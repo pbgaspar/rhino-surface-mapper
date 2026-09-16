@@ -18,6 +18,7 @@ from .models import (
 from .policy import filter_market_observations, is_carrier_name
 from .ranking import rank_market_observations
 from .spansh import SpanshError, fetch_commodity_market
+from .inara import InaraParseError, parse_inara_summaries
 
 __all__ = [
     "COMMODITY_ALIASES",
@@ -36,4 +37,6 @@ __all__ = [
     "rank_market_observations",
     "SpanshError",
     "fetch_commodity_market",
+    "InaraParseError",
+    "parse_inara_summaries",
 ]
