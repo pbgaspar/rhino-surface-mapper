@@ -8,6 +8,7 @@ dist/
 logs/
 
 .test-deps/
+.venv/
 
 MAPAS/
 options.json
