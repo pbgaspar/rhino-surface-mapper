@@ -1,0 +1,156 @@
+{
+  "source": "INARA",
+  "source_url": "https://inara.cz/elite/commodities-list/",
+  "updated_at": "2026-09-15T20:38:37.039533+00:00",
+  "notes": "Valores Avg sell e Max sell obtidos da lista geral de commodities do INARA. Methanol Crystals corresponde a Methanol Monohydrate Crystals no INARA.",
+  "commodities": {
+    "Helium": {
+      "avg_sell": 104572,
+      "max_sell": 477680
+    },
+    "Helium-3": {
+      "avg_sell": 97819,
+      "max_sell": 446919
+    },
+    "Tritium": {
+      "avg_sell": 53368,
+      "max_sell": 61894
+    },
+    "Water": {
+      "avg_sell": 497,
+      "max_sell": 4021
+    },
+    "Iridium": {
+      "avg_sell": 214562,
+      "max_sell": 939063
+    },
+    "Platinum": {
+      "avg_sell": 70254,
+      "max_sell": 302844
+    },
+    "Palladium": {
+      "avg_sell": 52052,
+      "max_sell": 151068
+    },
+    "Gold": {
+      "avg_sell": 47880,
+      "max_sell": 141339
+    },
+    "Osmium": {
+      "avg_sell": 56049,
+      "max_sell": 273000
+    },
+    "Silver": {
+      "avg_sell": 37606,
+      "max_sell": 109659
+    },
+    "Samarium": {
+      "avg_sell": 28601,
+      "max_sell": 48636
+    },
+    "Tantalum": {
+      "avg_sell": 14352,
+      "max_sell": 15582
+    },
+    "Thorium": {
+      "avg_sell": 12291,
+      "max_sell": 12917
+    },
+    "Uranium": {
+      "avg_sell": 7590,
+      "max_sell": 8587
+    },
+    "Titanium": {
+      "avg_sell": 4793,
+      "max_sell": 5865
+    },
+    "Lithium": {
+      "avg_sell": 2097,
+      "max_sell": 2892
+    },
+    "Copper": {
+      "avg_sell": 773,
+      "max_sell": 1931
+    },
+    "Thortveitite": {
+      "avg_sell": 207301,
+      "max_sell": 939063
+    },
+    "Periclase Dunite": {
+      "avg_sell": 207780,
+      "max_sell": 939063
+    },
+    "Monazite": {
+      "avg_sell": 271823,
+      "max_sell": 865908
+    },
+    "Rhodplumsite": {
+      "avg_sell": 186928,
+      "max_sell": 892219
+    },
+    "Diamond": {
+      "avg_sell": 136970,
+      "max_sell": 612056
+    },
+    "Alexandrite": {
+      "avg_sell": 228535,
+      "max_sell": 777430
+    },
+    "Sapphire": {
+      "avg_sell": 130360,
+      "max_sell": 588212
+    },
+    "Ruby": {
+      "avg_sell": 112182,
+      "max_sell": 501106
+    },
+    "Grandidierite": {
+      "avg_sell": 212121,
+      "max_sell": 635157
+    },
+    "Serendibite": {
+      "avg_sell": 187362,
+      "max_sell": 689075
+    },
+    "Bastnäsite": {
+      "avg_sell": 81767,
+      "max_sell": 350892
+    },
+    "Low Temperature Diamonds": {
+      "avg_sell": 131181,
+      "max_sell": 618772
+    },
+    "Quartz Pyroxenite": {
+      "avg_sell": 48366,
+      "max_sell": 207364
+    },
+    "Deuterium": {
+      "avg_sell": 42425,
+      "max_sell": 181972
+    },
+    "Magnesite": {
+      "avg_sell": 39756,
+      "max_sell": 170495
+    },
+    "Olivine": {
+      "avg_sell": 32697,
+      "max_sell": 140312
+    },
+    "Jadeite": {
+      "avg_sell": 42624,
+      "max_sell": 177499
+    },
+    "Uraninite": {
+      "avg_sell": 3002,
+      "max_sell": 8583
+    },
+    "Haematite": {
+      "avg_sell": 2811,
+      "max_sell": 10044
+    },
+    "Methanol Crystals": {
+      "avg_sell": 2523,
+      "max_sell": 3794
+    }
+  }
+}

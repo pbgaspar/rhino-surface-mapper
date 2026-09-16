@@ -1,0 +1,32 @@
+import os
+import unittest
+os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+from PyQt6.QtWidgets import QApplication, QSizePolicy
+from PyQt6.QtGui import QValidator
+from numeric_fields import MetresSpinBox, DegreesSpinBox, KilometresSpinBox
+
+
+class NumericFieldsTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_formats_and_limits(self):
+        metres, degrees, km = MetresSpinBox(), DegreesSpinBox(), KilometresSpinBox()
+        try:
+            metres.setValue(99999)
+            degrees.setValue(7)
+            km.setValue(12.3)
+            self.assertEqual(metres.text(), '99999 m')
+            self.assertEqual(degrees.text(), '007º')
+            self.assertEqual(km.text(), '12,3 km')
+            self.assertEqual(km.maximum(), 99.9)
+            for field, texts in [(metres, ['100000', '1,5', '1.5']),
+                                 (degrees, ['360', '-1', '1,5']),
+                                 (km, ['100,0', '12,34'])]:
+                self.assertEqual(field.sizePolicy().horizontalPolicy(), QSizePolicy.Policy.Fixed)
+                for text in texts:
+                    self.assertNotEqual(field.validate(text, len(text))[0], QValidator.State.Acceptable)
+        finally:
+            for field in (metres, degrees, km):
+                field.close()
