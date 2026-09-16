@@ -17,6 +17,7 @@ from .models import (
 )
 from .policy import filter_market_observations, is_carrier_name
 from .ranking import rank_market_observations
+from .spansh import SpanshError, fetch_commodity_market
 
 __all__ = [
     "COMMODITY_ALIASES",
@@ -33,4 +34,6 @@ __all__ = [
     "filter_market_observations",
     "is_carrier_name",
     "rank_market_observations",
+    "SpanshError",
+    "fetch_commodity_market",
 ]
