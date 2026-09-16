@@ -1,85 +1,95 @@
 # AGENTS.md
 
-## Diretrizes de arquitetura e desenvolvimento para o projeto Rhino Surface Mapper
+## Architecture and development guidelines for the Rhino Surface Mapper project
 
-Este projeto deve seguir uma arquitetura Python clara, modular e sustentável. Prioriza qualidade, previsibilidade e manutenção a longo prazo.
+This project must follow a clear, modular, and sustainable Python architecture. It prioritizes quality, predictability, and long-term maintainability.
 
-### 1. Modularidade extrema
-- Divide o código em módulos pequenos e com responsabilidade única.
-- Mantém cada ficheiro focado numa área bem definida: domínio, interface, utilitários, serviços, persistência e testes.
-- Evita ficheiros "mega-módulos" com lógica misturada e dezenas de responsabilidades.
-- Antes de qualquer alteração futura, analisa a estrutura existente e reutiliza a organização já adotada no projeto.
-- Só cria novos módulos quando a separação traz clareza real; caso contrário, mantém a composição atual.
+### 1. Extreme modularity
+- Divide the code into small modules with a single responsibility.
+- Keep each file focused on a well-defined area: domain, interface, utilities, services, persistence, and tests.
+- Avoid "mega-modules" with mixed logic and dozens of responsibilities.
+- Before any future change, analyze the existing structure and reuse the organization already adopted in the project.
+- Create new modules only when separation provides real clarity; otherwise, keep the current composition.
 
 ### 2. DRY (Don't Repeat Yourself)
-- Reúne lógica repetida em helpers, utilitários ou funções compartilhadas.
-- Evita duplicação de regras de negócio, validações, normalização e processamento de dados.
-- Quando a mesma lógica aparecer em vários pontos, extrai-a para um local central.
-- Procura reutilizar funções e classes já existentes antes de duplicar comportamento.
+- Consolidate repeated logic in helpers, utilities, or shared functions.
+- Avoid duplicating business rules, validations, normalization, and data processing.
+- When the same logic appears in multiple places, extract it to a central location.
+- Look for existing functions and classes to reuse before duplicating behavior.
 
-### 3. Separação de responsabilidades
-- Mantém claramente separadas:
-  - lógica de negócio
-  - interface do utilizador
-  - persistência e acesso a dados
-  - utilidades gerais
-  - testes
-- A lógica de negócio não deve depender diretamente de detalhes de UI.
-- A interface deve consumir serviços e regras do domínio, não misturar regras de negócio com widgets, eventos ou apresentação.
-- O acesso a ficheiros, JSON, CSV, cache e dados externos deve ficar isolado em camadas apropriadas.
+### 3. Separation of responsibilities
+- Keep the following clearly separated:
+  - business logic
+  - user interface
+  - persistence and data access
+  - general utilities
+  - tests
+- Business logic must not depend directly on UI details.
+- The interface must consume services and domain rules, without mixing business rules with widgets, events, or presentation.
+- Access to files, JSON, CSV, cache, and external data must be isolated in appropriate layers.
 
-### 4. Código limpo e legível
-- Escreve código simples, explícito e consistente.
-- Usa nomes significativos para funções, classes, variáveis e módulos.
-- Mantém funções curtas e com um objetivo bem definido.
-- Evita comentários redundantes; prefere código autoexplicativo.
-- Documenta a intenção de partes complexas ou não óbvias com docstrings claras e concisas.
+### 4. Clean and readable code
+- Write simple, explicit, and consistent code.
+- Use meaningful names for functions, classes, variables, and modules.
+- Keep functions short and focused on a well-defined purpose.
+- Avoid redundant comments; prefer self-explanatory code.
+- Document the intent of complex or non-obvious parts with clear and concise docstrings.
 
-### 5. Docstrings e documentação mínima
-- Todas as funções, classes e módulos relevantes devem ter docstrings quando a sua finalidade não for óbvia.
-- As docstrings devem explicar:
-  - o objetivo
-  - parâmetros principais
-  - comportamentos relevantes
-  - exceções esperadas ou resultados importantes
-- Prefere documentação útil e objetiva em vez de texto genérico.
+### 5. Docstrings and minimal documentation
+- All relevant functions, classes, and modules must have docstrings when their purpose is not obvious.
+- Docstrings must explain:
+  - the purpose
+  - key parameters
+  - relevant behavior
+  - expected exceptions or important results
+- Prefer useful and objective documentation over generic text.
 
-### 6. Tratamento robusto de exceções
-- Captura exceções específicas, nunca genéricas sem necessidade.
-- Evita mascarar erros importantes com blocos broad except.
-- Logging e mensagens de erro devem ser informativos e úteis para diagnóstico.
-- Preserva a causa real do problema quando repropagar exceções.
-- Em entradas externas, dados incompletos ou falhas de I/O, usa tratamento explícito e previsível.
+### Language and comments
+- English is the standard language for source-code comments, docstrings, developer-facing technical text, and new technical identifiers.
+- Comments should be concise and useful.
+- Comments should primarily explain intent, rationale, constraints, invariants, workarounds, or non-obvious behavior.
+- Do not add comments merely to restate straightforward code.
+- Docstrings must be useful and proportional to the complexity and public role of the function, class, or module; avoid verbose docstrings that merely repeat obvious signatures or implementation details.
+- When modifying existing code, non-English comments/docstrings directly related to the changed code may be translated or improved when this remains a small, relevant part of the task.
+- Do not perform repository-wide translation or comment/docstring cleanup as a side effect of an unrelated task.
+- Existing non-English comments/docstrings elsewhere in the repository do not need to be changed merely because they are encountered.
 
-### 7. Testes automatizados
-- Prioriza testes automatizados com pytest.
-- Os testes devem cobrir a lógica crítica de negócio, regressões e comportamentos sensíveis.
-- Mantém os testes simples, determinísticos e focados em comportamento real.
-- Sempre que houver correção ou alteração de comportamento, considera adicionar ou ajustar testes.
-- Sempre que for criado um novo módulo ou alterada lógica relevante, cria ou atualiza obrigatoriamente os testes automatizados correspondentes, preferencialmente com pytest.
-- O código deve ser testável; evita dependências excessivas e acoplamento forte.
+### 6. Robust exception handling
+- Catch specific exceptions, never generic ones without necessity.
+- Avoid masking important errors with broad except blocks.
+- Logging and error messages must be informative and useful for diagnosis.
+- Preserve the actual cause of the problem when re-raising exceptions.
+- For external inputs, incomplete data, or I/O failures, use explicit and predictable handling.
 
-### 8. Estrutura coerente de ficheiros e pastas
-- Mantém a organização do projeto consistente com a intenção funcional do código.
-- Agrupa módulos por responsabilidade e por domínio, em vez de criar dispersão arbitrária.
-- Reutiliza convenções já existentes no repositório antes de introduzir novas.
-- Evita renomeações ou reorganizações de ficheiros sem necessidade.
-- Sempre que uma solução implicar alterações estruturais, apresenta primeiro a estrutura de ficheiros/pastas proposta.
+### 7. Automated tests
+- Prioritize automated tests with pytest.
+- Tests must cover critical business logic, regressions, and sensitive behavior.
+- Keep tests simple, deterministic, and focused on actual behavior.
+- Whenever there is a bug fix or behavior change, consider adding or adjusting tests.
+- Whenever a new module is created or relevant logic is changed, the corresponding automated tests must be created or updated, preferably with pytest.
+- Code must be testable; avoid excessive dependencies and tight coupling.
 
-### 9. Refatoração prudente
-- Antes de alterar a estrutura do código, analisa primeiro o cenário atual e a arquitetura já existente.
-- Reaproveita módulos, funções e padrões já presentes.
-- Evita refatorizações desnecessárias, grandes rearranjos ou “limpeza” excessiva sem uma necessidade clara.
-- Só refatora quando isso melhora clareza, reduz duplicação ou facilita manutenção sem introduzir riscos indevidos.
+### 8. Coherent file and folder structure
+- Keep the project organization consistent with the functional purpose of the code.
+- Group modules by responsibility and domain instead of creating arbitrary dispersion.
+- Reuse conventions already present in the repository before introducing new ones.
+- Avoid file renames or reorganizations without necessity.
+- Whenever a solution involves structural changes, present the proposed file/folder structure first.
 
-### 10. Boas práticas de engenharia Python
-- Usa tipos e convenções Pythonic quando fizer sentido.
-- Segue padrões consistentes de naming, imports e organização.
-- Evita código acoplado, global state desnecessário e efeitos colaterais ocultos.
-- Valida entradas e limites de forma explícita quando relevante.
-- Mantém o código previsível e fácil de depurar.
+### 9. Careful refactoring
+- Before changing the code structure, first analyze the current situation and the existing architecture.
+- Reuse existing modules, functions, and patterns.
+- Avoid unnecessary refactoring, large rearrangements, or excessive "cleanup" without a clear need.
+- Refactor only when it improves clarity, reduces duplication, or facilitates maintenance without introducing undue risk.
 
-## Regra principal
-A prioridade é construir software claro, testável e sustentável, respeitando a estrutura existente do projeto e evitando mudanças expansivas sem necessidade.
+### 10. Python engineering best practices
+- Use types and Pythonic conventions when appropriate.
+- Follow consistent naming, import, and organizational patterns.
+- Avoid tightly coupled code, unnecessary global state, and hidden side effects.
+- Validate inputs and limits explicitly when relevant.
+- Keep the code predictable and easy to debug.
 
-A arquitetura deve ser simples de seguir, mas suficientemente robusta para crescer sem degradação de qualidade.
+## Main rule
+The priority is to build clear, testable, and sustainable software while respecting the existing project structure and avoiding expansive changes without necessity.
+
+The architecture must be simple to follow, but robust enough to grow without degradation in quality.
