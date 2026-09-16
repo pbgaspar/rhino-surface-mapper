@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 
 
-APP_DIR = Path(__file__).resolve().parents[1]
+APP_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(APP_DIR))
 
 from recovery_tkinter.rhino_surface_mapper_v2 import App

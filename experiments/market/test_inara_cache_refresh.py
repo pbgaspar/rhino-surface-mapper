@@ -4,9 +4,7 @@ from pathlib import Path
 
 def load_module():
     script_path = (
-        Path(__file__).resolve().parents[1]
-        / "tests"
-        / "test-market"
+        Path(__file__).resolve().parent
         / "Surface Mining Markets - cache INARA.py"
     )
     spec = importlib.util.spec_from_file_location(
