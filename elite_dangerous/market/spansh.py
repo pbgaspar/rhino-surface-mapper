@@ -1,17 +1,19 @@
-"""Spansh acquisition and mapping for one system commodity market."""
+"""Spansh acquisition and mapping for system commodity markets."""
 
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any
 
 import requests
 
-from .commodities import canonical_commodity_name, normalize_name
+from .commodities import canonical_commodity_name
 from .models import (
     CommodityMarketResult,
     LandingPad,
     MarketIssue,
     MarketObservation,
     Station,
+    _commodity_key,
 )
 
 _BASE_URL = "https://spansh.co.uk/api"
@@ -29,27 +31,67 @@ def fetch_commodity_market(
     *,
     session: requests.Session | None = None,
 ) -> CommodityMarketResult:
-    """Fetch one commodity's observations across a Spansh system.
+    """Fetch one commodity's observations across a Spansh system."""
+    return fetch_commodity_markets(
+        system_name,
+        (commodity_name,),
+        session=session,
+    )[0]
+
+
+def fetch_commodity_markets(
+    system_name: str,
+    commodity_names: Iterable[str],
+    *,
+    session: requests.Session | None = None,
+) -> tuple[CommodityMarketResult, ...]:
+    """Fetch several commodity results in one Spansh system traversal.
 
     An injected session is reused and remains caller-owned. Recoverable station
     failures are returned as issues; failures that prevent trustworthy system
-    discovery raise :class:`SpanshError`.
+    discovery raise :class:`SpanshError`. Duplicate commodity identities are
+    returned once, in their first requested order.
     """
+    if isinstance(commodity_names, (str, bytes)):
+        raise TypeError("commodity_names must be an iterable of commodity names")
+    requested_names = tuple(commodity_names)
+    if any(not isinstance(name, str) for name in requested_names):
+        raise TypeError("commodity names must be strings")
+
+    requested_by_key: dict[str, str] = {}
+    for name in requested_names:
+        canonical = canonical_commodity_name(name)
+        requested_by_key.setdefault(
+            _commodity_key(canonical or name),
+            canonical or name,
+        )
+
+    if not requested_by_key:
+        return ()
+
     if session is not None:
-        return _fetch_with_session(session, system_name, commodity_name)
+        return _fetch_commodities_with_session(
+            session,
+            system_name,
+            requested_by_key,
+        )
 
     owned_session = requests.Session()
     try:
-        return _fetch_with_session(owned_session, system_name, commodity_name)
+        return _fetch_commodities_with_session(
+            owned_session,
+            system_name,
+            requested_by_key,
+        )
     finally:
         owned_session.close()
 
 
-def _fetch_with_session(
+def _fetch_commodities_with_session(
     session: requests.Session,
     requested_system: str,
-    requested_commodity: str,
-) -> CommodityMarketResult:
+    requested_by_key: dict[str, str],
+) -> tuple[CommodityMarketResult, ...]:
     system_id = _find_system_id(session, requested_system)
     if system_id is None:
         raise SpanshError(f"System {requested_system!r} was not found by exact name.")
@@ -67,10 +109,16 @@ def _fetch_with_session(
     except ValueError as exc:
         raise SpanshError("Spansh returned an unusable system station listing.") from exc
 
-    canonical_requested = canonical_commodity_name(requested_commodity)
-    requested_key = normalize_name(canonical_requested or requested_commodity)
-    observations = []
-    issues = list(discovery_issues)
+    observations_by_key: dict[str, list[MarketObservation]] = {
+        key: [] for key in requested_by_key
+    }
+    issues_by_key: dict[str, list[MarketIssue]] = {
+        key: list(discovery_issues) for key in requested_by_key
+    }
+
+    def add_shared_issue(issue: MarketIssue) -> None:
+        for commodity_issues in issues_by_key.values():
+            commodity_issues.append(issue)
 
     for market_id, discovery_record in stations.items():
         station_name = _station_name(discovery_record)
@@ -79,7 +127,9 @@ def _fetch_with_session(
 
         numeric_id = _usable_market_id(market_id)
         if numeric_id is None:
-            issues.append(MarketIssue(station_name, "Station has no usable market_id."))
+            add_shared_issue(
+                MarketIssue(station_name, "Station has no usable market_id.")
+            )
             continue
 
         try:
@@ -97,21 +147,29 @@ def _fetch_with_session(
             market = record.get("market")
             if not isinstance(market, list):
                 raise ValueError("Station detail has no valid market list.")
-            station_observations, malformed_rows = _map_matching_rows(
+            station_observations, row_issues, shared_row_issues = _map_requested_rows(
                 market,
                 station,
-                requested_commodity,
-                canonical_requested,
-                requested_key,
+                requested_by_key,
                 record,
             )
-            observations.extend(station_observations)
-            issues.extend(malformed_rows)
+            for key, mapped in station_observations.items():
+                observations_by_key[key].extend(mapped)
+            for key, mapped_issues in row_issues.items():
+                issues_by_key[key].extend(mapped_issues)
+            for issue in shared_row_issues:
+                add_shared_issue(issue)
         except (SpanshError, ValueError, TypeError, KeyError) as exc:
-            issues.append(MarketIssue(station_name, str(exc)))
+            add_shared_issue(MarketIssue(station_name, str(exc)))
 
-    result_commodity = canonical_requested or requested_commodity
-    return CommodityMarketResult(result_commodity, tuple(observations), tuple(issues))
+    return tuple(
+        CommodityMarketResult(
+            requested_commodity=commodity,
+            observations=tuple(observations_by_key[key]),
+            issues=tuple(issues_by_key[key]),
+        )
+        for key, commodity in requested_by_key.items()
+    )
 
 
 def _find_system_id(session: requests.Session, requested_name: str) -> str | int | None:
@@ -299,30 +357,35 @@ def _max_landing_pad(record: dict[str, Any]) -> LandingPad | None:
     return None
 
 
-def _map_matching_rows(
+def _map_requested_rows(
     market: list[Any],
     station: Station,
-    requested_commodity: str,
-    canonical_requested: str | None,
-    requested_key: str,
+    requested_by_key: dict[str, str],
     station_record: dict[str, Any],
-) -> tuple[list[MarketObservation], list[MarketIssue]]:
-    observations = []
-    issues = []
+) -> tuple[
+    dict[str, list[MarketObservation]],
+    dict[str, list[MarketIssue]],
+    list[MarketIssue],
+]:
+    observations: dict[str, list[MarketObservation]] = {
+        key: [] for key in requested_by_key
+    }
+    issues: dict[str, list[MarketIssue]] = {key: [] for key in requested_by_key}
+    shared_issues: list[MarketIssue] = []
     for row in market:
         if not isinstance(row, dict):
-            issues.append(MarketIssue(station.name, "Market contains a malformed row."))
+            shared_issues.append(
+                MarketIssue(station.name, "Market contains a malformed row.")
+            )
             continue
         raw_name = row.get("commodity")
         if not isinstance(raw_name, str) or not raw_name:
-            issues.append(MarketIssue(station.name, "Market row has no usable commodity name."))
+            shared_issues.append(
+                MarketIssue(station.name, "Market row has no usable commodity name.")
+            )
             continue
-        if not _commodity_matches(
-            raw_name,
-            requested_commodity,
-            canonical_requested,
-            requested_key,
-        ):
+        key = _commodity_key(raw_name)
+        if key not in requested_by_key:
             continue
 
         try:
@@ -330,12 +393,15 @@ def _map_matching_rows(
             demand = _optional_integer(row.get("demand"), "demand")
             supply = _optional_integer(row.get("supply"), "supply")
         except ValueError as exc:
-            issues.append(MarketIssue(station.name, f"Malformed data for {raw_name!r}: {exc}"))
+            issues[key].append(
+                MarketIssue(station.name, f"Malformed data for {raw_name!r}: {exc}")
+            )
             continue
-        observations.append(
+        canonical = canonical_commodity_name(raw_name)
+        observations[key].append(
             MarketObservation(
                 station=station,
-                commodity=canonical_requested or raw_name,
+                commodity=canonical or raw_name,
                 sell_price=sell_price,
                 demand=demand,
                 supply=supply,
@@ -343,21 +409,7 @@ def _map_matching_rows(
                 station_updated_at=_parse_utc(station_record.get("updated_at")),
             )
         )
-    return observations, issues
-
-
-def _commodity_matches(
-    raw_name: str,
-    requested_name: str,
-    canonical_requested: str | None,
-    requested_key: str,
-) -> bool:
-    if canonical_requested is not None:
-        return canonical_commodity_name(raw_name) == canonical_requested
-    raw_key = normalize_name(raw_name)
-    if requested_key and raw_key:
-        return raw_key == requested_key
-    return raw_name.casefold() == requested_name.casefold()
+    return observations, issues, shared_issues
 
 
 def _optional_integer(value: Any, field_name: str) -> int | None:

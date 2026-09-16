@@ -4,7 +4,11 @@ from unittest.mock import patch
 
 import requests
 
-from elite_dangerous.market import SpanshError, fetch_commodity_market
+from elite_dangerous.market import (
+    SpanshError,
+    fetch_commodity_market,
+    fetch_commodity_markets,
+)
 
 BASE_URL = "https://spansh.co.uk/api"
 
@@ -27,6 +31,7 @@ class FakeSession:
         self.routes = {key: list(value) for key, value in routes.items()}
         self.calls = []
         self.closed = False
+        self.close_count = 0
 
     def request(self, method, url, *, timeout, **kwargs):
         path = url.removeprefix(BASE_URL)
@@ -38,6 +43,7 @@ class FakeSession:
 
     def close(self):
         self.closed = True
+        self.close_count += 1
 
 
 def response(payload):
@@ -492,6 +498,312 @@ class SpanshMarketTests(unittest.TestCase):
                     with self.assertRaises(SpanshError):
                         fetch_commodity_market("Kappa", "Platinum")
             self.assertTrue(session.closed)
+
+    def test_batch_fetches_multiple_commodities_with_one_traversal(self):
+        system = {
+            "name": "Kappa",
+            "stations": [station("Market", 123, has_market=True)],
+            "bodies": [],
+        }
+        detail = station_detail("Market", market=[
+            {"commodity": "Platinum", "sell_price": 10, "demand": 20},
+            {"commodity": "Gold", "sell_price": 30, "demand": 40},
+        ])
+        session = setup_session(system_record=system, details={123: detail})
+
+        results = fetch_commodity_markets(
+            "Kappa",
+            (name for name in ("Gold", "Platinum")),
+            session=session,
+        )
+
+        self.assertEqual(
+            tuple(result.requested_commodity for result in results),
+            ("Gold", "Platinum"),
+        )
+        self.assertEqual(
+            tuple(result.observations[0].sell_price for result in results),
+            (30, 10),
+        )
+        paths = [call[1] for call in session.calls]
+        self.assertEqual(paths.count("/systems/search"), 1)
+        self.assertEqual(paths.count("/system/42"), 1)
+        self.assertEqual(paths.count("/station/123"), 1)
+
+    def test_batch_deduplicates_aliases_and_exact_requests_in_first_order(self):
+        system = {
+            "name": "Kappa",
+            "stations": [station("Market", 123, has_market=True)],
+            "bodies": [],
+        }
+        detail = station_detail("Market", market=[
+            {"commodity": "Bastnasite", "sell_price": 1},
+            {"commodity": "Gold", "sell_price": 2},
+            {"commodity": "Methanol Monohydrate Crystals", "sell_price": 3},
+            {"commodity": "Platinum", "sell_price": 4},
+        ])
+        results = fetch_commodity_markets(
+            "Kappa",
+            (name for name in (
+                "Gold",
+                "Bastnasite",
+                "Bastnäsite",
+                "Methanol Monohydrate Crystals",
+                "Methanol Crystals",
+                "Platinum",
+                "Gold",
+            )),
+            session=setup_session(system_record=system, details={123: detail}),
+        )
+
+        self.assertEqual(
+            tuple(result.requested_commodity for result in results),
+            ("Gold", "Bastnäsite", "Methanol Crystals", "Platinum"),
+        )
+        self.assertEqual(results[1].observations[0].commodity, "Bastnäsite")
+        self.assertEqual(results[2].observations[0].commodity, "Methanol Crystals")
+
+    def test_batch_supports_unknown_normalized_names_and_distinct_empty_keys(self):
+        system = {
+            "name": "Kappa",
+            "stations": [station("Market", 123, has_market=True)],
+            "bodies": [],
+        }
+        detail = station_detail("Market", market=[
+            {"commodity": "New-Community Product", "sell_price": 1},
+            {"commodity": "???", "sell_price": 2},
+            {"commodity": "!!!", "sell_price": 3},
+        ])
+        results = fetch_commodity_markets(
+            "Kappa",
+            ("new community product", "???", "!!!"),
+            session=setup_session(system_record=system, details={123: detail}),
+        )
+
+        self.assertEqual(len(results), 3)
+        self.assertEqual(
+            tuple(result.observations[0].sell_price for result in results),
+            (1, 2, 3),
+        )
+        self.assertEqual(results[0].observations[0].commodity, "New-Community Product")
+
+    def test_empty_batch_does_not_create_or_use_a_session(self):
+        supplied_session = setup_session()
+        with patch("elite_dangerous.market.spansh.requests.Session") as make_session:
+            self.assertEqual(fetch_commodity_markets("Kappa", ()), ())
+            self.assertEqual(make_session.call_count, 0)
+
+        self.assertEqual(
+            fetch_commodity_markets("Kappa", (), session=supplied_session),
+            (),
+        )
+        self.assertEqual(supplied_session.calls, [])
+        self.assertFalse(supplied_session.closed)
+
+    def test_absent_requested_commodity_has_no_synthetic_issue(self):
+        system = {
+            "name": "Kappa",
+            "stations": [station("Market", 123, has_market=True)],
+            "bodies": [],
+        }
+        result = fetch_commodity_markets(
+            "Kappa",
+            ("Platinum", "Gold"),
+            session=setup_session(
+                system_record=system,
+                details={123: station_detail("Market", market=[{"commodity": "Platinum"}])},
+            ),
+        )[1]
+
+        self.assertEqual(result.observations, ())
+        self.assertEqual(result.issues, ())
+        self.assertEqual(result.missing, ("Gold",))
+
+    def test_malformed_requested_row_only_affects_its_commodity(self):
+        system = {
+            "name": "Kappa",
+            "stations": [station("Market", 123, has_market=True)],
+            "bodies": [],
+        }
+        results = fetch_commodity_markets(
+            "Kappa",
+            ("Platinum", "Gold"),
+            session=setup_session(
+                system_record=system,
+                details={123: station_detail("Market", market=[
+                    {"commodity": "Platinum", "sell_price": "bad"},
+                    {"commodity": "Gold", "sell_price": 50},
+                ])},
+            ),
+        )
+
+        self.assertEqual(len(results[0].issues), 1)
+        self.assertEqual(results[0].observations, ())
+        self.assertEqual(results[1].issues, ())
+        self.assertEqual(results[1].observations[0].sell_price, 50)
+
+    def test_malformed_unrelated_row_is_ignored_and_later_products_survive(self):
+        system = {
+            "name": "Kappa",
+            "stations": [station("Market", 123, has_market=True)],
+            "bodies": [],
+        }
+        results = fetch_commodity_markets(
+            "Kappa",
+            ("Platinum", "Silver"),
+            session=setup_session(
+                system_record=system,
+                details={123: station_detail("Market", market=[
+                    {"commodity": "Gold", "sell_price": "bad"},
+                    {"commodity": "Platinum", "sell_price": 75},
+                    {"commodity": "Silver", "sell_price": 25},
+                ])},
+            ),
+        )
+
+        self.assertEqual(tuple(len(result.observations) for result in results), (1, 1))
+        self.assertEqual(tuple(result.issues for result in results), ((), ()))
+
+    def test_unidentifiable_malformed_row_is_shared_across_results(self):
+        system = {
+            "name": "Kappa",
+            "stations": [station("Market", 123, has_market=True)],
+            "bodies": [],
+        }
+        results = fetch_commodity_markets(
+            "Kappa",
+            ("Platinum", "Gold"),
+            session=setup_session(
+                system_record=system,
+                details={123: station_detail("Market", market=[
+                    {"sell_price": 12},
+                    {"commodity": "Platinum", "sell_price": 75},
+                ])},
+            ),
+        )
+
+        self.assertEqual(results[0].issues, results[1].issues)
+        self.assertEqual(len(results[0].issues), 1)
+        self.assertEqual(len(results[0].observations), 1)
+
+    def test_duplicate_valid_rows_remain_duplicate_observations(self):
+        system = {
+            "name": "Kappa",
+            "stations": [station("Market", 123, has_market=True)],
+            "bodies": [],
+        }
+        result = fetch_commodity_markets(
+            "Kappa",
+            ("Platinum",),
+            session=setup_session(
+                system_record=system,
+                details={123: station_detail("Market", market=[
+                    {"commodity": "Platinum", "sell_price": 5},
+                    {"commodity": "Platinum", "sell_price": 8},
+                ])},
+            ),
+        )[0]
+
+        self.assertEqual(tuple(item.sell_price for item in result.observations), (5, 8))
+
+    def test_station_failure_is_shared_and_other_station_products_survive(self):
+        system = {
+            "name": "Kappa",
+            "stations": [
+                station("Unavailable", 123, has_market=True),
+                station("Available", 124, has_market=True),
+            ],
+            "bodies": [],
+        }
+        session = setup_session(
+            system_record=system,
+            details={
+                123: requests.ConnectionError("offline"),
+                124: station_detail("Available", market=[
+                    {"commodity": "Platinum", "sell_price": 50},
+                    {"commodity": "Gold", "sell_price": 25},
+                ]),
+            },
+        )
+
+        results = fetch_commodity_markets(
+            "Kappa",
+            ("Platinum", "Gold"),
+            session=session,
+        )
+
+        self.assertEqual(results[0].issues, results[1].issues)
+        self.assertEqual(results[0].issues[0].station_name, "Unavailable")
+        self.assertEqual(results[0].observations[0].station.name, "Available")
+        self.assertEqual(results[1].observations[0].station.name, "Available")
+        self.assertEqual([call[1] for call in session.calls].count("/station/123"), 1)
+        self.assertEqual([call[1] for call in session.calls].count("/station/124"), 1)
+
+    def test_batch_preserves_mapping_and_does_not_apply_policy_or_ranking(self):
+        names = ("FC01", "ABC-123", "Ordinary")
+        system = {
+            "name": "Kappa",
+            "stations": [
+                station(name, 123 + index, has_market=True)
+                for index, name in enumerate(names)
+            ],
+            "bodies": [],
+        }
+        prices = (0, 200, None)
+        pads = (
+            {"has_large_pad": True},
+            {"medium_pads": 1},
+            {"small_pads": 1},
+        )
+        details = {
+            123 + index: station_detail(
+                name,
+                market=[{
+                    "commodity": "Platinum",
+                    "sell_price": prices[index],
+                    "demand": 0,
+                    "supply": index,
+                }],
+                market_updated_at="2026-09-16T12:30:00Z",
+                updated_at="2026-09-16T12:30:00",
+                **pads[index],
+            )
+            for index, name in enumerate(names)
+        }
+        result = fetch_commodity_markets(
+            "Kappa",
+            ("Platinum",),
+            session=setup_session(system_record=system, details=details),
+        )[0]
+
+        self.assertEqual(tuple(item.station.name for item in result.observations), names)
+        self.assertEqual(tuple(item.sell_price for item in result.observations), prices)
+        self.assertEqual(tuple(item.demand for item in result.observations), (0, 0, 0))
+        self.assertEqual(tuple(item.supply for item in result.observations), (0, 1, 2))
+        self.assertEqual(
+            tuple(item.station.max_landing_pad for item in result.observations),
+            ("L", "M", "S"),
+        )
+        self.assertTrue(all(
+            item.market_updated_at == datetime(2026, 9, 16, 12, 30, tzinfo=timezone.utc)
+            for item in result.observations
+        ))
+
+    def test_batch_fatal_system_failure_remains_spansh_error(self):
+        session = setup_session(pages=[response({"results": "invalid"})])
+        with self.assertRaises(SpanshError):
+            fetch_commodity_markets("Kappa", ("Platinum", "Gold"), session=session)
+
+    def test_batch_session_ownership_matches_singular_api(self):
+        supplied = setup_session()
+        fetch_commodity_markets("Kappa", ("Platinum", "Gold"), session=supplied)
+        self.assertFalse(supplied.closed)
+
+        owned = setup_session()
+        with patch("elite_dangerous.market.spansh.requests.Session", return_value=owned):
+            fetch_commodity_markets("Kappa", ("Platinum", "Gold"))
+        self.assertTrue(owned.closed)
+        self.assertEqual(owned.close_count, 1)
 
 
 if __name__ == "__main__":
