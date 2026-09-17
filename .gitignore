@@ -16,3 +16,4 @@ options.json
 backups/
 archive/
 experiments/market/inara_summary_cache_v1.json
+experiments/market/test-market.zip
