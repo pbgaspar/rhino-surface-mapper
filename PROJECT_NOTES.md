@@ -99,12 +99,12 @@ Guardar/Abrir em Mapas usa JSON com parâmetros, pontos, marcas, depósitos, rig
 
 ## Validação e pendentes
 
-Última execução: **94 testes passaram**, incluindo entradas numéricas, pintura, navegação, assistência e ficheiros de configurações. O utilizador confirmou o layout, as correções de setas/cores e anteriormente o movimento do overlay, coberturas, direção e chegada. Guardar/Carregar/Repor tem validação automática; falta confirmação manual específica.
+Última execução: **243 testes passaram** com pytest em `tests/`, incluindo entradas numéricas, pintura, navegação, assistência, ficheiros de configurações e componentes de mercado. O utilizador confirmou o layout, as correções de setas/cores e anteriormente o movimento do overlay, coberturas, direção e chegada. Guardar/Carregar/Repor tem validação automática; falta confirmação manual específica.
 
-A partir da pasta do programa:
+A partir da pasta do programa, usando o ambiente virtual do projeto:
 
 ```powershell
-py -3.13 -m unittest discover -s tests -v
+.venv\Scripts\python.exe -m pytest tests -ra
 ```
 
 Os testes Qt usam renderização fora do ecrã e não cobrem todas as escalas Windows, monitores ou condições do jogo. Pendentes: confinamento do overlay ao monitor, validação visual entre monitores, condições transitórias da assistência e comentários didáticos. Ver [TODO.md](TODO.md).
