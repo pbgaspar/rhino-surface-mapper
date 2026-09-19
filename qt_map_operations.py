@@ -352,11 +352,19 @@ class MapOperations:
             ) != QMessageBox.StandardButton.Yes:
                 return False
             pml_id = self.next_john_doe_id(s.system, s.body)
-        azimuth, accepted = QInputDialog.getInt(
-            self, f'Centro do PML [{pml_id}]',
-            'Azimute do Rhino para o centro do PML (0° = norte):', 0, 0, 359)
-        if not accepted:
+        azimuth_dialog = QInputDialog(self)
+        azimuth_dialog.setWindowTitle(f'Centro do PML [{pml_id}]')
+        azimuth_dialog.setLabelText('Azimute do Rhino para o centro do PML (0° = norte):')
+        azimuth_dialog.setInputMode(QInputDialog.InputMode.IntInput)
+        azimuth_dialog.setIntRange(0, 359)
+        azimuth_dialog.setIntStep(1)
+        azimuth_dialog.setIntValue(0)
+        azimuth_spin = azimuth_dialog.findChild(QSpinBox)
+        if azimuth_spin is not None:
+            azimuth_spin.setWrapping(True)
+        if azimuth_dialog.exec() != QDialog.DialogCode.Accepted:
             return False
+        azimuth = azimuth_dialog.intValue()
         distance, accepted = QInputDialog.getDouble(
             self, f'Centro do PML [{pml_id}]',
             'Distância do Rhino ao centro do PML (m):', 0, 0, 100000, 0)

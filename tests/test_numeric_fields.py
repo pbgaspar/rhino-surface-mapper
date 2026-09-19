@@ -30,3 +30,18 @@ class NumericFieldsTests(unittest.TestCase):
         finally:
             for field in (metres, degrees, km):
                 field.close()
+
+    def test_degrees_wrap_at_both_boundaries(self):
+        degrees = DegreesSpinBox()
+        try:
+            self.assertEqual((degrees.minimum(), degrees.maximum()), (0, 359))
+            self.assertEqual(degrees.singleStep(), 1)
+            self.assertTrue(degrees.wrapping())
+            degrees.setValue(0)
+            degrees.stepBy(-1)
+            self.assertEqual(degrees.value(), 359)
+            degrees.setValue(359)
+            degrees.stepBy(1)
+            self.assertEqual(degrees.value(), 0)
+        finally:
+            degrees.close()

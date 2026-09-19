@@ -25,6 +25,7 @@ class DegreesSpinBox(QSpinBox):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setRange(0, 359)
+        self.setWrapping(True)
         self.setSuffix('º')
         compact(self)
 

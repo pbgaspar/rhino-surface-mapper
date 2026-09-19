@@ -82,6 +82,36 @@ class MapOperationsTests(unittest.TestCase):
             self.assertFalse(w.state.search_started)
             self.assertFalse(w.overlay.isVisible())
             self.assertFalse(w.overlay_button.isEnabled())
+
+    def test_pml_center_azimuth_dialog_wraps_without_changing_contract(self):
+        from PyQt6.QtWidgets import QDialog, QInputDialog, QSpinBox
+        w = self.window
+
+        def inspect_spin(dialog):
+            spin = dialog.findChild(QSpinBox)
+            self.assertIsNotNone(spin)
+            self.assertTrue(spin.wrapping())
+            self.assertEqual((spin.minimum(), spin.maximum()), (0, 359))
+            self.assertEqual(spin.singleStep(), 1)
+            spin.setValue(0)
+            spin.stepBy(-1)
+            self.assertEqual(spin.value(), 359)
+            spin.setValue(359)
+            spin.stepBy(1)
+            self.assertEqual(spin.value(), 0)
+
+        with patch('qt_map_operations.QInputDialog.getText', return_value=('PML', True)), \
+                patch.object(QInputDialog, 'exec', return_value=QDialog.DialogCode.Accepted), \
+                patch('qt_map_operations.QInputDialog.getDouble', return_value=(0.0, True)):
+            result = w.setup_new_pml()
+
+        dialog = w.findChildren(QInputDialog)[-1]
+        inspect_spin(dialog)
+        self.assertTrue(result)
+
+        self.assertEqual(dialog.windowTitle(), 'Centro do PML [PML]')
+        self.assertEqual(dialog.labelText(), 'Azimute do Rhino para o centro do PML (0° = norte):')
+        self.assertEqual(dialog.intValue(), 0)
     def test_load_rereads_unchanged_status_immediately(self):
         import json
         from PyQt6.QtWidgets import QMessageBox

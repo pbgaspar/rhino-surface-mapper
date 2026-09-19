@@ -196,6 +196,13 @@ class QtWindowTests(unittest.TestCase):
             for spin in (dialog.azimuth, window.search_azimuth_spin):
                 self.assertIsInstance(spin, QSpinBox)
                 self.assertEqual((spin.minimum(), spin.maximum()), (0, 359))
+                self.assertTrue(spin.wrapping())
+                spin.setValue(0)
+                spin.stepBy(-1)
+                self.assertEqual(spin.value(), 359)
+                spin.setValue(359)
+                spin.stepBy(1)
+                self.assertEqual(spin.value(), 0)
                 for value in ('1.5', '1,5', '360', '-1'):
                     self.assertNotEqual(spin.validate(value, len(value))[0], QValidator.State.Acceptable)
         finally:
