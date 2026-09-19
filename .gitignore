@@ -9,6 +9,7 @@ logs/
 
 .test-deps/
 .venv/
+.vscode/settings.json
 
 MAPAS/
 options.json
