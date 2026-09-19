@@ -8,6 +8,40 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLineEdit, QFileDialog, QLabel, QColorDialog, QMessageBox, QSizePolicy, QFontComboBox, QStyleFactory, QAbstractSpinBox)
 
 
+def _theme_is_dark(theme, system_scheme):
+    return theme == 'Dark' or (theme == 'Como o Windows' and system_scheme == Qt.ColorScheme.Dark)
+
+
+def _widget_theme_colors(dark):
+    if dark:
+        return {'background': '#202429', 'foreground': '#edf1f5',
+                'panel': '#2c3239', 'border': '#46515d'}
+    return {'background': '#edf1f4', 'foreground': '#233448',
+            'panel': '#ffffff', 'border': '#cbd5dd'}
+
+
+def _theme_stylesheet(colors, arrow_root):
+    background = colors['background']
+    foreground = colors['foreground']
+    panel = colors['panel']
+    border = colors['border']
+    return (f'QMainWindow, QWidget {{ background: {background}; color: {foreground}; }} '
+            f'QPushButton, QToolButton, QComboBox, QSpinBox, QLineEdit {{ '
+            f'background: {panel}; border: 1px solid {border}; border-radius: 4px; padding: 4px; }} '
+            'QPushButton:disabled { color: #7e8790; } '
+            'QPushButton:checked { border: 2px solid #448b68; } '
+            f'QMenu {{ background: {panel}; }} '
+            'QMenu::item:selected { background: #448b68; color: white; }' +
+            f"""
+            QAbstractSpinBox {{ padding: 4px 24px 4px 4px; min-height: 24px; }}
+            QAbstractSpinBox::up-button {{ subcontrol-origin: border; subcontrol-position: top right; width: 22px; height: 16px; border-left: 1px solid {border}; background: {panel}; }}
+            QAbstractSpinBox::down-button {{ subcontrol-origin: border; subcontrol-position: bottom right; width: 22px; height: 16px; border-left: 1px solid {border}; background: {panel}; }}
+            QAbstractSpinBox::up-arrow {{ image: url("{arrow_root}/spin-up.svg"); width: 10px; height: 7px; }}
+            QAbstractSpinBox::down-arrow {{ image: url("{arrow_root}/spin-down.svg"); width: 10px; height: 7px; }}
+            QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {{ background: #698779; }}
+        """)
+
+
 class LayoutOptions:
     def build_layout_options(self, layout, operations, controls, options):
         self.setting_fields = {}
@@ -342,18 +376,10 @@ class LayoutOptions:
             self.statusBar().showMessage(f'Não foi possível guardar as configurações: {exc}')
 
     def apply_theme(self, theme):
-        dark = theme == 'Dark' or (theme == 'Como o Windows' and QApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark)
-        bg,fg,panel,border = ('#202429','#edf1f5','#2c3239','#46515d') if dark else ('#edf1f4','#233448','#ffffff','#cbd5dd')
-        self.setStyleSheet(f'QMainWindow, QWidget {{ background: {bg}; color: {fg}; }} QPushButton, QToolButton, QComboBox, QSpinBox, QLineEdit {{ background: {panel}; border: 1px solid {border}; border-radius: 4px; padding: 4px; }} QPushButton:disabled {{ color: #7e8790; }} QPushButton:checked {{ border: 2px solid #448b68; }} QMenu {{ background: {panel}; }} QMenu::item:selected {{ background: #448b68; color: white; }}')
+        dark = _theme_is_dark(theme, QApplication.styleHints().colorScheme())
+        colors = _widget_theme_colors(dark)
         arrow_root = (Path(__file__).resolve().parent / 'assets').as_posix()
-        self.setStyleSheet(self.styleSheet() + f"""
-            QAbstractSpinBox {{ padding: 4px 24px 4px 4px; min-height: 24px; }}
-            QAbstractSpinBox::up-button {{ subcontrol-origin: border; subcontrol-position: top right; width: 22px; height: 16px; border-left: 1px solid {border}; background: {panel}; }}
-            QAbstractSpinBox::down-button {{ subcontrol-origin: border; subcontrol-position: bottom right; width: 22px; height: 16px; border-left: 1px solid {border}; background: {panel}; }}
-            QAbstractSpinBox::up-arrow {{ image: url("{arrow_root}/spin-up.svg"); width: 10px; height: 7px; }}
-            QAbstractSpinBox::down-arrow {{ image: url("{arrow_root}/spin-down.svg"); width: 10px; height: 7px; }}
-            QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {{ background: #698779; }}
-        """)
+        self.setStyleSheet(_theme_stylesheet(colors, arrow_root))
         self.view.dark_theme = dark
         for key in ('map_background','grid_color'):
             if key not in self.preferences:
@@ -361,6 +387,9 @@ class LayoutOptions:
                 self.view.colors[key] = value
                 self.color_buttons[key].setText(value)
                 self.color_buttons[key].setStyleSheet(f'border-left: 18px solid {value}; padding: 5px;')
+        map_library = getattr(self, 'map_library', None)
+        if map_library is not None:
+            map_library.set_theme(dark)
         self.view.update()
 
 

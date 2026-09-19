@@ -726,7 +726,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
     def show_map_library(self):
         """Abre uma janela de consulta independente do mapa e do jogo."""
         if not hasattr(self, 'map_library') or self.map_library is None:
-            self.map_library = MapLibraryWindow(self)
+            self.map_library = MapLibraryWindow(self, self.view.dark_theme)
         self.map_library.show()
         self.map_library.raise_()
         self.map_library.activateWindow()

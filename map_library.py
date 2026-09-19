@@ -16,6 +16,53 @@ from mapper_core import MapperState
 from qt_map_operations import MapOperations, maps_directory
 
 
+def _theme_values(dark):
+    if dark:
+        return dict(
+            foreground='#edf1f5',
+            tree_foreground='#ffffff',
+            panel='#252d34',
+            border='#4c5d6b',
+            tree_panel='#2c3239',
+            selection='#2f5d78',
+            selection_border='#80c8ff',
+            indicator='#18222b',
+            indicator_border='#8296a8',
+            preview_background='#38434a',
+            preview_foreground='#d5e2e8',
+        )
+    return dict(
+        foreground='#233448',
+        tree_foreground='#233448',
+        panel='#ffffff',
+        border='#cbd5dd',
+        tree_panel='#ffffff',
+        selection='#dbe9f2',
+        selection_border='#2478c4',
+        indicator='#f3f6f8',
+        indicator_border='#8296a8',
+        preview_background='#ffffff',
+        preview_foreground='#233448',
+    )
+
+
+def _tree_stylesheet(colors, arrow_root):
+    return f'''
+        QTreeWidget {{ background: transparent; border: none; outline: 0; color: {colors['foreground']}; }}
+        QTreeWidget::item {{ background: {colors['tree_panel']}; border: 1px solid {colors['border']};
+                            border-radius: 5px; margin: 3px 1px; padding: 7px; }}
+        QTreeWidget::item:selected {{ background: {colors['selection']}; color: {colors['tree_foreground']};
+                                     border: 1px solid {colors['selection_border']}; }}
+        QTreeWidget::branch {{ background: transparent; border: none; image: none; }}
+        QTreeWidget::branch:has-children:closed {{
+            image: url("{arrow_root}/tree-closed.svg");
+        }}
+        QTreeWidget::branch:has-children:open {{
+            image: url("{arrow_root}/tree-open.svg");
+        }}
+    '''
+
+
 class MapRowDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index):
         size = super().sizeHint(option, index)
@@ -31,6 +78,14 @@ class MapTree(QTreeWidget):
         super().__init__()
         self.setIndentation(24)
         self.setItemDelegate(MapRowDelegate(self))
+        self.set_theme(True)
+
+    def set_theme(self, dark):
+        self.dark_theme = dark
+        colors = _theme_values(dark)
+        arrow_root = (Path(__file__).resolve().parent / 'assets').as_posix()
+        self.setStyleSheet(_tree_stylesheet(colors, arrow_root))
+        self.viewport().update()
 
     def drawBranches(self, painter, rect, index):
         if not index.parent().isValid():
@@ -44,14 +99,15 @@ class MapTree(QTreeWidget):
         side = min(rect.height()-6, rect.width()-2)
         box = QRectF(rect.right()-side, rect.top()+3, side, side)
         selected = self.selectionModel().isSelected(index)
-        painter.setPen(QPen(QColor('#80c8ff' if selected else '#4c5d6b'), 1))
-        painter.setBrush(QColor('#2f5d78' if selected else '#2c3239'))
+        colors = _theme_values(self.dark_theme)
+        painter.setPen(QPen(QColor(colors['selection_border'] if selected else colors['border']), 1))
+        painter.setBrush(QColor(colors['selection'] if selected else colors['tree_panel']))
         painter.drawRoundedRect(box, 4, 4)
         half = side/2
         font = painter.font()
         font.setPixelSize(max(8, int(half*.65)))
         painter.setFont(font)
-        painter.setPen(QColor('white'))
+        painter.setPen(QColor(colors['tree_foreground']))
         text = str(count) if count else 'X'
         while painter.fontMetrics().horizontalAdvance(text) > half-3 and font.pixelSize() > 6:
             font.setPixelSize(font.pixelSize()-1)
@@ -75,7 +131,12 @@ class MapPreview(QWidget):
     def __init__(self):
         super().__init__()
         self.state = None
+        self.dark_theme = True
         self.setMinimumSize(460, 300)
+
+    def set_theme(self, dark):
+        self.dark_theme = dark
+        self.update()
 
     def show_map(self, state):
         self.state = state
@@ -83,15 +144,16 @@ class MapPreview(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor('#38434a'))
+        colors = _theme_values(self.dark_theme)
+        painter.fillRect(self.rect(), QColor(colors['preview_background']))
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if self.state is None:
-            painter.setPen(QColor('#d5e2e8'))
+            painter.setPen(QColor(colors['preview_foreground']))
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, 'Selecciona um mapa para o pré-visualizar.')
             return
         items = self.state.points + self.state.deposits + self.state.rigs + self.state.marks
         if not items:
-            painter.setPen(QColor('#d5e2e8'))
+            painter.setPen(QColor(colors['preview_foreground']))
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, 'Este mapa ainda não contém registos.')
             return
         xs, ys = [item['x'] for item in items], [item['y'] for item in items]
@@ -126,7 +188,7 @@ class MapPreview(QWidget):
 
 class MapLibraryWindow(QDialog):
     """Consulta sistemas, planetas, versões e conteúdos dos ficheiros em MAPAS."""
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, dark=True):
         super().__init__(parent)
         self.setWindowTitle('Ver e manter mapas')
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowMinMaxButtonsHint |
@@ -137,6 +199,7 @@ class MapLibraryWindow(QDialog):
         self.systems = []
         self.selected_path = None
         self.selected_item = None
+        self.dark_theme = dark
         root = QVBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(8)
@@ -149,10 +212,6 @@ class MapLibraryWindow(QDialog):
         self.info = QTextEdit()
         self.info.setReadOnly(True)
         self.info.setMinimumHeight(190)
-        self.info.setStyleSheet('''
-            QTextEdit { background: #252d34; border: 1px solid #4c5d6b;
-                        border-radius: 6px; padding: 8px; color: #edf1f5; }
-        ''')
         left_layout.addWidget(self.preview, 3)
         flags = QHBoxLayout()
         self.favorite_check = QCheckBox('Favorito')
@@ -167,18 +226,12 @@ class MapLibraryWindow(QDialog):
         self.open_button.setEnabled(False)
         self.open_button.clicked.connect(self.open_selected_map)
         flags.addWidget(self.open_button)
-        info_panel = QWidget()
-        info_panel.setObjectName('map_details')
-        info_panel.setStyleSheet('''
-            QWidget#map_details { background: #252d34; border: 1px solid #4c5d6b; border-radius: 6px; }
-            QCheckBox { color: #edf1f5; background: transparent; }
-            QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #8296a8; border-radius: 2px; background: #18222b; }
-            QCheckBox::indicator:checked { background: #2f5d78; image: url("CHECK_ICON"); }
-        '''.replace('CHECK_ICON', (Path(__file__).resolve().parent/'assets'/'checked.svg').as_posix()))
-        info_layout = QVBoxLayout(info_panel)
+        self.info_panel = QWidget()
+        self.info_panel.setObjectName('map_details')
+        info_layout = QVBoxLayout(self.info_panel)
         info_layout.addLayout(flags)
         info_layout.addWidget(self.info)
-        left_layout.addWidget(info_panel, 2)
+        left_layout.addWidget(self.info_panel, 2)
         body.addWidget(left)
 
         right = QWidget()
@@ -223,6 +276,24 @@ class MapLibraryWindow(QDialog):
         self.favorite_check.toggled.connect(self.change_flags)
         self.protected_check.toggled.connect(self.change_flags)
         self.load_systems()
+        self.set_theme(dark)
+
+    def set_theme(self, dark):
+        self.dark_theme = dark
+        colors = _theme_values(dark)
+        checked_icon = (Path(__file__).resolve().parent / 'assets' / 'checked.svg').as_posix()
+        self.info.setStyleSheet(f'''
+            QTextEdit {{ background: {colors['panel']}; border: 1px solid {colors['border']};
+                         border-radius: 6px; padding: 8px; color: {colors['foreground']}; }}
+        ''')
+        self.info_panel.setStyleSheet(f'''
+            QWidget#map_details {{ background: {colors['panel']}; border: 1px solid {colors['border']}; border-radius: 6px; }}
+            QCheckBox {{ color: {colors['foreground']}; background: transparent; }}
+            QCheckBox::indicator {{ width: 14px; height: 14px; border: 1px solid {colors['indicator_border']}; border-radius: 2px; background: {colors['indicator']}; }}
+            QCheckBox::indicator:checked {{ background: {colors['selection']}; image: url("{checked_icon}"); }}
+        ''')
+        self.tree.set_theme(dark)
+        self.preview.set_theme(dark)
 
     def load_systems(self):
         """Lê apenas os nomes das subpastas de MAPAS para alimentar a pesquisa."""

@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PyQt6.QtWidgets import QApplication, QPushButton, QSpinBox
+from PyQt6.QtCore import Qt
+from layout_options import _theme_is_dark
 from rhino_surface_mapper_qt import MapperWindow
 
 
@@ -57,6 +59,23 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(w.view.rhino_height,73)
         self.assertTrue(w.view.dark_theme)
 
+    def test_theme_resolution_and_widget_stylesheet(self):
+        w = self.window
+        self.assertFalse(_theme_is_dark('Light', Qt.ColorScheme.Dark))
+        self.assertTrue(_theme_is_dark('Dark', Qt.ColorScheme.Light))
+        self.assertTrue(_theme_is_dark('Como o Windows', Qt.ColorScheme.Dark))
+        self.assertFalse(_theme_is_dark('Como o Windows', Qt.ColorScheme.Light))
+
+        w.apply_theme('Light')
+        self.assertFalse(w.view.dark_theme)
+        self.assertIn('background: #edf1f4; color: #233448;', w.styleSheet())
+        self.assertIn('background: #ffffff; border: 1px solid #cbd5dd;', w.styleSheet())
+
+        w.apply_theme('Dark')
+        self.assertTrue(w.view.dark_theme)
+        self.assertIn('background: #202429; color: #edf1f5;', w.styleSheet())
+        self.assertIn('background: #2c3239; border: 1px solid #46515d;', w.styleSheet())
+
     def test_spin_arrows_with_mouse_in_both_themes(self):
         from PyQt6.QtCore import Qt
         from PyQt6.QtWidgets import QStyle, QStyleOptionSpinBox
@@ -100,6 +119,11 @@ class LayoutTests(unittest.TestCase):
         w.apply_theme('Light')
         w.apply_theme('Dark')
         self.assertEqual(w.view.colors['map_background'],'#8899aa')
+
+        w.setting_fields['grid_color'][1]('#112233')
+        w.apply_theme('Light')
+        w.apply_theme('Dark')
+        self.assertEqual(w.view.colors['grid_color'],'#112233')
 
     def test_scanned_area_uses_wave_color(self):
         w = self.window

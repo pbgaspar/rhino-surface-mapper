@@ -161,6 +161,61 @@ class ProtectionTests(unittest.TestCase):
             self.assertFalse(json.loads(self.path.read_text())['protected'])
             library.close()
 
+    def test_map_library_theme_is_local_and_preserves_preview_semantics(self):
+        from map_library import MapPreview
+
+        library = MapLibraryWindow()
+        try:
+            self.assertTrue(library.dark_theme)
+            self.assertIn('#252d34', library.info.styleSheet())
+            self.assertIn('#2c3239', library.tree.styleSheet())
+            library.set_theme(False)
+            self.assertFalse(library.dark_theme)
+            self.assertIn('#ffffff', library.info.styleSheet())
+            self.assertIn('#ffffff', library.tree.styleSheet())
+            self.assertNotIn('#252d34', library.info.styleSheet())
+            self.assertNotIn('#2c3239', library.tree.styleSheet())
+            library.set_theme(True)
+            self.assertIn('#252d34', library.info.styleSheet())
+        finally:
+            library.close()
+
+        preview = MapPreview()
+        preview.resize(460, 300)
+        state = MapperState()
+        state.points = [dict(x=-500, y=0), dict(x=500, y=0)]
+        preview.show_map(state)
+        preview.show()
+        self.app.processEvents()
+        try:
+            dark_route = preview.grab().toImage().pixelColor(230, 150)
+            preview.set_theme(False)
+            self.app.processEvents()
+            light_route = preview.grab().toImage().pixelColor(230, 150)
+            for color in (dark_route, light_route):
+                self.assertGreater(color.green(), color.red())
+                self.assertGreater(color.green(), color.blue())
+        finally:
+            preview.close()
+
+    def test_map_library_follows_effective_theme_when_open(self):
+        window = self.make_window()
+        self.assertFalse(hasattr(window, 'map_library'))
+        window.apply_theme('Dark')
+        self.assertFalse(hasattr(window, 'map_library'))
+        window.show_map_library()
+        library = window.map_library
+        self.assertTrue(library.dark_theme)
+        window.apply_theme('Light')
+        self.assertFalse(library.dark_theme)
+        window.apply_theme('Dark')
+        self.assertTrue(library.dark_theme)
+
+        library.close()
+        window.show_map_library()
+        self.assertIs(window.map_library, library)
+        self.assertTrue(window.map_library.dark_theme)
+
     def test_legacy_exploration_uses_next_free_version(self):
         w = self.make_window()
         self.state.pml_id = ''
