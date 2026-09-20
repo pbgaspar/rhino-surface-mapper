@@ -1,0 +1,150 @@
+[
+  {
+    "name": "Helium",
+    "planet_types": ["High metal content", "Rocky", "Rocky Ice"]
+  },
+  {
+    "name": "Helium-3",
+    "planet_types": ["Icy"]
+  },
+  {
+    "name": "Tritium",
+    "planet_types": ["Icy"]
+  },
+  {
+    "name": "Water",
+    "planet_types": ["Rocky Ice", "Icy"]
+  },
+  {
+    "name": "Iridium",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Platinum",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Palladium",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky", "Rocky Ice"]
+  },
+  {
+    "name": "Gold",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Osmium",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Silver",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Samarium",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Tantalum",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Thorium",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Uranium",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Titanium",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Lithium",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Copper",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky", "Rocky Ice"]
+  },
+  {
+    "name": "Thortveitite",
+    "planet_types": ["Rocky"]
+  },
+  {
+    "name": "Periclase Dunite",
+    "planet_types": ["Rocky"]
+  },
+  {
+    "name": "Monazite",
+    "planet_types": ["Rocky"]
+  },
+  {
+    "name": "Rhodplumsite",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Diamond",
+    "planet_types": ["High metal content", "Metal Rich"]
+  },
+  {
+    "name": "Alexandrite",
+    "planet_types": ["Rocky"]
+  },
+  {
+    "name": "Sapphire",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Ruby",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky"]
+  },
+  {
+    "name": "Grandidierite",
+    "planet_types": ["Rocky"]
+  },
+  {
+    "name": "Serendibite",
+    "planet_types": ["Rocky"]
+  },
+  {
+    "name": "Bastnäsite",
+    "planet_types": ["Rocky"]
+  },
+  {
+    "name": "Low Temperature Diamonds",
+    "planet_types": ["Rocky", "Rocky Ice", "Icy"]
+  },
+  {
+    "name": "Quartz Pyroxenite",
+    "planet_types": ["Rocky"]
+  },
+  {
+    "name": "Deuterium",
+    "planet_types": ["Rocky", "Rocky Ice", "Icy"]
+  },
+  {
+    "name": "Magnesite",
+    "planet_types": ["Rocky"]
+  },
+  {
+    "name": "Olivine",
+    "planet_types": ["Rocky", "Rocky Ice"]
+  },
+  {
+    "name": "Jadeite",
+    "planet_types": ["Rocky"]
+  },
+  {
+    "name": "Uraninite",
+    "planet_types": ["Rocky"]
+  },
+  {
+    "name": "Haematite",
+    "planet_types": ["High metal content", "Metal Rich", "Rocky", "Rocky Ice"]
+  },
+  {
+    "name": "Methanol Crystals",
+    "planet_types": ["Rocky Ice", "Icy"]
+  }
+]

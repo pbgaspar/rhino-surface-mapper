@@ -1,6 +1,7 @@
 """Market domain data and behavior."""
 
 from .commodities import (
+    CatalogueFormatError,
     COMMODITY_ALIASES,
     SURFACE_COMMODITIES,
     canonical_commodity_name,
@@ -27,6 +28,7 @@ from .cache import (
 )
 
 __all__ = [
+    "CatalogueFormatError",
     "COMMODITY_ALIASES",
     "SURFACE_COMMODITIES",
     "canonical_commodity_name",

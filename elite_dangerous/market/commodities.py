@@ -1,57 +1,103 @@
 """Surface mining product data and name normalization."""
 
+import json
+from pathlib import Path
 from types import MappingProxyType
 import unicodedata
 
 
-# Canonical spelling and adopted membership are characterized from the mature
-# market experiments. Keep this data separate from its lookup behavior.
-_SURFACE_COMMODITIES = (
-    "Helium",
-    "Helium-3",
-    "Tritium",
-    "Water",
-    "Iridium",
-    "Platinum",
-    "Palladium",
-    "Gold",
-    "Osmium",
-    "Silver",
-    "Samarium",
-    "Tantalum",
-    "Thorium",
-    "Uranium",
-    "Titanium",
-    "Lithium",
-    "Copper",
-    "Thortveitite",
-    "Periclase Dunite",
-    "Monazite",
-    "Rhodplumsite",
-    "Diamond",
-    "Alexandrite",
-    "Sapphire",
-    "Ruby",
-    "Grandidierite",
-    "Serendibite",
-    "Bastnäsite",
-    "Low Temperature Diamonds",
-    "Quartz Pyroxenite",
-    "Deuterium",
-    "Magnesite",
-    "Olivine",
-    "Jadeite",
-    "Uraninite",
-    "Haematite",
-    "Methanol Crystals",
+CATALOGUE_PATH = Path(__file__).with_name("SURFACE_MINING_COMMODITIES.json")
+_EXPECTED_COMMODITY_COUNT = 37
+_ALLOWED_PLANET_TYPES = frozenset(
+    {
+        "High metal content",
+        "Metal Rich",
+        "Rocky",
+        "Rocky Ice",
+        "Icy",
+    }
 )
+
+
+class CatalogueFormatError(ValueError):
+    """Raised when the surface commodity catalogue is missing or invalid."""
+
+
+def _load_catalogue(path: Path) -> tuple[dict[str, object], ...]:
+    """Load and validate the required surface commodity catalogue."""
+    try:
+        with path.open("r", encoding="utf-8") as catalogue_file:
+            payload = json.load(catalogue_file)
+    except FileNotFoundError as exc:
+        raise CatalogueFormatError(f"catalogue file is missing: {path}") from exc
+    except UnicodeDecodeError as exc:
+        raise CatalogueFormatError("catalogue is not valid UTF-8") from exc
+    except json.JSONDecodeError as exc:
+        raise CatalogueFormatError("catalogue is not valid JSON") from exc
+
+    if not isinstance(payload, list):
+        raise CatalogueFormatError("catalogue must be a JSON array")
+    if len(payload) != _EXPECTED_COMMODITY_COUNT:
+        raise CatalogueFormatError(
+            f"catalogue must contain exactly {_EXPECTED_COMMODITY_COUNT} records"
+        )
+
+    records: list[dict[str, object]] = []
+    seen_names: set[str] = set()
+    seen_normalized_names: set[str] = set()
+    for index, record in enumerate(payload):
+        if not isinstance(record, dict) or set(record) != {"name", "planet_types"}:
+            raise CatalogueFormatError(
+                f"catalogue record {index} must contain only name and planet_types"
+            )
+
+        name = record["name"]
+        if not isinstance(name, str) or not name.strip():
+            raise CatalogueFormatError(
+                f"catalogue record {index} has an invalid name"
+            )
+        if name in seen_names:
+            raise CatalogueFormatError(f"duplicate commodity name: {name!r}")
+        normalized_name = normalize_name(name)
+        if normalized_name in seen_normalized_names:
+            raise CatalogueFormatError(
+                f"duplicate normalized commodity name: {name!r}"
+            )
+        seen_names.add(name)
+        seen_normalized_names.add(normalized_name)
+
+        planet_types = record["planet_types"]
+        if not isinstance(planet_types, list) or not planet_types:
+            raise CatalogueFormatError(
+                f"catalogue record {index} has invalid planet_types"
+            )
+        if any(
+            not isinstance(planet_type, str) or not planet_type.strip()
+            for planet_type in planet_types
+        ):
+            raise CatalogueFormatError(
+                f"catalogue record {index} has an invalid planet type"
+            )
+        unknown_types = set(planet_types) - _ALLOWED_PLANET_TYPES
+        if unknown_types:
+            raise CatalogueFormatError(
+                f"catalogue record {index} has unsupported planet types: "
+                f"{sorted(unknown_types)!r}"
+            )
+        if len(planet_types) != len(set(planet_types)):
+            raise CatalogueFormatError(
+                f"catalogue record {index} has duplicate planet types"
+            )
+
+        records.append(record)
+
+    return tuple(records)
 
 _COMMODITY_ALIASES = {
     "Bastnasite": "Bastnäsite",
     "Methanol Monohydrate Crystals": "Methanol Crystals",
 }
 
-SURFACE_COMMODITIES = _SURFACE_COMMODITIES
 COMMODITY_ALIASES = MappingProxyType(_COMMODITY_ALIASES)
 
 
@@ -73,9 +119,13 @@ def normalize_name(value: object | None) -> str:
     )
 
 
+_CATALOGUE = _load_catalogue(CATALOGUE_PATH)
+SURFACE_COMMODITIES = tuple(record["name"] for record in _CATALOGUE)
+
+
 def _build_canonical_names() -> MappingProxyType:
     """Build immutable normalized-name to canonical-name lookup data."""
-    names = {normalize_name(product): product for product in _SURFACE_COMMODITIES}
+    names = {normalize_name(product): product for product in SURFACE_COMMODITIES}
     names.update(
         (normalize_name(alias), canonical)
         for alias, canonical in _COMMODITY_ALIASES.items()
