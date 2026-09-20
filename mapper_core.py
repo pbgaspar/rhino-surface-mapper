@@ -7,15 +7,18 @@ principal para processar os dados do jogo e dos mapas guardados.
 
 from __future__ import annotations
 
-import json
 import math
 import time
-import os
-import tempfile
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from map_persistence import (
+    is_map_file_protected,
+    read_file_timestamps,
+    read_map_json,
+    update_map_file_flags,
+    write_map_json,
+)
 
 # Flags é um conjunto de bits enviado pelo jogo. Este bit identifica uso do SRV.
 SRV_FLAG = 0x04000000
@@ -379,13 +382,13 @@ class MapperState:
         path = Path(path)
         if self.mining_only:
             raise PermissionError('Só minerar não permite gravar alterações. Abre uma nova versão para explorar.')
-        if path.exists() and json.loads(path.read_text(encoding='utf-8')).get('protected', False):
+        if is_map_file_protected(path):
             raise PermissionError('Este mapa está protegido. Cria uma nova versão para continuar a exploração.')
         # Só mapas novos recebem estes metadados. Não inventamos uma data de
         # criação para um mapa antigo que não a tinha gravado.
         if self.created_at is not None and update_saved_at:
             self.last_saved_at = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-        path.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        write_map_json(path, self.to_dict())
 
     @property
     def read_only(self):
@@ -408,23 +411,7 @@ class MapperState:
         É a operação explícita que permite retirar a proteção. Lê o JSON atual
         para não substituir dados por uma cópia antiga aberta na biblioteca.
         """
-        if type(favorite) is not bool or type(protected) is not bool:
-            raise ValueError('Favorito e proteção devem ser valores booleanos.')
-        path = Path(path)
-        stats = path.stat()
-        data = json.loads(path.read_text(encoding='utf-8'))
-        data.update(favorite=favorite, protected=protected)
-        temporary = None
-        try:
-            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent,
-                                             suffix='.tmp', delete=False) as stream:
-                temporary = Path(stream.name)
-                json.dump(data, stream, ensure_ascii=False, indent=2)
-            os.replace(temporary, path)
-            os.utime(path, ns=(stats.st_atime_ns, stats.st_mtime_ns))
-        finally:
-            if temporary is not None and temporary.exists():
-                temporary.unlink()
+        update_map_file_flags(path, favorite=favorite, protected=protected)
 
     def populate_missing_timestamps(self, path: Path) -> bool:
         """Completa datas ausentes com as propriedades de um mapa antigo.
@@ -433,13 +420,13 @@ class MapperState:
         última modificação. Devolve True apenas quando há informação nova para
         gravar, preservando no JSON a data histórica em vez da data da migração.
         """
-        stats = path.stat()
+        created_at, last_saved_at = read_file_timestamps(path)
         changed = False
         if self.created_at is None:
-            self.created_at = datetime.fromtimestamp(stats.st_ctime).astimezone().isoformat(timespec='seconds')
+            self.created_at = created_at
             changed = True
         if self.last_saved_at is None:
-            self.last_saved_at = datetime.fromtimestamp(stats.st_mtime).astimezone().isoformat(timespec='seconds')
+            self.last_saved_at = last_saved_at
             changed = True
         return changed
 
@@ -542,7 +529,7 @@ class MapperState:
     def _load_file(self, path: Path) -> None:
         """Desserializa os campos JSON num estado candidato.
         Método interno: só load deve ser usado externamente, pois também valida o resultado."""
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = read_map_json(path)
         self.system, self.body = data.get("system", ""), data.get("body", "")
         self.created_at = data.get("created_at")
         self.last_saved_at = data.get("last_saved_at")
