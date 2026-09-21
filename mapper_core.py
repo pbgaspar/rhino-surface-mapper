@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,22 @@ SRV_FLAG = 0x04000000
 DEFAULT_RADIUS_M = 6_371_000.0
 SEARCH_RADIUS_M = 3_500.0
 SEARCH_SPACING_M = 1_800.0
+
+
+@dataclass(frozen=True)
+class StatusUpdate:
+    """Result of processing one telemetry status."""
+
+    accepted: bool
+    location_changed: bool = False
+    system: str = ""
+    body: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+
+    def __bool__(self) -> bool:
+        """Preserve the historical boolean contract for existing callers."""
+        return self.accepted
 
 
 class MapperState:
@@ -150,7 +167,7 @@ class MapperState:
         self.next_target_xy = None
         self.route_history.clear()
 
-    def process_status(self, status: dict[str, Any]) -> bool:
+    def process_status(self, status: dict[str, Any], *, record_position: bool = True) -> StatusUpdate:
         """Atualiza a telemetria a partir de um ``Status.json``.
 
         Devolve ``True`` quando a posição foi aceite como telemetria do Rhino.
@@ -158,7 +175,7 @@ class MapperState:
         flags = int(status.get("Flags", 0))
         self.in_srv = bool(flags & SRV_FLAG)
         if not self.in_srv:
-            return False
+            return StatusUpdate(False)
 
         fuel = status.get("Fuel") or {}
         reservoir = fuel.get("FuelReservoir")
@@ -176,8 +193,8 @@ class MapperState:
 
         lat, lon = status.get("Latitude"), status.get("Longitude")
         if lat is None or lon is None:
-            return False
-        self.rhino_lat, self.rhino_lon = float(lat), float(lon)
+            return StatusUpdate(False)
+        latitude, longitude = float(lat), float(lon)
 
         system, body = status.get("StarSystem", ""), status.get("BodyName", "")
         # O Status.json pode omitir StarSystem durante vários segundos. Quando
@@ -186,10 +203,13 @@ class MapperState:
         if not system and self.system and body == self.body:
             system = self.system
         body_key = f"{system}|{body}"
+        if self.body_key and self.body_key != body_key:
+            return StatusUpdate(True, True, system, body, latitude, longitude)
+        if record_position:
+            self.rhino_lat, self.rhino_lon = latitude, longitude
         if self.read_only and self.body_key != body_key:
             # Consultar outro planeta não pode apagar o mapa protegido.
-            self.in_srv = False
-            return False
+            return StatusUpdate(True, True, system, body, latitude, longitude)
         # Um novo corpo define outro referencial: não podemos juntar percursos
         # de planetas diferentes nas mesmas coordenadas locais.
         if self.body_key != body_key:
@@ -197,6 +217,9 @@ class MapperState:
             self.center_lat, self.center_lon = self.rhino_lat, self.rhino_lon
             self.radius = float(status.get("PlanetRadius") or DEFAULT_RADIUS_M)
             self.new_map()
+
+        if not record_position:
+            return StatusUpdate(True, False, system, body, latitude, longitude)
 
         x, y = self.llxy(self.rhino_lat, self.rhino_lon)
         # Registamos amostras separadas por pelo menos 10 m. Saltos acima de
@@ -210,7 +233,7 @@ class MapperState:
             self.last_xy = (x, y)
 
         self.update_next()
-        return True
+        return StatusUpdate(True, False, system, body, latitude, longitude)
 
     def start_search(self, azimuth: int = 0) -> bool:
         """Define o Datum na posição atual e prepara o primeiro destino."""

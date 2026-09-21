@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from map_persistence import (
     is_map_file_protected,
@@ -30,6 +31,47 @@ class TestMapPersistence(unittest.TestCase):
 
         loaded = read_map_json(self.path)
         self.assertEqual(loaded, sample_data)
+        self.assertEqual(list(self.path.parent.glob('*.tmp')), [])
+
+    def test_write_replaces_existing_map_completely(self):
+        write_map_json(self.path, {"old": True})
+        write_map_json(self.path, {"new": "á", "values": [1, 2, 3]})
+
+        self.assertEqual(read_map_json(self.path), {"new": "á", "values": [1, 2, 3]})
+        self.assertEqual(list(self.path.parent.glob('*.tmp')), [])
+
+    def test_write_failure_before_replacement_preserves_existing_map(self):
+        write_map_json(self.path, {"original": True})
+        original = self.path.read_bytes()
+
+        with patch("map_persistence.tempfile.NamedTemporaryFile", side_effect=OSError("write failed")):
+            with self.assertRaises(OSError):
+                write_map_json(self.path, {"replacement": True})
+
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertEqual(list(self.path.parent.glob('*.tmp')), [])
+
+    def test_serialization_failure_preserves_existing_map(self):
+        write_map_json(self.path, {"original": True})
+        original = self.path.read_bytes()
+
+        with patch("map_persistence.json.dumps", side_effect=TypeError("serialize failed")):
+            with self.assertRaises(TypeError):
+                write_map_json(self.path, {"replacement": object()})
+
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertEqual(list(self.path.parent.glob('*.tmp')), [])
+
+    def test_replace_failure_preserves_existing_map_and_cleans_temporary(self):
+        write_map_json(self.path, {"original": True})
+        original = self.path.read_bytes()
+
+        with patch("map_persistence.os.replace", side_effect=OSError("replace failed")):
+            with self.assertRaises(OSError):
+                write_map_json(self.path, {"replacement": True})
+
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertEqual(list(self.path.parent.glob('*.tmp')), [])
 
     def test_is_map_file_protected(self):
         self.assertFalse(is_map_file_protected(self.path))

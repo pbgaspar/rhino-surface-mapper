@@ -9,6 +9,29 @@ from typing import Any, Callable, Iterable
 
 PML_MATCH_DISTANCE_M = 13_000
 
+
+def corresponds_to_map(state: Any, system: str, body: str, lat: float, lon: float) -> bool:
+    """Return whether a position belongs to the supplied map location.
+
+    System and body identity must match and the stored map centre must be
+    available. The fixed PML/JD correspondence radius is inclusive.
+    Invalid or incomplete map coordinates are treated as non-corresponding.
+    """
+    if (not isinstance(getattr(state, 'system', None), str)
+            or not isinstance(getattr(state, 'body', None), str)
+            or state.system.casefold() != system.casefold()
+            or state.body.casefold() != body.casefold()):
+        return False
+    center_lat = getattr(state, 'pml_center_lat', None)
+    center_lon = getattr(state, 'pml_center_lon', None)
+    if center_lat is None or center_lon is None:
+        return False
+    try:
+        distance = surface_distance(state.radius, lat, lon, center_lat, center_lon)
+    except (AttributeError, TypeError, ValueError, ZeroDivisionError):
+        return False
+    return distance <= PML_MATCH_DISTANCE_M
+
 def safe_filename_component(value: object) -> str:
     """Return a Windows-safe, readable filename component."""
     cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', str(value)).strip().rstrip('. ')
@@ -55,11 +78,11 @@ def matching_candidates(paths: Iterable[Path], system: str, body: str, lat: floa
         try:
             candidate = loader(path)
             infer_legacy_pml(candidate, path, system, body)
-            if candidate.system.casefold() != system.casefold() or candidate.body.casefold() != body.casefold() or candidate.pml_center_lat is None:
+            if not corresponds_to_map(candidate, system, body, lat, lon):
                 continue
-            distance = surface_distance(candidate.radius, lat, lon, candidate.pml_center_lat, candidate.pml_center_lon)
-            if distance < PML_MATCH_DISTANCE_M:
-                matches.append((distance, path, candidate))
+            distance = surface_distance(candidate.radius, lat, lon,
+                                        candidate.pml_center_lat, candidate.pml_center_lon)
+            matches.append((distance, path, candidate))
         except (OSError, ValueError, TypeError, KeyError, AttributeError):
             continue
     return sorted(matches, key=lambda item: item[0])

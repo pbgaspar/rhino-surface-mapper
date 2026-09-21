@@ -1,5 +1,6 @@
 """Janela principal e mapa do Rhino Surface Mapper em PyQt6."""
 import json
+import copy
 import math
 import sys
 import time
@@ -11,6 +12,7 @@ from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QSpinBox, QCheckBox, QFileDialog, QMessageBox, QMenu)
 from mapper_core import MapperState
+from map_pml import corresponds_to_map, newest_by_pml
 from pyqt_overlay import OverlayWindow
 from qt_map_operations import MapOperations
 from radar import RadarPulse
@@ -563,6 +565,15 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.live_status = {}
         self.status_valid = False
         self.retry_status = False
+        self.transition_required = False
+        self.pending_status_update = None
+        self.pending_status_snapshot = None
+        self.latest_status_snapshot = None
+        self.pending_old_map_resolved = False
+        self.pending_destination = None
+        self._transition_attempt_snapshot = None
+        self._transition_schedule_pending = False
+        self._transition_resolution_active = False
         self.radar_input = RadarInput()
         self.options_path = Path(__file__).resolve().parent / 'options.json'
         self.scanner_group = 0
@@ -690,6 +701,10 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
     def update_radar(self):
         now = time.monotonic()
         s = self.state
+        if self.transition_required:
+            self.view.radar.waves.clear()
+            self.radar_info.setText('Radar: aguarda mudança de mapa')
+            return
         if s.read_only:
             self.view.radar.waves.clear()
             return
@@ -744,7 +759,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
     def start_search(self):
         """Inicia a busca na posição atual ou pede confirmação para substituir o Datum.
         A atualização posterior abre o overlay quando se entra neste modo."""
-        if self.map_is_read_only():
+        if self.transition_required or self.map_is_read_only():
             return
         if self.state.search_started and QMessageBox.question(self,'Iniciar busca','Substituir o Datum atual?') != QMessageBox.StandardButton.Yes:
             return
@@ -772,12 +787,14 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
     def skip_next(self):
         """Avança para o destino seguinte através do núcleo e atualiza a apresentação.
         O núcleo regista o destino como saltado, distinguindo-o de um destino alcançado."""
+        if self.transition_required:
+            return
         self.state.skip_next()
         self.refresh()
 
     def handle_skip_button(self):
         """Retoma a busca imediatamente se estiver em pausa; senão salta o destino atual."""
-        if self.state.read_only:
+        if self.transition_required or self.state.read_only:
             return
         if self.state.search_paused or self.state.return_to_pause:
             self.state.search_paused = False
@@ -792,10 +809,23 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
     def toggle_overlay(self):
         """Alterna a visibilidade apenas quando o modo atual autoriza o overlay.
         A decisão manual mantém-se nas atualizações seguintes dentro do mesmo modo."""
-        if not (self.state.overlay_allowed() or (self.state.in_srv and self.direction_test_active())):
+        if self.transition_required or not (self.state.overlay_allowed() or (self.state.in_srv and self.direction_test_active())):
             return
         self.overlay_mode_active = not self.overlay_mode_active
         self.refresh()
+
+    def toggle_assistance(self):
+        """Keep steering assistance inactive while the active map is unresolved."""
+        if self.transition_required:
+            self.stop_assistance('Assistência desligada: mudança de mapa pendente')
+            return
+        super().toggle_assistance()
+
+    def update_assistance(self):
+        """Skip assistance/navigation calculations for an unresolved location."""
+        if self.transition_required:
+            return
+        super().update_assistance()
 
     def refresh(self, redraw_map=True):
         """Sincroniza combustível, navegação, botão Overlay e desenho com o estado.
@@ -808,8 +838,12 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
             level = '⛔ Sem combustível' if fuel <= 0 else '🔴 Crítico' if fuel <= 15 else '⚠ Baixo' if fuel <= 30 else '✓ Normal'
             self.info_right.setText(f'FUEL : {fuel:.0f}% {level}')
             
-        navigation = s.overlay_navigation()
-        self.overlay.set_navigation(*navigation)
+        if self.transition_required:
+            self.overlay.set_navigation('—', '—', '#888888', 'white', '')
+            navigation = None
+        else:
+            navigation = s.overlay_navigation()
+            self.overlay.set_navigation(*navigation)
         
         # O overlay só deve estar visível se:
         # 1. O modo for autorizado (search_started, active_nav, etc.)
@@ -827,7 +861,8 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         elif not navigating:
             self.overlay_mode_active = False
         self.overlay_navigation_active = navigating
-        allowed = s.overlay_allowed() or (s.in_srv and self.direction_test_active())
+        allowed = (not self.transition_required and
+                    (s.overlay_allowed() or (s.in_srv and self.direction_test_active())))
         self.overlay_button.setEnabled(allowed)
         
         should_be_visible = allowed and self.overlay_mode_active
@@ -842,14 +877,15 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
 
         # Ativar/Desativar botões conforme a presença no Rhino
         in_srv = s.in_srv
-        self.search_button.setEnabled(in_srv and not s.read_only)
-        self.skip_button.setEnabled(in_srv and (s.search_started or s.search_paused or s.return_to_pause))
+        self.search_button.setEnabled(in_srv and not s.read_only and not self.transition_required)
+        self.skip_button.setEnabled(in_srv and not self.transition_required and
+                                    (s.search_started or s.search_paused or s.return_to_pause))
         
         # Botões de marcação e operações
         if hasattr(self, 'op_buttons'):
             for btn_text, btn in self.op_buttons.items():
                 if btn_text in ('Marca', 'Marcar depósito', 'Marcar rig'):
-                    btn.setEnabled(in_srv and not s.read_only)
+                    btn.setEnabled(in_srv and not s.read_only and not self.transition_required)
 
         # Atualizar textos e estilos dos botões de busca e salto/pausa
         if hasattr(self, 'search_button'):
@@ -863,7 +899,8 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                 self.skip_button.setStyleSheet(f"background-color: {bg}; color: #101010; font-weight: bold; border: 1px solid #705000; border-radius: 4px; padding: 3px 8px;")
             else:
                 self.skip_button.setText('Saltar próximo')
-                self.skip_button.setEnabled(in_srv and s.search_started and s.next_target_xy is not None)
+                self.skip_button.setEnabled(in_srv and not self.transition_required and
+                                            s.search_started and s.next_target_xy is not None)
                 self.skip_button.setStyleSheet("")
 
         from map_badges import flag_pixmap
@@ -874,7 +911,9 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
             self.map_file_info.setText(f'{self.current_map_path.name} — {stamp}' + (' · Só minerar' if s.mining_only else ''))
         else:
             self.map_file_info.setText('Mapa ainda não guardado')
-        if s.active_nav_target is not None:
+        if self.transition_required:
+            self.navigation.setText('A aguardar mudança de mapa')
+        elif s.active_nav_target is not None:
             self.navigation.setText(f"A navegar: {navigation[4]} | {navigation[0]} | {navigation[1]}")
         elif s.return_to_pause:
             self.navigation.setText(f"A regressar ao ponto de pausa | {navigation[0]} | {navigation[1]}")
@@ -892,6 +931,188 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         return (s.body_key, s.rhino_lat, s.rhino_lon, s.rhino_heading, s.in_srv,
                 len(s.points), s.next_target_xy, len(s.route_history),
                 nav_sig, s.search_paused, s.search_pause_point, s.return_to_pause)
+
+    def active_map_corresponds(self, system, body, latitude, longitude):
+        """Evaluate incoming SRV location without changing the active map."""
+        state = self.state
+        if not (state.body_key and state.pml_id.strip()
+                and state.pml_center_lat is not None
+                and state.pml_center_lon is not None):
+            return None
+        return corresponds_to_map(state, system, body, latitude, longitude)
+
+    def evaluate_status_update(self, status_update, correspondence, raw_status=None):
+        """Record the first unresolved mismatch for the future lifecycle step."""
+        if (not self.transition_required and status_update.accepted
+                and (status_update.location_changed or correspondence is False)):
+            self.transition_required = True
+            self.pending_status_update = status_update
+            snapshot = self.latest_status_snapshot if raw_status is None else raw_status
+            self.pending_status_snapshot = copy.deepcopy(snapshot)
+            self.stop_assistance('Assistência desligada: mudança de mapa pendente')
+            self.schedule_pending_transition()
+
+    def schedule_pending_transition(self):
+        """Defer future lifecycle resolution until the current poll has returned."""
+        if self._transition_schedule_pending or self._transition_resolution_active:
+            return
+        self._transition_schedule_pending = True
+        QTimer.singleShot(0, self._run_pending_transition)
+
+    def _run_pending_transition(self):
+        """Run the future lifecycle seam once without implementing Step 3 yet."""
+        self._transition_schedule_pending = False
+        if not self.transition_required or self._transition_resolution_active:
+            return
+        self._transition_resolution_active = True
+        try:
+            self._transition_attempt_snapshot = copy.deepcopy(self.latest_status_snapshot)
+            if self.resolve_pending_transition() is not None:
+                self.activate_pending_destination()
+        finally:
+            self._transition_resolution_active = False
+            if (self.transition_required and self.pending_destination is None
+                    and self.latest_status_snapshot != self._transition_attempt_snapshot):
+                self.schedule_pending_transition()
+
+    def resolve_pending_transition(self):
+        """Resolve the old map and prepare, but do not install, a destination."""
+        if not self.transition_required or self.pending_destination is not None:
+            return self.pending_destination
+        try:
+            if not self.pending_old_map_resolved:
+                if not self.prepare_to_replace_current_map(
+                        'Mudar de localização', allow_cancel=False):
+                    return None
+                self.pending_old_map_resolved = True
+            self.pending_destination = self.prepare_pending_destination()
+        except (OSError, ValueError, TypeError, KeyError, AttributeError,
+                OverflowError, ZeroDivisionError) as exc:
+            QMessageBox.critical(self, 'Erro ao preparar mudança de mapa', str(exc))
+            return None
+        return self.pending_destination
+
+    def clear_transition_state(self):
+        """Clear lifecycle-only state after a confirmed destination activation."""
+        self.transition_required = False
+        self.pending_status_update = None
+        self.pending_status_snapshot = None
+        self.latest_status_snapshot = None
+        self.pending_old_map_resolved = False
+        self.pending_destination = None
+        self._transition_attempt_snapshot = None
+        self._transition_schedule_pending = False
+        self._transition_resolution_active = False
+
+    def activate_pending_destination(self):
+        """Activate a prepared destination after latest-telemetry validation."""
+        if (not self.transition_required or not self.pending_old_map_resolved
+                or self.pending_destination is None):
+            return False
+        status = self._current_transition_status()
+        if status is None:
+            return False
+        destination = self.pending_destination
+        candidate = destination.get('state')
+        if candidate is None:
+            return False
+        system, body = status['StarSystem'], status['BodyName']
+        latitude, longitude = float(status['Latitude']), float(status['Longitude'])
+        if not corresponds_to_map(candidate, system, body, latitude, longitude):
+            self.pending_destination = None
+            return False
+        try:
+            candidate.process_status(status)
+            if not corresponds_to_map(candidate, system, body, latitude, longitude):
+                self.pending_destination = None
+                return False
+            self.install_prepared_map(
+                candidate,
+                destination.get('source_text', 'Mapa carregado'),
+                destination.get('path'),
+                poll_after_install=False)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError,
+                OverflowError, ZeroDivisionError) as exc:
+            QMessageBox.critical(self, 'Erro ao ativar mudança de mapa', str(exc))
+            return False
+        if not corresponds_to_map(self.state, system, body, latitude, longitude):
+            return False
+        self.status_valid = True
+        self.clear_transition_state()
+        self.refresh()
+        return True
+
+    def install_loaded_map(self, candidate, source_text='Mapa carregado', source_path=None):
+        """Install a manual map and supersede pending lifecycle state if valid."""
+        result = super().install_loaded_map(candidate, source_text, source_path)
+        if result and self.transition_required:
+            status = self._current_transition_status()
+            if (status is not None and corresponds_to_map(
+                    self.state, status['StarSystem'], status['BodyName'],
+                    float(status['Latitude']), float(status['Longitude']))):
+                self.clear_transition_state()
+                self.refresh()
+        return result
+
+    def _current_transition_status(self):
+        """Return the latest valid SRV status suitable for destination preparation."""
+        status = self.latest_status_snapshot or self.pending_status_snapshot
+        if not status or not (int(status.get('Flags', 0)) & 0x04000000):
+            return None
+        if not (status.get('StarSystem', '').strip()
+                and status.get('BodyName', '').strip()
+                and status.get('Latitude') is not None
+                and status.get('Longitude') is not None):
+            return None
+        return copy.deepcopy(status)
+
+    def prepare_pending_destination(self):
+        """Prepare a detached existing or new destination for Slice 3.3."""
+        status = self._current_transition_status()
+        if status is None:
+            return None
+        system = status['StarSystem']
+        body = status['BodyName']
+        latitude = float(status['Latitude'])
+        longitude = float(status['Longitude'])
+        matches = self.nearby_pml_maps(system, body, latitude, longitude)
+        matches = newest_by_pml(matches)
+        if len(matches) > 1:
+            matches.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
+            labels = [
+                f'[{candidate.pml_id}] — guardado '
+                f'{datetime.fromtimestamp(path.stat().st_mtime):%Y-%m-%d %H:%M} — '
+                f'{path.name}'
+                for _, path, candidate in matches
+            ]
+            chosen = self.choose_list_item('Vários PML próximos', 'Escolhe o PML:', labels)
+            if chosen is None:
+                return None
+            path, candidate = matches[labels.index(chosen)][1:]
+        elif matches:
+            _, path, candidate = matches[0]
+        else:
+            candidate = MapperState()
+            candidate.process_status(status)
+            if not self.setup_new_pml(candidate):
+                return None
+            path = self.pml_path(candidate)
+            if path is None:
+                return None
+            path.parent.mkdir(parents=True, exist_ok=True)
+            candidate.save(path)
+            return dict(state=candidate, path=path,
+                        source_text=f'PML [{candidate.pml_id}] criado')
+
+        status['StarSystem'] = candidate.system
+        status['BodyName'] = candidate.body
+        candidate.process_status(status)
+        prepared = self.prepare_loaded_map(candidate, path)
+        if prepared is None:
+            return None
+        candidate, path = prepared
+        return dict(state=candidate, path=path,
+                    source_text=f'PML [{candidate.pml_id}] preparado')
 
     def poll(self, reloading_map=False):
         """Lê Status.json se a data mudou e atualiza a telemetria e a vista.
@@ -915,17 +1136,38 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                     self.info_left.setText(f'{self.state.system} — {self.state.body} | Mapa carregado; Rhino noutro corpo')
                     self.refresh()
                     return
+                incoming_system = data.get('StarSystem', '')
+                incoming_body = data.get('BodyName', '')
+                if not incoming_system and incoming_body == self.state.body:
+                    incoming_system = self.state.system
+                incoming_lat = data.get('Latitude')
+                incoming_lon = data.get('Longitude')
+                correspondence = None
+                if (data.get('Flags', 0) & 0x04000000
+                        and incoming_lat is not None and incoming_lon is not None):
+                    correspondence = self.active_map_corresponds(
+                        incoming_system, incoming_body,
+                        float(incoming_lat), float(incoming_lon))
                 old_body = self.state.body_key
                 before = self.map_signature()
-                accepted = self.state.process_status(data)
+                status_update = self.state.process_status(
+                    data, record_position=correspondence is not False)
+                accepted = bool(status_update)
                 self.live_status = data
                 self.live_status['Flags'] = int(data.get('Flags', 0))
                 self.status_valid = accepted
+                if accepted:
+                    self.latest_status_snapshot = copy.deepcopy(data)
+                    if (self.transition_required
+                            and self.latest_status_snapshot != self._transition_attempt_snapshot):
+                        self.schedule_pending_transition()
+                self.evaluate_status_update(status_update, correspondence, data)
                 changed = before != self.map_signature()
                 # Só memorizamos a data depois de processar uma leitura válida.
                 self.last_mtime = mtime
                 if accepted:
-                    self.observe_steering()
+                    if not self.transition_required:
+                        self.observe_steering()
                     if old_body != self.state.body_key:
                         self.cancel_placement()
                         self.view.scale = 0.08

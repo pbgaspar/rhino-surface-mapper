@@ -89,9 +89,13 @@ class ProtectionTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 state.save(path)
         self.assertEqual(self.original, self.path.read_bytes())
-        self.assertFalse(state.process_status(dict(self.status, BodyName='Outro')))
+        result = state.process_status(dict(self.status, BodyName='Outro'))
+        self.assertTrue(result)
+        self.assertTrue(result.location_changed)
+        self.assertEqual((result.system, result.body), ('Kappa', 'Outro'))
         self.assertEqual(state.body, 'Kappa 2')
         self.assertEqual(records, (state.points, state.radar_coverage, state.route_history))
+        self.assertTrue(state.protected and state.mining_only)
 
     def test_exploration_creates_unprotected_version_and_preserves_original(self):
         w = self.make_window()

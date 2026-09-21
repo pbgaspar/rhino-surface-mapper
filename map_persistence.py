@@ -17,9 +17,27 @@ def read_map_json(path: Path | str) -> dict[str, Any]:
 
 
 def write_map_json(path: Path | str, data: dict[str, Any]) -> None:
-    """Write a dictionary to disk as a UTF-8 encoded, formatted JSON map file."""
+    """Atomically write a dictionary as a UTF-8 encoded map JSON file."""
     target = Path(path)
-    target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    content = json.dumps(data, ensure_ascii=False, indent=2)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=target.parent,
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+        os.replace(temporary, target)
+    finally:
+        if temporary is not None and temporary.exists():
+            try:
+                temporary.unlink()
+            except OSError:
+                pass
 
 
 def is_map_file_protected(path: Path | str) -> bool:

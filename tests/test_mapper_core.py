@@ -1,6 +1,7 @@
 """Testes do núcleo independente da futura interface PyQt6."""
 
 import math
+import copy
 import sys
 import unittest
 from pathlib import Path
@@ -68,6 +69,64 @@ class MapperCoreTests(unittest.TestCase):
         state = MapperState()
         self.assertFalse(state.process_status(status(Flags=0)))
         self.assertEqual(state.points, [])
+
+    def test_status_reports_body_change_without_resetting_active_map(self):
+        state = MapperState()
+        state.process_status(status())
+        state.pml_id = '6'
+        state.points.append({'x': 12, 'y': 34, 'lat': 38, 'lon': -9})
+        before = copy.deepcopy((state.system, state.body, state.pml_id, state.points,
+                                state.deposits, state.rigs, state.marks,
+                                state.route_history, state.radar_coverage))
+        result = state.process_status(status(BodyName='A 2', Latitude=39.0, Longitude=-8.0))
+
+        self.assertTrue(result)
+        self.assertTrue(result.location_changed)
+        self.assertEqual((result.system, result.body, result.latitude, result.longitude),
+                         ('Teste', 'A 2', 39.0, -8.0))
+        after = (state.system, state.body, state.pml_id, state.points,
+                 state.deposits, state.rigs, state.marks,
+                 state.route_history, state.radar_coverage)
+        self.assertEqual(after, before)
+
+    def test_status_reports_system_change_without_resetting_active_map(self):
+        state = MapperState()
+        state.process_status(status())
+        state.pml_id = 'JD1'
+        before = copy.deepcopy((state.system, state.body, state.pml_id, state.points,
+                                state.deposits, state.rigs, state.marks,
+                                state.route_history, state.radar_coverage))
+        result = state.process_status(status(StarSystem='Outro'))
+
+        self.assertTrue(result.location_changed)
+        self.assertEqual((result.system, result.body), ('Outro', 'A 1'))
+        after = (state.system, state.body, state.pml_id, state.points,
+                 state.deposits, state.rigs, state.marks,
+                 state.route_history, state.radar_coverage)
+        self.assertEqual(after, before)
+
+    def test_non_srv_status_preserves_active_map(self):
+        state = MapperState()
+        state.process_status(status())
+        state.pml_id = '6'
+        result = state.process_status(status(Flags=0))
+
+        self.assertFalse(result)
+        self.assertFalse(result.location_changed)
+        self.assertEqual((state.system, state.body, state.pml_id), ('Teste', 'A 1', '6'))
+
+    def test_changed_location_can_be_processed_without_mutating_position_or_trail(self):
+        state = MapperState()
+        state.process_status(status())
+        old_position = (state.rhino_lat, state.rhino_lon)
+        old_points = copy.deepcopy(state.points)
+
+        result = state.process_status(status(Latitude=39.0, Longitude=-8.0),
+                                      record_position=False)
+
+        self.assertTrue(result)
+        self.assertEqual((state.rhino_lat, state.rhino_lon), old_position)
+        self.assertEqual(state.points, old_points)
 
     def test_missing_system_keeps_the_known_system_on_the_same_planet(self):
         """O jogo não pode apagar o mapa só porque omitiu StarSystem numa leitura."""

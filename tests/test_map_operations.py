@@ -21,7 +21,9 @@ class MapOperationsTests(unittest.TestCase):
         self.window.state.process_status(dict(Flags=0x04000000,Latitude=38,Longitude=-9,Heading=0,BodyName='Test'))
 
     def tearDown(self):
-        self.window.close()
+        self.window.transition_required = False
+        with patch.object(self.window, 'confirm_pml_exit', return_value=True):
+            self.window.close()
         self.temp.cleanup()
 
     def test_deposit_duplicate_edit_rig_cancel_and_delete(self):
@@ -171,13 +173,381 @@ class MapOperationsTests(unittest.TestCase):
         with patch.object(w, 'edit_mark_values', return_value=None):
             w.mark()
         self.assertEqual(w.state.marks, [])
-        def change_body():
-            w.state.process_status(dict(Flags=0x04000000, Latitude=38, Longitude=-9, Heading=0, BodyName='Other'))
-            return dict(name='Local', azimuth=0, distance=100)
-        with patch.object(w, 'edit_mark_values', side_effect=change_body):
+        with patch.object(w, 'edit_mark_values', return_value=dict(name='Local', azimuth=0, distance=100)):
             w.mark()
-        self.assertEqual(w.state.marks, [])
+        before = list(w.state.marks)
+        result = w.state.process_status(dict(Flags=0x04000000, Latitude=38,
+                                             Longitude=-9, Heading=0, BodyName='Other'))
+        self.assertTrue(result.location_changed)
+        self.assertEqual(w.state.marks, before)
 
+    def test_active_map_lifecycle_evaluation_preserves_pending_mismatch(self):
+        from mapper_core import MapperState
+        from map_pml import PML_MATCH_DISTANCE_M
+
+        w = self.window
+        state = MapperState()
+        state.process_status(dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+                                  Heading=0, StarSystem='Sol', BodyName='Earth'))
+        state.pml_id = '6'
+        state.pml_center_lat, state.pml_center_lon = 38, -9
+        w.state = w.view.state = state
+        w.current_map_path = Path(self.temp.name) / 'active.json'
+        degrees = PML_MATCH_DISTANCE_M / state.radius * 180 / 3.141592653589793
+
+        nearby = w.active_map_corresponds('Sol', 'Earth', 38, -9 + degrees / 2)
+        self.assertTrue(nearby)
+        nearby_update = state.process_status(dict(Flags=0x04000000, Latitude=38,
+                                                   Longitude=-9 + degrees / 2,
+                                                   Heading=0, StarSystem='Sol',
+                                                   BodyName='Earth'))
+        w.evaluate_status_update(nearby_update, nearby)
+        self.assertFalse(w.transition_required)
+        self.assertIsNone(w.pending_status_update)
+        original = (state.system, state.body, state.pml_id,
+                    state.pml_center_lat, state.pml_center_lon,
+                    state.rhino_lat, state.rhino_lon, list(state.points),
+                    w.current_map_path)
+
+        mismatch_lat = 38 + degrees + .001
+        mismatch = w.active_map_corresponds('Sol', 'Earth', mismatch_lat, -9)
+        self.assertFalse(mismatch)
+        before_position = (state.rhino_lat, state.rhino_lon, list(state.points))
+        mismatch_update = state.process_status(dict(Flags=0x04000000, Latitude=mismatch_lat,
+                                                     Longitude=-9,
+                                                     Heading=0, StarSystem='Sol',
+                                                     BodyName='Earth'),
+                                                record_position=False)
+        w.evaluate_status_update(mismatch_update, mismatch)
+        self.assertTrue(w.transition_required)
+        self.assertIs(w.pending_status_update, mismatch_update)
+        self.assertEqual((state.rhino_lat, state.rhino_lon, state.points), before_position)
+        self.assertEqual((state.system, state.body, state.pml_id,
+                          state.pml_center_lat, state.pml_center_lon,
+                          state.rhino_lat, state.rhino_lon, state.points,
+                          w.current_map_path), original)
+
+        corresponding_update = state.process_status(dict(Flags=0x04000000, Latitude=38,
+                                                          Longitude=-9, Heading=0,
+                                                          StarSystem='Sol', BodyName='Earth'))
+        w.evaluate_status_update(corresponding_update, True)
+        self.assertTrue(w.transition_required)
+        self.assertIs(w.pending_status_update, mismatch_update)
+
+        non_srv_update = state.process_status(dict(Flags=0, Latitude=38,
+                                                   Longitude=-9, StarSystem='Sol',
+                                                   BodyName='Earth'))
+        w.evaluate_status_update(non_srv_update, None)
+        self.assertTrue(w.transition_required)
+        self.assertIs(w.pending_status_update, mismatch_update)
+
+    def test_active_map_lifecycle_evaluation_handles_identity_and_protection(self):
+        from mapper_core import MapperState
+
+        for identifier in ('6', 'JD1'):
+            w = self.window
+            state = MapperState()
+            state.process_status(dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+                                      Heading=0, StarSystem='Sol', BodyName='Earth'))
+            state.pml_id = identifier
+            state.pml_center_lat, state.pml_center_lon = 38, -9
+            state.marks.append({'name': 'Keep', 'x': 0, 'y': 0, 'lat': 38, 'lon': -9})
+            if identifier == 'JD1':
+                state.protected = True
+                state.enter_mining_mode()
+            w.state = w.view.state = state
+            w.transition_required = False
+            w.pending_status_update = None
+            before = (state.system, state.body, state.pml_id,
+                      state.pml_center_lat, state.pml_center_lon,
+                      list(state.marks), state.protected, state.mining_only)
+
+            incoming = state.process_status(dict(Flags=0x04000000, Latitude=38,
+                                                 Longitude=-9, Heading=0,
+                                                 StarSystem='Other', BodyName='Mars'))
+            correspondence = w.active_map_corresponds('Other', 'Mars', 38, -9)
+            w.evaluate_status_update(incoming, correspondence)
+
+            self.assertFalse(correspondence)
+            self.assertTrue(w.transition_required)
+            self.assertEqual((incoming.system, incoming.body), ('Other', 'Mars'))
+            self.assertEqual((state.system, state.body, state.pml_id,
+                              state.pml_center_lat, state.pml_center_lon,
+                              state.marks, state.protected, state.mining_only), before)
+
+    def test_pending_transition_retains_telemetry_and_schedules_once(self):
+        from mapper_core import MapperState
+
+        w = self.window
+        state = MapperState()
+        state.process_status(dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+                                  Heading=0, StarSystem='Sol', BodyName='Earth'))
+        state.pml_id = '6'
+        state.pml_center_lat, state.pml_center_lon = 38, -9
+        w.state = w.view.state = state
+        raw_status = dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+                          Heading=12, StarSystem='Other', BodyName='Mars',
+                          PlanetRadius=3_000_000)
+        update = state.process_status(raw_status, record_position=False)
+
+        with patch('rhino_surface_mapper_qt.QTimer.singleShot') as single_shot:
+            w.evaluate_status_update(update, False, raw_status)
+            w.evaluate_status_update(update, False, raw_status)
+
+        self.assertTrue(w.transition_required)
+        self.assertIs(w.pending_status_update, update)
+        self.assertEqual(w.pending_status_snapshot, raw_status)
+        single_shot.assert_called_once()
+        self.assertTrue(state.in_srv)
+
+    def test_pending_transition_gates_foreign_poll_consumers(self):
+        import json
+        from mapper_core import MapperState
+
+        w = self.window
+        state = MapperState()
+        state.process_status(dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+                                  Heading=0, StarSystem='Sol', BodyName='Earth'))
+        state.pml_id = '6'
+        state.pml_center_lat, state.pml_center_lon = 38, -9
+        w.state = w.view.state = state
+        before = (state.rhino_lat, state.rhino_lon, list(state.points),
+                  state.system, state.body, state.pml_id,
+                  state.pml_center_lat, state.pml_center_lon)
+        w.status_path.write_text(json.dumps(dict(
+            Flags=0x04000000 | 0x08000000,
+            Latitude=38, Longitude=-9, Heading=45,
+            StarSystem='Other', BodyName='Mars',
+            PlanetRadius=3_000_000, FireGroup=0, GuiFocus=0)),
+            encoding='utf-8')
+
+        with patch.object(w, 'observe_steering') as observe, \
+                patch.object(w.view.radar, 'tick') as radar_tick:
+            w.poll()
+            w.update_radar()
+
+        self.assertTrue(w.transition_required)
+        self.assertTrue(state.in_srv)
+        self.assertEqual((state.rhino_lat, state.rhino_lon, state.points,
+                          state.system, state.body, state.pml_id,
+                          state.pml_center_lat, state.pml_center_lon), before)
+        observe.assert_not_called()
+        radar_tick.assert_not_called()
+        self.assertFalse(w.overlay_button.isEnabled())
+
+    def test_pending_transition_resolves_old_map_once_without_installing(self):
+        from mapper_core import MapperState
+
+        w = self.window
+        old_state = w.state
+        w.transition_required = True
+        destination = dict(state=MapperState(), path=None, source_text='prepared')
+        with patch.object(w, 'prepare_to_replace_current_map', return_value=True) as replace, \
+                patch.object(w, 'prepare_pending_destination', return_value=destination) as prepare:
+            self.assertIs(w.resolve_pending_transition(), destination)
+            self.assertIs(w.resolve_pending_transition(), destination)
+
+        replace.assert_called_once_with('Mudar de localização', allow_cancel=False)
+        prepare.assert_called_once_with()
+        self.assertTrue(w.pending_old_map_resolved)
+        self.assertIs(w.pending_destination, destination)
+        self.assertIs(w.state, old_state)
+        self.assertTrue(w.transition_required)
+
+    def test_pending_transition_dismissal_does_not_resolve_old_map(self):
+        w = self.window
+        w.transition_required = True
+        with patch.object(w, 'prepare_to_replace_current_map', return_value=False) as replace, \
+                patch.object(w, 'prepare_pending_destination') as prepare:
+            self.assertIsNone(w.resolve_pending_transition())
+
+        replace.assert_called_once_with('Mudar de localização', allow_cancel=False)
+        prepare.assert_not_called()
+        self.assertFalse(w.pending_old_map_resolved)
+        self.assertIsNone(w.pending_destination)
+        self.assertTrue(w.transition_required)
+
+    def test_destination_retry_does_not_repeat_old_map_resolution(self):
+        w = self.window
+        w.transition_required = True
+        destination = dict(state=object(), path=None, source_text='prepared')
+        with patch.object(w, 'prepare_to_replace_current_map', return_value=True) as replace, \
+                patch.object(w, 'prepare_pending_destination', side_effect=[None, destination]):
+            self.assertIsNone(w.resolve_pending_transition())
+            self.assertIs(w.resolve_pending_transition(), destination)
+
+        replace.assert_called_once_with('Mudar de localização', allow_cancel=False)
+        self.assertTrue(w.pending_old_map_resolved)
+        self.assertIs(w.pending_destination, destination)
+
+    def test_new_destination_is_prepared_detached_from_live_state(self):
+        from mapper_core import MapperState
+
+        w = self.window
+        old_state = w.state
+        status = dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+                      Heading=0, StarSystem='Sol', BodyName='Earth',
+                      PlanetRadius=3_000_000)
+        w.latest_status_snapshot = status
+        destination_path = Path(self.temp.name) / 'Earth [JD1].json'
+
+        def classify(candidate):
+            candidate.pml_id = 'JD1'
+            candidate.pml_center_lat = candidate.rhino_lat
+            candidate.pml_center_lon = candidate.rhino_lon
+            candidate.created_at = '2026-01-01T00:00:00Z'
+            return True
+
+        with patch.object(w, 'nearby_pml_maps', return_value=[]), \
+                patch.object(w, 'setup_new_pml', side_effect=classify), \
+                patch.object(w, 'pml_path', return_value=destination_path):
+            prepared = w.prepare_pending_destination()
+
+        self.assertIsInstance(prepared['state'], MapperState)
+        self.assertIsNot(prepared['state'], old_state)
+        self.assertEqual(prepared['state'].pml_id, 'JD1')
+        self.assertEqual(prepared['path'], destination_path)
+        self.assertTrue(destination_path.exists())
+        self.assertIs(w.state, old_state)
+        self.assertTrue(w.transition_required is False)
+
+    def test_existing_destination_is_prepared_detached_without_poll(self):
+        from mapper_core import MapperState
+
+        w = self.window
+        old_state = w.state
+        status = dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+                      Heading=0, StarSystem='Sol', BodyName='Earth')
+        w.latest_status_snapshot = status
+        candidate = MapperState()
+        candidate.process_status(status)
+        candidate.pml_id = '6'
+        candidate.pml_center_lat, candidate.pml_center_lon = 38, -9
+        path = Path(self.temp.name) / 'Earth [6].json'
+        candidate.save(path)
+
+        with patch.object(w, 'nearby_pml_maps', return_value=[(0, path, candidate)]), \
+                patch.object(w, 'prepare_loaded_map', return_value=(candidate, path)) as prepare:
+            prepared = w.prepare_pending_destination()
+
+        self.assertIs(prepared['state'], candidate)
+        self.assertEqual(prepared['path'], path)
+        prepare.assert_called_once_with(candidate, path)
+        self.assertIs(w.state, old_state)
+
+    def test_pending_destination_activation_clears_state_after_success(self):
+        from mapper_core import MapperState
+
+        w = self.window
+        old_state = w.state
+        status = dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+                      Heading=12, StarSystem='Sol', BodyName='Earth')
+        candidate = MapperState()
+        candidate.process_status(status)
+        candidate.pml_id = '6'
+        candidate.pml_center_lat, candidate.pml_center_lon = 38, -9
+        w.transition_required = True
+        w.pending_old_map_resolved = True
+        w.latest_status_snapshot = status
+        w.pending_destination = dict(state=candidate, path=None,
+                                     source_text='preparado')
+
+        self.assertTrue(w.activate_pending_destination())
+        self.assertIs(w.state, candidate)
+        self.assertIsNot(w.state, old_state)
+        self.assertFalse(w.transition_required)
+        self.assertIsNone(w.pending_status_update)
+        self.assertIsNone(w.pending_status_snapshot)
+        self.assertIsNone(w.latest_status_snapshot)
+        self.assertFalse(w.pending_old_map_resolved)
+        self.assertIsNone(w.pending_destination)
+        self.assertEqual((w.state.rhino_lat, w.state.rhino_lon), (38, -9))
+
+    def test_stale_prepared_destination_remains_pending_without_installing(self):
+        from mapper_core import MapperState
+
+        w = self.window
+        old_state = w.state
+        status = dict(Flags=0x04000000, Latitude=38.2, Longitude=-9,
+                      Heading=12, StarSystem='Sol', BodyName='Earth')
+        candidate = MapperState()
+        candidate.process_status(dict(Flags=0x04000000, Latitude=38,
+                                      Longitude=-9, Heading=0,
+                                      StarSystem='Sol', BodyName='Earth'))
+        candidate.pml_id = '6'
+        candidate.pml_center_lat, candidate.pml_center_lon = 38, -9
+        w.transition_required = True
+        w.pending_old_map_resolved = True
+        w.latest_status_snapshot = status
+        w.pending_destination = dict(state=candidate, path=None,
+                                     source_text='preparado')
+
+        self.assertFalse(w.activate_pending_destination())
+        self.assertIs(w.state, old_state)
+        self.assertTrue(w.transition_required)
+        self.assertTrue(w.pending_old_map_resolved)
+        self.assertIsNone(w.pending_destination)
+
+    def test_activation_failure_preserves_pending_lifecycle_state(self):
+        from mapper_core import MapperState
+
+        w = self.window
+        candidate = MapperState()
+        candidate.process_status(dict(Flags=0x04000000, Latitude=38,
+                                      Longitude=-9, Heading=0,
+                                      StarSystem='Sol', BodyName='Earth'))
+        candidate.pml_id = '6'
+        candidate.pml_center_lat, candidate.pml_center_lon = 38, -9
+        w.transition_required = True
+        w.pending_old_map_resolved = True
+        w.latest_status_snapshot = dict(
+            Flags=0x04000000, Latitude=38, Longitude=-9,
+            StarSystem='Sol', BodyName='Earth')
+        w.pending_destination = dict(state=candidate, path=None,
+                                     source_text='preparado')
+
+        with patch.object(w, 'install_prepared_map', side_effect=OSError('falha')), \
+                patch('rhino_surface_mapper_qt.QMessageBox.critical'):
+            self.assertFalse(w.activate_pending_destination())
+
+        self.assertTrue(w.transition_required)
+        self.assertTrue(w.pending_old_map_resolved)
+        self.assertIsNotNone(w.pending_destination)
+
+    def test_post_commit_activation_failure_rolls_back_live_state(self):
+        from mapper_core import MapperState
+
+        w = self.window
+        old_state = w.state
+        candidate = MapperState()
+        candidate.process_status(dict(Flags=0x04000000, Latitude=38,
+                                      Longitude=-9, Heading=0,
+                                      StarSystem='Sol', BodyName='Earth'))
+        candidate.pml_id = '6'
+        candidate.pml_center_lat, candidate.pml_center_lon = 38, -9
+        w.transition_required = True
+        w.pending_old_map_resolved = True
+        w.latest_status_snapshot = dict(
+            Flags=0x04000000, Latitude=38, Longitude=-9,
+            StarSystem='Sol', BodyName='Earth')
+        w.pending_destination = dict(state=candidate, path=None,
+                                     source_text='preparado')
+
+        with patch.object(w.info_left, 'setText',
+                          side_effect=[RuntimeError('falha pós-commit'), None]):
+            with self.assertRaises(RuntimeError):
+                w.activate_pending_destination()
+
+        self.assertIs(w.state, old_state)
+        self.assertIs(w.view.state, old_state)
+        self.assertTrue(w.transition_required)
+        self.assertTrue(w.pending_old_map_resolved)
+        self.assertIs(w.pending_destination['state'], candidate)
+        self.assertTrue(w.transition_required)
+
+        self.assertTrue(w.activate_pending_destination())
+        self.assertIs(w.state, candidate)
+        self.assertFalse(w.transition_required)
     def test_alter_mark_cancel_and_name_only_preserve_position(self):
         w = self.window
         with patch.object(w, 'edit_mark_values', return_value=dict(name='A', azimuth=37, distance=1234.56)):

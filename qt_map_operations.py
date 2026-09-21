@@ -13,7 +13,8 @@ from mapper_core import MapperState
 from map_pml import (PML_MATCH_DISTANCE_M, infer_legacy_pml, matching_candidates,
                      newest_by_pml, next_john_doe_id, next_version_path,
                      pml_filename, pml_path as canonical_pml_path,
-                     safe_filename_component, surface_distance as pml_surface_distance)
+                     safe_filename_component, surface_distance as pml_surface_distance,
+                     corresponds_to_map)
 from numeric_fields import MetresSpinBox, DegreesSpinBox, compact
 
 # Margem usada para reconhecer automaticamente um PML e decidir se Novo está
@@ -257,12 +258,12 @@ class MapOperations:
                     continue
         return f'JD{highest+1}'
 
-    def install_loaded_map(self, candidate, source_text='Mapa carregado', source_path=None):
-        """Troca o estado somente depois de um mapa já validado estar disponível."""
+    def prepare_loaded_map(self, candidate, source_path=None):
+        """Prepare a loaded candidate without changing the active window state."""
         if candidate.protected:
             choice = self.choose_protected_map_mode()
             if choice is None:
-                return False
+                return None
             if choice == 'mining':
                 candidate.enter_mining_mode()
             else:
@@ -279,36 +280,85 @@ class MapOperations:
                 # Migração pontual de mapas antigos: conserva as datas que
                 # estavam nas propriedades do ficheiro antes desta escrita.
                 candidate.save(source_path, update_saved_at=False)
+        return candidate, Path(source_path) if source_path else None
+
+    def install_prepared_map(self, candidate, source_text='Mapa carregado',
+                             source_path=None, poll_after_install=True):
+        """Activate a prepared candidate and optionally reread telemetry."""
         self.cancel_placement()
         self.view.radar.waves.clear()
         self.stop_assistance()
-        self.state = candidate
-        self.view.state = candidate
-        # Guarda o ficheiro efetivamente aberto. "Substituir" tem de escrever
-        # neste caminho, incluindo quando se trata de uma versão antiga.
-        self.current_map_path = Path(source_path) if source_path else None
-        for field, spin in self.parameter_spins.items():
-            spin.blockSignals(True)
-            spin.setValue(int(getattr(candidate, field)))
-            spin.blockSignals(False)
-        points = ([] if candidate.mining_only else candidate.points) + candidate.deposits + candidate.rigs + candidate.marks
-        if points:
-            xs, ys = [p['x'] for p in points], [p['y'] for p in points]
-            self.view.center = QPointF((min(xs)+max(xs))/2, (min(ys)+max(ys))/2)
-            self.view.scale = max(0.001, min(10, min(
-                self.view.width()/max(4000, max(xs)-min(xs)+2000),
-                self.view.height()/max(4000, max(ys)-min(ys)+2000))))
-        else:
-            self.view.center = QPointF()
-            self.view.scale = 0.08
-        self.overlay_mode_active = False
-        self.overlay_navigation_active = False
-        self.info_left.setText(f'{candidate.system} — {candidate.body} | {source_text}')
-        # O JSON do mapa não inclui a presença/posição atual do Rhino.
-        # Reler já, mesmo parado e sem alteração da data de Status.json.
-        self.last_mtime = None
-        self.poll(reloading_map=True)
+        previous = {
+            'state': self.state,
+            'view_state': self.view.state,
+            'current_map_path': self.current_map_path,
+            'view_center': QPointF(self.view.center),
+            'view_scale': self.view.scale,
+            'overlay_mode_active': self.overlay_mode_active,
+            'overlay_navigation_active': self.overlay_navigation_active,
+            'info_left': self.info_left.text(),
+            'last_mtime': self.last_mtime,
+            'status_valid': self.status_valid,
+            'live_status': dict(self.live_status),
+            'parameters': {field: spin.value()
+                           for field, spin in self.parameter_spins.items()},
+        }
+
+        try:
+            self.state = candidate
+            self.view.state = candidate
+            # Guarda o ficheiro efetivamente aberto. "Substituir" tem de escrever
+            # neste caminho, incluindo quando se trata de uma versão antiga.
+            self.current_map_path = Path(source_path) if source_path else None
+            for field, spin in self.parameter_spins.items():
+                spin.blockSignals(True)
+                spin.setValue(int(getattr(candidate, field)))
+                spin.blockSignals(False)
+            points = ([] if candidate.mining_only else candidate.points) + candidate.deposits + candidate.rigs + candidate.marks
+            if points:
+                xs, ys = [p['x'] for p in points], [p['y'] for p in points]
+                self.view.center = QPointF((min(xs)+max(xs))/2, (min(ys)+max(ys))/2)
+                self.view.scale = max(0.001, min(10, min(
+                    self.view.width()/max(4000, max(xs)-min(xs)+2000),
+                    self.view.height()/max(4000, max(ys)-min(ys)+2000))))
+            else:
+                self.view.center = QPointF()
+                self.view.scale = 0.08
+            self.overlay_mode_active = False
+            self.overlay_navigation_active = False
+            self.info_left.setText(f'{candidate.system} — {candidate.body} | {source_text}')
+            if poll_after_install:
+                # O JSON do mapa não inclui a presença/posição atual do Rhino.
+                # Reler já, mesmo parado e sem alteração da data de Status.json.
+                self.last_mtime = None
+                self.poll(reloading_map=True)
+        except Exception:
+            self.state = previous['state']
+            self.view.state = previous['view_state']
+            self.current_map_path = previous['current_map_path']
+            self.view.center = previous['view_center']
+            self.view.scale = previous['view_scale']
+            self.overlay_mode_active = previous['overlay_mode_active']
+            self.overlay_navigation_active = previous['overlay_navigation_active']
+            self.last_mtime = previous['last_mtime']
+            self.status_valid = previous['status_valid']
+            self.live_status = previous['live_status']
+            for field, value in previous['parameters'].items():
+                spin = self.parameter_spins[field]
+                spin.blockSignals(True)
+                spin.setValue(value)
+                spin.blockSignals(False)
+            self.info_left.setText(previous['info_left'])
+            raise
         return True
+
+    def install_loaded_map(self, candidate, source_text='Mapa carregado', source_path=None):
+        """Troca o estado somente depois de um mapa já validado estar disponível."""
+        prepared = self.prepare_loaded_map(candidate, source_path)
+        if prepared is None:
+            return False
+        candidate, source_path = prepared
+        return self.install_prepared_map(candidate, source_text, source_path)
 
     def choose_protected_map_mode(self):
         """Pausa os temporizadores durante a decisão para não registar ao fundo."""
@@ -352,9 +402,9 @@ class MapOperations:
         state.save(destination)
         return destination
 
-    def setup_new_pml(self):
+    def setup_new_pml(self, state=None):
         """Pede os dados mínimos para identificar um PML ainda desconhecido."""
-        s = self.state
+        s = state or self.state
         prompt = ('Número do PML nesta zona. Deixa vazio se ainda não o conheces.')
         pml_id, accepted = QInputDialog.getText(self, 'Novo PML', prompt)
         if not accepted:
@@ -526,7 +576,7 @@ class MapOperations:
             QMessageBox.critical(self, 'Erro ao guardar', str(exc))
             return False
 
-    def prepare_to_replace_current_map(self, next_action):
+    def prepare_to_replace_current_map(self, next_action, allow_cancel=True):
         """Resolve o destino das alterações antes de Abrir ou Novo.
 
         Apagar descarta apenas as alterações em memória; nunca apaga um
@@ -550,10 +600,14 @@ class MapOperations:
         discard = message.addButton('Não gravar', QMessageBox.ButtonRole.DestructiveRole)
         new_version = message.addButton('Nova Versão', QMessageBox.ButtonRole.ActionRole)
         save = message.addButton('Gravar', QMessageBox.ButtonRole.AcceptRole)
-        cancel = message.addButton('Cancelar', QMessageBox.ButtonRole.RejectRole)
+        cancel = (message.addButton('Cancelar', QMessageBox.ButtonRole.RejectRole)
+                  if allow_cancel else None)
         message.setDefaultButton(save)
         message.exec()
-        if message.clickedButton() is cancel:
+        if cancel is not None and message.clickedButton() is cancel:
+            return False
+        if (not allow_cancel
+                and message.clickedButton() not in (discard, new_version, save)):
             return False
         try:
             if message.clickedButton() is new_version:
@@ -580,9 +634,8 @@ class MapOperations:
             return
         s = self.state
         if (s.pml_center_lat is not None and s.rhino_lat is not None
-                and self.surface_distance(s.radius, s.rhino_lat, s.rhino_lon,
-                                          s.pml_center_lat, s.pml_center_lon)
-                > PML_MATCH_DISTANCE_M):
+                and not corresponds_to_map(s, s.system, s.body,
+                                           s.rhino_lat, s.rhino_lon)):
             answer = QMessageBox.question(
                 self, 'Novo mapa noutro PML',
                 'Estás a mais de 13 km do centro deste PML. Trata-se de outro PML?')
