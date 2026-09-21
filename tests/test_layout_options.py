@@ -45,6 +45,14 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(w.view.width(),width)
         menu = w.findChild(QPushButton,'maps_menu').menu()
         self.assertEqual([a.text() for a in menu.actions()],['Abrir','Guardar','Novo','Ver e manter'])
+        maps = w.findChildren(QPushButton, 'maps_menu')
+        self.assertEqual(len(maps), 1)
+        self.assertIs(w.op_buttons['Mapas'], maps[0])
+        self.assertTrue(maps[0].isVisible())
+        self.assertEqual(len([button for button in w.findChildren(QPushButton)
+                              if button.text() == 'Configurações']), 1)
+        self.assertEqual(len([button for button in w.findChildren(QPushButton)
+                              if button.text() == 'Escolher Status.json']), 1)
 
     def test_preferences_preserve_existing_keys(self):
         w = self.window

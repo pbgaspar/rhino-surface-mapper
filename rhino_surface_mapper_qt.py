@@ -10,7 +10,7 @@ from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPainter, QPen, QKeySequence, QShortcut, QFont, QPainterPath, QFontMetricsF, QIcon, QTransform
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-    QHBoxLayout, QLabel, QPushButton, QSpinBox, QCheckBox, QFileDialog, QMessageBox, QMenu)
+    QHBoxLayout, QLabel, QPushButton, QSpinBox, QCheckBox, QFileDialog, QMessageBox)
 from mapper_core import MapperState
 from map_pml import corresponds_to_map, newest_by_pml
 from settings_persistence import load_preferences
@@ -23,7 +23,7 @@ from steering_ui import SteeringUI
 from layout_options import LayoutOptions
 from map_library import MapLibraryWindow
 from deposit_marker import draw_deposit, deposit_bounds
-from numeric_fields import MetresSpinBox, DegreesSpinBox, labelled_field
+from numeric_fields import MetresSpinBox, DegreesSpinBox
 from PyQt6.QtWidgets import QDialog, QFormLayout, QComboBox, QLineEdit, QDialogButtonBox
 
 
@@ -598,25 +598,12 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         operations = QHBoxLayout()
         layout.addLayout(operations)
         self.op_buttons = {}
-        # As ações sobre ficheiros pertencem ao menu vertical Mapas. Assim não
-        # ocupam a barra principal e ficam reunidas na ordem de utilização.
-        maps_button = QPushButton('Mapas')
-        maps_menu = QMenu(maps_button)
-        for title, callback in [('Abrir', self.load_map), ('Guardar', self.save_map), ('Novo', self.new_map)]:
-            maps_menu.addAction(title, callback)
-        viewer_action = maps_menu.addAction('Ver e manter', self.show_map_library)
-        maps_button.setMenu(maps_menu)
-        operations.addWidget(maps_button)
-        self.op_buttons['Mapas'] = maps_button
         for title, callback in [('Marca',self.mark),('Marcar depósito',self.mark_deposit),('Marcar rig',self.mark_rig),('Sair',self.close)]:
             button = QPushButton(title)
             button.clicked.connect(callback)
             operations.addWidget(button)
             self.op_buttons[title] = button
         layout.addLayout(controls)
-        options_button = QPushButton('Configurações')
-        options_button.clicked.connect(self.radar_options)
-        operations.addWidget(options_button)
         for label, field, minimum in [('Cobertura:','coverage_width_m',100),('Scanner:','scanner_range_m',500)]:
             spin = MetresSpinBox()
             self.parameter_spins[field] = spin
@@ -626,14 +613,12 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
             # field=field fixa o atributo desta iteração. Sem isso, todas as
             # funções lambda usariam o último atributo do ciclo quando chamadas.
             spin.valueChanged.connect(lambda value, field=field: self.set_parameter(field,value))
-            controls.addWidget(labelled_field(label, spin))
         self.search_azimuth_spin = AzimuthSpinBox()
         self.search_azimuth_spin.setRange(0,359)
         self.search_azimuth_spin.setValue(0)
         self.search_azimuth_spin.setToolTip('Azimute inicial da próxima busca: 000=Norte, 090=Este, 180=Sul, 270=Oeste.')
         self.parameter_spins['search_azimuth'] = self.search_azimuth_spin
-        controls.addWidget(labelled_field('AZ Busca:', self.search_azimuth_spin))
-        for title, callback in [('Escolher Status.json',self.choose_status),('Iniciar busca',self.handle_search_button),('Saltar próximo',self.handle_skip_button),('Overlay',self.toggle_overlay)]:
+        for title, callback in [('Iniciar busca',self.handle_search_button),('Saltar próximo',self.handle_skip_button),('Overlay',self.toggle_overlay)]:
             button = QPushButton(title)
             if title == 'Iniciar busca':
                 self.search_button = button
@@ -643,10 +628,8 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                 self.overlay_button = button
                 button.setEnabled(False)
             button.clicked.connect(callback)
-            controls.addWidget(button)
         self.follow = QCheckBox('Centrar')
         self.follow.toggled.connect(lambda checked: self.view.recenter() if checked else None)
-        controls.addWidget(self.follow)
         # Barra inferior consolidada numa única linha
         self.info_bar = QHBoxLayout()
         self.info_left = QLabel('A aguardar Status.json')

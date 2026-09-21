@@ -68,6 +68,7 @@ class LayoutOptions:
         maps.setObjectName("maps_menu")
         maps.setMenu(menu)
         operations.addWidget(maps)
+        self.op_buttons['Mapas'] = maps
         self.fixed_buttons.append((maps, 90))
         for key, title in [('Marca','Marca'), ('Marcar depósito','Depósito'), ('Marcar rig','Rig')]:
             button = self.op_buttons[key]
