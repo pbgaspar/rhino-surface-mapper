@@ -1,7 +1,6 @@
 """Operações e diálogos Qt para mapas, depósitos e rigs."""
 import math
 import re
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +8,7 @@ from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtWidgets import (QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
     QComboBox, QSpinBox, QFileDialog, QMessageBox, QMenu, QApplication, QDoubleSpinBox,
     QInputDialog)
+from app_paths import maps_directory
 from mapper_core import MapperState
 from map_pml import (PML_MATCH_DISTANCE_M, infer_legacy_pml, matching_candidates,
                      newest_by_pml, next_john_doe_id, next_version_path,
@@ -20,14 +20,6 @@ from numeric_fields import MetresSpinBox, DegreesSpinBox, compact
 # Margem usada para reconhecer automaticamente um PML e decidir se Novo está
 # a começar a exploração de outra zona.
 PML_MATCH_DISTANCE_M = 13_000
-
-def maps_directory():
-    """Dados do utilizador junto do programa, nunca na extração temporária do EXE."""
-    base = Path(sys.executable if getattr(sys, 'frozen', False) else __file__).resolve().parent
-    directory = base / 'MAPAS'
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory
-
 
 def safe_filename_component(value):
     """Conserva o nome legível, substituindo só caracteres proibidos no Windows."""

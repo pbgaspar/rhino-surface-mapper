@@ -12,8 +12,9 @@ from PyQt6.QtWidgets import (QDialog, QLabel, QLineEdit, QListWidget,
 from deposit_marker import draw_deposit
 from PyQt6.QtSvg import QSvgRenderer
 
+from app_paths import maps_directory
 from mapper_core import MapperState
-from qt_map_operations import MapOperations, maps_directory
+from qt_map_operations import MapOperations
 
 
 def _theme_values(dark):

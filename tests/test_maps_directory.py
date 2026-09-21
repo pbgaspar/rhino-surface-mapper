@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-import qt_map_operations as maps
+import app_paths as maps
 
 class MapsDirectoryTests(unittest.TestCase):
     def test_executable_directory_not_extraction_directory(self):
