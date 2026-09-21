@@ -13,8 +13,8 @@ from deposit_marker import draw_deposit
 from PyQt6.QtSvg import QSvgRenderer
 
 from app_paths import maps_directory
+from map_pml import infer_legacy_pml
 from mapper_core import MapperState
-from qt_map_operations import MapOperations
 
 
 def _theme_values(dark):
@@ -323,7 +323,7 @@ class MapLibraryWindow(QDialog):
                 # Corrige apenas em memória os metadados antigos a partir do
                 # nome normalizado do ficheiro: "Kappa 2" e "Kappa 2 a" são
                 # planetas diferentes, mesmo quando um JSON antigo os confundiu.
-                MapOperations.infer_legacy_pml(state, path, system, state.body)
+                infer_legacy_pml(state, path, system, state.body)
                 body = state.body or path.stem.split(' [', 1)[0]
                 planets.setdefault(body, []).append((path, state))
             except (OSError, ValueError, TypeError, KeyError):
@@ -393,8 +393,8 @@ class MapLibraryWindow(QDialog):
         try:
             state = MapperState()
             state.load(self.selected_path)
-            MapOperations.infer_legacy_pml(state, self.selected_path,
-                                          self.current_system or self.selected_path.parent.name, state.body)
+            infer_legacy_pml(state, self.selected_path,
+                             self.current_system or self.selected_path.parent.name, state.body)
             if not parent.prepare_to_replace_current_map('Abrir mapa'):
                 return
             parent.install_loaded_map(state, source_path=self.selected_path)
@@ -418,7 +418,7 @@ class MapLibraryWindow(QDialog):
         try:
             state = MapperState()
             state.load(path)
-            MapOperations.infer_legacy_pml(state, path, self.current_system or path.parent.name, state.body)
+            infer_legacy_pml(state, path, self.current_system or path.parent.name, state.body)
             if not state.protected and state.populate_missing_timestamps(path):
                 state.save(path, update_saved_at=False)
         except (OSError, ValueError, TypeError, KeyError) as exc:
