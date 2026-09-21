@@ -10,6 +10,10 @@ from PyQt6.QtWidgets import (QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
     QComboBox, QSpinBox, QFileDialog, QMessageBox, QMenu, QApplication, QDoubleSpinBox,
     QInputDialog)
 from mapper_core import MapperState
+from map_pml import (PML_MATCH_DISTANCE_M, infer_legacy_pml, matching_candidates,
+                     newest_by_pml, next_john_doe_id, next_version_path,
+                     pml_filename, pml_path as canonical_pml_path,
+                     safe_filename_component, surface_distance as pml_surface_distance)
 from numeric_fields import MetresSpinBox, DegreesSpinBox, compact
 
 # Margem usada para reconhecer automaticamente um PML e decidir se Novo está
@@ -120,6 +124,7 @@ class MapOperations:
 
     @staticmethod
     def surface_distance(radius, lat_a, lon_a, lat_b, lon_b):
+        return pml_surface_distance(radius, lat_a, lon_a, lat_b, lon_b)
         """Distância de grande círculo entre duas posições, em metros."""
         dlat = math.radians(lat_b-lat_a)
         dlon = math.radians(lon_b-lon_a)
@@ -130,9 +135,7 @@ class MapOperations:
     def pml_path(self, state=None):
         """Devolve o destino canónico para um mapa já identificado como PML."""
         state = state or self.state
-        if not (state.system.strip() and state.body.strip() and state.pml_id.strip()):
-            return None
-        return maps_directory() / safe_filename_component(state.system) / pml_filename(state)
+        return canonical_pml_path(maps_directory(), state)
 
     def choose_list_item(self, title, label, items):
         """Mostra uma lista com a seleção legível em temas claros e escuros."""
@@ -152,6 +155,8 @@ class MapOperations:
 
     @staticmethod
     def infer_legacy_pml(state, path, system, body):
+        infer_legacy_pml(state, path, system, body)
+        return
         """Completa metadados que os mapas antigos ainda não gravavam.
 
         A marca ``Centro [n]`` criada pela versão anterior é uma fonte fiável
@@ -186,6 +191,8 @@ class MapOperations:
         a entrada no Rhino; será simplesmente ignorado nesta deteção.
         """
         directory = maps_directory() / safe_filename_component(system)
+        return matching_candidates(directory.glob('*.json') if directory.is_dir() else (),
+                                   system, body, lat, lon, self._load_candidate)
         if not directory.is_dir():
             return []
         matches = []
@@ -222,6 +229,17 @@ class MapOperations:
 
     def next_john_doe_id(self, system, body):
         """Calcula o próximo JD apenas entre os mapas do planeta atual."""
+        directory = maps_directory() / safe_filename_component(system)
+        return next_john_doe_id(directory.glob('*.json') if directory.is_dir() else (),
+                                 system, body, self._load_candidate)
+
+    @staticmethod
+    def _load_candidate(path):
+        candidate = MapperState()
+        candidate.load(path)
+        return candidate
+
+    def _legacy_next_john_doe_id(self, system, body):
         highest = 0
         directory = maps_directory() / safe_filename_component(system)
         if directory.is_dir():
@@ -330,10 +348,7 @@ class MapOperations:
         if canonical is None:
             raise ValueError('O mapa ainda não tem um ficheiro ou PML identificado.')
         canonical.parent.mkdir(parents=True, exist_ok=True)
-        expression = re.compile(rf'^{re.escape(canonical.stem)} v(\d+)\.json$', re.IGNORECASE)
-        highest = max([1] + [int(match.group(1)) for path in canonical.parent.iterdir()
-                            if (match := expression.fullmatch(path.name))])
-        destination = canonical.with_name(f'{canonical.stem} v{highest+1}.json')
+        destination = next_version_path(canonical, canonical.parent.iterdir())
         state.save(destination)
         return destination
 
