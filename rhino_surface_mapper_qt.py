@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from mapper_core import MapperState
 from map_pml import corresponds_to_map, newest_by_pml
 from settings_persistence import load_preferences
+from elite_dangerous.status import read_status_if_changed
 from pyqt_overlay import OverlayWindow
 from qt_map_operations import MapOperations
 from radar import RadarPulse
@@ -1117,9 +1118,13 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         Uma leitura incompleta não regista a data: será repetida no próximo disparo do temporizador."""
         changed = False
         try:
-            mtime = self.status_path.stat().st_mtime_ns
-            if mtime != self.last_mtime or self.retry_status:
-                data = json.loads(self.status_path.read_text(encoding='utf-8'))
+            status = read_status_if_changed(
+                self.status_path,
+                self.last_mtime,
+                force=self.retry_status,
+            )
+            if status is not None:
+                mtime, data = status
                 self.retry_status = False
                 if not data.get('StarSystem') and data.get('BodyName') == self.state.body:
                     # A mesma regra de process_status tem de preceder a
