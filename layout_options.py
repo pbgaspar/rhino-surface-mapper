@@ -1,11 +1,12 @@
 """Painel de preferências recolhível e organização das barras principais."""
-import json
 from pathlib import Path
 from PyQt6.QtCore import Qt, QByteArray
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QPushButton, QToolButton, QScrollArea, QMenu, QComboBox, QSpinBox,
     QLineEdit, QFileDialog, QLabel, QColorDialog, QMessageBox, QSizePolicy, QFontComboBox, QStyleFactory, QAbstractSpinBox)
+from settings_persistence import (read_exported_settings, save_preferences,
+                                  write_exported_settings)
 
 
 def _theme_is_dark(theme, system_scheme):
@@ -306,7 +307,7 @@ class LayoutOptions:
             return
         data = {key:getter() for key,(getter,_,_) in self.setting_fields.items()}
         try:
-            Path(filename).write_text(json.dumps({'rhino_settings_version':1,'settings':data},ensure_ascii=False,indent=2),encoding='utf-8')
+            write_exported_settings(filename, data)
         except OSError as exc:
             QMessageBox.warning(self,'Configurações',f'Não foi possível guardar: {exc}')
 
@@ -315,12 +316,7 @@ class LayoutOptions:
         if not filename:
             return
         try:
-            document = json.loads(Path(filename).read_text(encoding='utf-8-sig'))
-            if not isinstance(document,dict) or document.get('rhino_settings_version') != 1:
-                raise ValueError('Formato de configurações inválido.')
-            data = document.get('settings')
-            if not isinstance(data,dict) or not data:
-                raise ValueError('O ficheiro não contém configurações.')
+            data = read_exported_settings(filename)
             for key,value in data.items():
                 if key not in self.setting_fields or not self.setting_fields[key][2](value):
                     raise ValueError(f'Configuração inválida: {key}')
@@ -371,7 +367,7 @@ class LayoutOptions:
         if self.loading_settings:
             return
         try:
-            self.options_path.write_text(json.dumps(self.preferences,ensure_ascii=False,indent=2),encoding='utf-8')
+            save_preferences(self.options_path, self.preferences)
         except OSError as exc:
             self.statusBar().showMessage(f'Não foi possível guardar as configurações: {exc}')
 

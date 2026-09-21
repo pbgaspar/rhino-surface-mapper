@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QSpinBox, QCheckBox, QFileDialog, QMessageBox, QMenu)
 from mapper_core import MapperState
 from map_pml import corresponds_to_map, newest_by_pml
+from settings_persistence import load_preferences
 from pyqt_overlay import OverlayWindow
 from qt_map_operations import MapOperations
 from radar import RadarPulse
@@ -578,17 +579,13 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.options_path = Path(__file__).resolve().parent / 'options.json'
         self.scanner_group = 0
         self.bindings_override = ''
-        options = {}
-        try:
-            options = json.loads(self.options_path.read_text(encoding='utf-8'))
-            group = options.get('scanner_group', 0)
-            if type(group) is int and 0 <= group <= 25:
-                self.scanner_group = group
-            override = options.get('bindings_path', '')
-            if isinstance(override, str):
-                self.bindings_override = override
-        except (OSError, ValueError, AttributeError):
-            pass
+        options = load_preferences(self.options_path)
+        group = options.get('scanner_group', 0)
+        if type(group) is int and 0 <= group <= 25:
+            self.scanner_group = group
+        override = options.get('bindings_path', '')
+        if isinstance(override, str):
+            self.bindings_override = override
         self.radar_input.load(self.bindings_override or None)
         self.overlay = OverlayWindow()
         self.overlay_mode_active = False
