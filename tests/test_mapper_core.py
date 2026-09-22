@@ -172,6 +172,37 @@ class MapperCoreTests(unittest.TestCase):
         state.search_started=False
         self.assertEqual(state.overlay_navigation()[2],'#888888')
 
+    def test_overlay_is_inactive_when_heading_is_missing(self):
+        state = MapperState()
+        state.process_status(status())
+        state.start_search()
+        state.rhino_heading = None
+
+        self.assertEqual(
+            state.overlay_navigation(),
+            ("—", "—", "#888888", "white", "Busca: Ponto 1"),
+        )
+
+    def test_completed_route_stays_completed_after_repeated_updates(self):
+        state = MapperState()
+        state.process_status(status())
+        state.start_search()
+
+        for _ in range(state.search_total_points):
+            state.rhino_lat, state.rhino_lon = state.xyll(*state.next_target_xy)
+            state.update_next()
+
+        history = list(state.route_history)
+        self.assertIsNone(state.next_target_xy)
+        self.assertEqual(state.route_index, state.search_total_points)
+
+        state.update_next()
+        state.update_next()
+
+        self.assertIsNone(state.next_target_xy)
+        self.assertEqual(state.route_index, state.search_total_points)
+        self.assertEqual(state.route_history, history)
+
     def test_coordinate_conversion_round_trip(self):
         state = MapperState()
         state.process_status(status())

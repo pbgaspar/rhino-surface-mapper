@@ -26,9 +26,8 @@ from elite_dangerous.market import (
 UTC_NOW = datetime(2026, 9, 16, 12, 0, tzinfo=timezone.utc)
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[1]
-    / "experiments"
-    / "market"
-    / "Surface Mining Markets - cache INARA.py"
+    / "tests"
+    / "surface_mining_markets_consumer.py"
 )
 
 

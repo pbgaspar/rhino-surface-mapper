@@ -1,7 +1,7 @@
 """Surface Mining Markets consumer for reusable market services.
 
-The experiment coordinates local Spansh markets and global INARA summaries,
-then presents the best products and stations for a requested system.
+Coordinates local Spansh markets and global INARA summaries, then presents
+the best products and stations for a requested system.
 """
 
 import json
@@ -17,7 +17,7 @@ from time import perf_counter
 
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
-REPOSITORY_ROOT = SCRIPT_DIRECTORY.parents[1]
+REPOSITORY_ROOT = SCRIPT_DIRECTORY.parent
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 

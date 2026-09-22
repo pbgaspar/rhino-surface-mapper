@@ -40,7 +40,7 @@ Run the verified pytest workflow from the repository root:
 .venv\Scripts\python.exe -m pytest tests -ra
 ```
 
-Some Qt tests skip when PyQt6 is unavailable. Automated tests do not replace validation in the game, across monitor setups, or across Windows display scales. See [`TODO.md`](TODO.md) for recorded work and validation still pending.
+Some Qt tests skip when PyQt6 is unavailable. Automated tests do not replace validation in the game, across monitor setups, or across Windows display scales.
 
 ## Project structure
 
@@ -50,7 +50,7 @@ Some Qt tests skip when PyQt6 is unavailable. Automated tests do not replace val
 - `assets/` — SVG interface and map resources.
 - `tests/` — automated tests.
 
-For detailed engineering notes and repository guidance, see [`PROJECT_NOTES.md`](PROJECT_NOTES.md) and [`AGENTS.md`](AGENTS.md).
+For repository architecture and engineering guidance, see [`AGENTS.md`](AGENTS.md).
 
 ## Development status
 
