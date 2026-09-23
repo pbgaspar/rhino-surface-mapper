@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MapLibraryWindow</class>
+ <widget class="QDialog" name="MapLibraryWindow">
+  <property name="windowTitle"><string>Ver e manter mapas</string></property>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="spacing"><number>8</number></property>
+   <property name="leftMargin"><number>10</number></property>
+   <property name="topMargin"><number>10</number></property>
+   <property name="rightMargin"><number>10</number></property>
+   <property name="bottomMargin"><number>10</number></property>
+   <item>
+    <widget class="QSplitter" name="librarySplitter">
+     <property name="orientation"><enum>Qt::Horizontal</enum></property>
+     <widget class="QWidget" name="leftPane">
+      <layout class="QVBoxLayout" name="leftLayout">
+       <item><widget class="QWidget" name="previewHost"><layout class="QVBoxLayout" name="previewLayout"/></widget></item>
+       <item>
+        <widget class="QWidget" name="mapDetails">
+         <layout class="QVBoxLayout" name="detailsLayout">
+          <item>
+           <layout class="QHBoxLayout" name="flagsLayout">
+            <item><widget class="QCheckBox" name="favoriteCheck"><property name="text"><string>Favorito</string></property></widget></item>
+            <item><widget class="QCheckBox" name="protectedCheck"><property name="text"><string>Proteger</string></property></widget></item>
+            <item><spacer name="flagsSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+            <item><widget class="QPushButton" name="openButton"><property name="text"><string>Abrir mapa</string></property></widget></item>
+           </layout>
+          </item>
+          <item><widget class="QWidget" name="detailsInfoHost"><layout class="QVBoxLayout" name="detailsInfoLayout"/></widget></item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="rightPane">
+      <layout class="QVBoxLayout" name="rightLayout">
+       <item><widget class="QLabel" name="systemLabel"><property name="text"><string>Sistema:</string></property></widget></item>
+       <item><widget class="QLineEdit" name="searchInput"><property name="placeholderText"><string>Escreve pelo menos 2 caracteres</string></property></widget></item>
+       <item><widget class="QListWidget" name="suggestionsList"><property name="maximumHeight"><number>125</number></property></widget></item>
+       <item><widget class="QLabel" name="systemTitle"><property name="text"><string>Procura um sistema</string></property></widget></item>
+       <item><widget class="QWidget" name="treeHost"><layout class="QVBoxLayout" name="treeLayout"/></widget></item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

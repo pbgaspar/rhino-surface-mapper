@@ -26,6 +26,28 @@ class MapOperationsTests(unittest.TestCase):
             self.window.close()
         self.temp.cleanup()
 
+    def test_deposit_dialog_ui_preserves_widget_contract_and_defaults(self):
+        from qt_map_operations import DepositDialog
+        from PySide6.QtWidgets import QDialogButtonBox
+        dialog = DepositDialog(self.window)
+        self.addCleanup(dialog.close)
+        self.assertEqual(dialog.name.objectName(), 'name')
+        self.assertEqual(dialog.size.objectName(), 'size')
+        self.assertEqual(dialog.rigs.objectName(), 'rigs')
+        self.assertEqual(dialog.size.count(), 4)
+        self.assertEqual((dialog.rigs.minimum(), dialog.rigs.maximum()), (1, 6))
+        self.assertEqual(dialog.values(), {'name': 'Depósito', 'size': 'Pequeno', 'rigs': 1})
+        self.assertIsNotNone(dialog.findChild(QDialogButtonBox, 'buttonBox'))
+
+    def test_deposit_dialog_ui_populates_existing_values_and_rejects(self):
+        from qt_map_operations import DepositDialog
+        from PySide6.QtWidgets import QDialog
+        dialog = DepositDialog(self.window, {'name': 'A', 'size': 'Grande', 'rigs': 3})
+        self.addCleanup(dialog.close)
+        self.assertEqual(dialog.values(), {'name': 'A', 'size': 'Grande', 'rigs': 3})
+        dialog.reject()
+        self.assertEqual(dialog.result(), QDialog.DialogCode.Rejected)
+
     def test_deposit_duplicate_edit_rig_cancel_and_delete(self):
         from PySide6.QtCore import QPointF
         from PySide6.QtWidgets import QMessageBox

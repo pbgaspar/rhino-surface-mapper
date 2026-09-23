@@ -4,17 +4,32 @@ import html
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QSize, QRectF, QPointF
+from PySide6.QtCore import QFile, Qt, QSize, QRectF, QPointF
 from PySide6.QtGui import QColor, QPainter, QPen, QIcon
+from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import (QDialog, QLabel, QLineEdit, QListWidget,
-    QSplitter, QTextEdit, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
-    QSizePolicy, QCheckBox, QHBoxLayout, QMessageBox, QPushButton, QStyledItemDelegate)
+    QSplitter, QTextEdit, QTreeWidget, QTreeWidgetItem, QWidget, QCheckBox,
+    QMessageBox, QPushButton, QStyledItemDelegate)
 from deposit_marker import draw_deposit
 from PySide6.QtSvg import QSvgRenderer
 
 from app_paths import maps_directory
 from map_pml import infer_legacy_pml
 from mapper_core import MapperState
+
+
+class _MapLibraryLoader(QUiLoader):
+    """Load the Designer root directly into the existing dialog wrapper."""
+
+    def __init__(self, window):
+        super().__init__(window)
+        self.window = window
+
+    def createWidget(self, class_name, parent=None, name=''):
+        """Reuse MapLibraryWindow for the root and delegate child creation."""
+        if class_name == 'QDialog' and name == 'MapLibraryWindow':
+            return self.window
+        return super().createWidget(class_name, parent, name)
 
 
 def _theme_values(dark):
@@ -191,7 +206,6 @@ class MapLibraryWindow(QDialog):
     """Consulta sistemas, planetas, versões e conteúdos dos ficheiros em MAPAS."""
     def __init__(self, parent=None, dark=True):
         super().__init__(parent)
-        self.setWindowTitle('Ver e manter mapas')
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowMinMaxButtonsHint |
                             Qt.WindowType.WindowCloseButtonHint)
         self.setMinimumSize(820, 520)
@@ -201,47 +215,42 @@ class MapLibraryWindow(QDialog):
         self.selected_path = None
         self.selected_item = None
         self.dark_theme = dark
-        root = QVBoxLayout(self)
-        root.setContentsMargins(10, 10, 10, 10)
-        root.setSpacing(8)
+        ui_path = Path(__file__).resolve().parent / 'ui' / 'map_library_window.ui'
+        ui_file = QFile(str(ui_path))
+        if not ui_file.open(QFile.OpenModeFlag.ReadOnly):
+            raise OSError(f'Unable to open UI resource: {ui_path}')
+        loaded = _MapLibraryLoader(self).load(ui_file, self)
+        ui_file.close()
+        if loaded is None or loaded is not self:
+            raise RuntimeError(f'Unable to load UI resource: {ui_path}')
 
-        body = QSplitter(Qt.Orientation.Horizontal)
-        body.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        left = QWidget()
-        left_layout = QVBoxLayout(left)
+        body = self.findChild(QSplitter, 'librarySplitter')
+        preview_host = self.findChild(QWidget, 'previewHost')
+        tree_host = self.findChild(QWidget, 'treeHost')
+        if body is None or preview_host is None or tree_host is None:
+            raise RuntimeError('MapLibraryWindow.ui is missing a required container')
+
+        preview_layout = preview_host.layout()
         self.preview = MapPreview()
+        preview_layout.addWidget(self.preview)
         self.info = QTextEdit()
         self.info.setReadOnly(True)
         self.info.setMinimumHeight(190)
-        left_layout.addWidget(self.preview, 3)
-        flags = QHBoxLayout()
-        self.favorite_check = QCheckBox('Favorito')
-        self.protected_check = QCheckBox('Proteger')
+        self.findChild(QWidget, 'detailsInfoHost').layout().addWidget(self.info)
+        self.favorite_check = self.findChild(QCheckBox, 'favoriteCheck')
+        self.protected_check = self.findChild(QCheckBox, 'protectedCheck')
         for checkbox, symbol in ((self.favorite_check, 'favorite'), (self.protected_check, 'protected')):
             checkbox.setIcon(QIcon(str(Path(__file__).resolve().parent/'assets'/f'{symbol}.svg')))
             checkbox.setIconSize(QSize(22, 22))
             checkbox.setEnabled(False)
-            flags.addWidget(checkbox)
-        flags.addStretch()
-        self.open_button = QPushButton('Abrir mapa')
+        self.open_button = self.findChild(QPushButton, 'openButton')
         self.open_button.setEnabled(False)
         self.open_button.clicked.connect(self.open_selected_map)
-        flags.addWidget(self.open_button)
-        self.info_panel = QWidget()
+        self.info_panel = self.findChild(QWidget, 'mapDetails')
         self.info_panel.setObjectName('map_details')
-        info_layout = QVBoxLayout(self.info_panel)
-        info_layout.addLayout(flags)
-        info_layout.addWidget(self.info)
-        left_layout.addWidget(self.info_panel, 2)
-        body.addWidget(left)
-
-        right = QWidget()
-        right_layout = QVBoxLayout(right)
-        self.system_title = QLabel('Procura um sistema')
-        self.search = QLineEdit()
-        self.search.setPlaceholderText('Escreve pelo menos 2 caracteres')
-        self.suggestions = QListWidget()
-        self.suggestions.setMaximumHeight(125)
+        self.system_title = self.findChild(QLabel, 'systemTitle')
+        self.search = self.findChild(QLineEdit, 'searchInput')
+        self.suggestions = self.findChild(QListWidget, 'suggestionsList')
         self.tree = MapTree()
         self.tree.setHeaderHidden(True)
         # O estilo dos cartões substitui os indicadores nativos do Windows.
@@ -261,14 +270,8 @@ class MapLibraryWindow(QDialog):
                 image: url("ARROW_ROOT/tree-open.svg");
             }
         '''.replace('ARROW_ROOT', arrow_root))
-        right_layout.addWidget(QLabel('Sistema:'))
-        right_layout.addWidget(self.search)
-        right_layout.addWidget(self.suggestions)
-        right_layout.addWidget(self.system_title)
-        right_layout.addWidget(self.tree, 1)
-        body.addWidget(right)
+        tree_host.layout().addWidget(self.tree)
         body.setSizes([760, 390])
-        root.addWidget(body)
 
         self.search.textChanged.connect(self.filter_systems)
         self.suggestions.itemClicked.connect(lambda item: self.select_system(item.text()))

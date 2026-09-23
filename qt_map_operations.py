@@ -4,7 +4,8 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QFile, QPointF, Qt
+from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
     QComboBox, QSpinBox, QFileDialog, QMessageBox, QMenu, QApplication, QDoubleSpinBox,
     QInputDialog)
@@ -16,6 +17,20 @@ from map_pml import (PML_MATCH_DISTANCE_M, infer_legacy_pml, matching_candidates
                      safe_filename_component, surface_distance as pml_surface_distance,
                      corresponds_to_map)
 from numeric_fields import MetresSpinBox, DegreesSpinBox, compact
+
+
+class _DepositDialogLoader(QUiLoader):
+    """Load the Designer root directly into the existing dialog wrapper."""
+
+    def __init__(self, dialog):
+        super().__init__(dialog)
+        self.dialog = dialog
+
+    def createWidget(self, class_name, parent=None, name=''):
+        """Reuse DepositDialog for the root and delegate child creation."""
+        if class_name == 'QDialog' and name == 'DepositDialog':
+            return self.dialog
+        return super().createWidget(class_name, parent, name)
 
 # Margem usada para reconhecer automaticamente um PML e decidir se Novo está
 # a começar a exploração de outra zona.
@@ -39,27 +54,31 @@ class DepositDialog(QDialog):
         """Preenche os campos a partir de existing, ou usa valores iniciais.
         O diálogo só devolve os dados; não modifica diretamente o mapa."""
         super().__init__(parent)
+        ui_path = Path(__file__).resolve().parent / 'ui' / 'deposit_dialog.ui'
+        ui_file = QFile(str(ui_path))
+        if not ui_file.open(QFile.OpenModeFlag.ReadOnly):
+            raise OSError(f'Unable to open UI resource: {ui_path}')
+        loaded = _DepositDialogLoader(self).load(ui_file, self)
+        ui_file.close()
+        if loaded is None or loaded.layout() is None:
+            raise RuntimeError(f'Unable to load UI resource: {ui_path}')
         self.setWindowTitle('Editar depósito' if existing else 'Marcar depósito')
         data = existing or {}
-        form = QFormLayout(self)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        form.setHorizontalSpacing(4)
-        self.name = QLineEdit(data.get('name',''))
-        self.size = QComboBox()
+        self.name = self.findChild(QLineEdit, 'name')
+        self.size = self.findChild(QComboBox, 'size')
+        self.rigs = self.findChild(QSpinBox, 'rigs')
+        buttons = self.findChild(QDialogButtonBox, 'buttonBox')
+        if not all((self.name, self.size, self.rigs, buttons)):
+            raise RuntimeError('DepositDialog.ui is missing a required widget')
+        self.name.setText(data.get('name', ''))
         self.size.addItems(['Pequeno','Médio','Grande','Enorme'])
         self.size.setCurrentText(data.get('size','Pequeno'))
-        self.rigs = QSpinBox()
         self.rigs.setSuffix(' rigs')
         self.rigs.setRange(1,6)
         self.rigs.setValue(int(data.get('rigs',1)))
         compact(self.rigs)
-        form.addRow('Nome:', self.name)
-        form.addRow('Tamanho:', self.size)
-        form.addRow('Nº rigs:', self.rigs)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
 
     def values(self):
         """Devolve um dicionário com os três campos editáveis.

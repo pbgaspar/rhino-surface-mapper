@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DepositDialog</class>
+ <widget class="QDialog" name="DepositDialog">
+  <property name="windowTitle">
+   <string>Marcar depósito</string>
+  </property>
+  <layout class="QFormLayout" name="formLayout">
+   <property name="horizontalSpacing">
+    <number>4</number>
+   </property>
+   <property name="labelAlignment">
+    <set>Qt::AlignRight|Qt::AlignVCenter</set>
+   </property>
+   <item row="0" column="0">
+    <widget class="QLabel" name="nameLabel">
+     <property name="text"><string>Nome:</string></property>
+    </widget>
+   </item>
+   <item row="0" column="1">
+    <widget class="QLineEdit" name="name"/>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="sizeLabel">
+     <property name="text"><string>Tamanho:</string></property>
+    </widget>
+   </item>
+   <item row="1" column="1">
+    <widget class="QComboBox" name="size"/>
+   </item>
+   <item row="2" column="0">
+    <widget class="QLabel" name="rigsLabel">
+     <property name="text"><string>Nº rigs:</string></property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QSpinBox" name="rigs"/>
+   </item>
+   <item row="3" column="0" colspan="2">
+    <widget class="QDialogButtonBox" name="buttonBox">
+     <property name="standardButtons">
+      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

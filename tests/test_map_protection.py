@@ -165,6 +165,25 @@ class ProtectionTests(unittest.TestCase):
             self.assertFalse(json.loads(self.path.read_text())['protected'])
             library.close()
 
+    def test_map_library_ui_hosts_custom_widgets_without_transplanting_them(self):
+        from PySide6.QtWidgets import QCheckBox, QLineEdit, QListWidget, QPushButton, QSplitter, QWidget
+        library = MapLibraryWindow()
+        try:
+            self.assertEqual(library.objectName(), 'MapLibraryWindow')
+            self.assertIsNotNone(library.findChild(QSplitter, 'librarySplitter'))
+            self.assertIsInstance(library.findChild(QLineEdit, 'searchInput'), QLineEdit)
+            self.assertIsInstance(library.findChild(QListWidget, 'suggestionsList'), QListWidget)
+            self.assertIsInstance(library.findChild(QCheckBox, 'favoriteCheck'), QCheckBox)
+            self.assertIsInstance(library.findChild(QPushButton, 'openButton'), QPushButton)
+            preview_host = library.findChild(QWidget, 'previewHost')
+            tree_host = library.findChild(QWidget, 'treeHost')
+            self.assertIs(library.preview.parent(), preview_host)
+            self.assertIs(library.tree.parent(), tree_host)
+            self.assertIs(library.preview.window(), library)
+            self.assertIs(library.tree.window(), library)
+        finally:
+            library.close()
+
     def test_map_library_theme_is_local_and_preserves_preview_semantics(self):
         from map_library import MapPreview
 
