@@ -1,4 +1,4 @@
-"""Testes do núcleo independente da futura interface PyQt6."""
+"""Tests for the core independent of the UI binding."""
 
 import math
 import copy

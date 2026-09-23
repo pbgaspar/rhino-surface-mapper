@@ -1,8 +1,8 @@
 """Caixa dos depósitos partilhada pelos mapas e pela pré-visualização."""
 from pathlib import Path
-from PyQt6.QtCore import QRectF, Qt
-from PyQt6.QtGui import QColor, QPen, QFontMetricsF
-from PyQt6.QtSvg import QSvgRenderer
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QPen, QFontMetricsF
+from PySide6.QtSvg import QSvgRenderer
 
 
 def deposit_details(item):

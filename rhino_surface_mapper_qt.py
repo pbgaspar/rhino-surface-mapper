@@ -1,4 +1,4 @@
-"""Janela principal e mapa do Rhino Surface Mapper em PyQt6."""
+"""Main window and map view for Rhino Surface Mapper using PySide6."""
 import json
 import copy
 import math
@@ -6,10 +6,10 @@ import sys
 import time
 from pathlib import Path
 
-from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QPainter, QPen, QKeySequence, QShortcut, QFont, QPainterPath, QFontMetricsF, QIcon, QTransform
-from PyQt6.QtSvg import QSvgRenderer
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QPainter, QPen, QKeySequence, QShortcut, QFont, QPainterPath, QFontMetricsF, QIcon, QTransform
+from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QSpinBox, QCheckBox, QFileDialog, QMessageBox)
 from mapper_core import MapperState
 from map_pml import corresponds_to_map, newest_by_pml
@@ -24,7 +24,7 @@ from layout_options import LayoutOptions
 from map_library import MapLibraryWindow
 from deposit_marker import draw_deposit, deposit_bounds
 from numeric_fields import MetresSpinBox, DegreesSpinBox
-from PyQt6.QtWidgets import QDialog, QFormLayout, QComboBox, QLineEdit, QDialogButtonBox
+from PySide6.QtWidgets import QDialog, QFormLayout, QComboBox, QLineEdit, QDialogButtonBox
 
 
 class AzimuthSpinBox(DegreesSpinBox):
@@ -39,9 +39,9 @@ class MapView(QWidget):
     O estado pertence a MapperState; esta classe apenas o apresenta e guarda a vista."""
     # Um sinal é uma mensagem Qt. connect() liga essa mensagem à função recetora.
     # O mapa comunica posições/texto; a janela decide que operação realizar.
-    cursor_changed = pyqtSignal(str)
-    clicked = pyqtSignal(QPointF)
-    menu_requested = pyqtSignal(QPointF)
+    cursor_changed = Signal(str)
+    clicked = Signal(QPointF)
+    menu_requested = Signal(QPointF)
 
     def __init__(self, state):
         """Recebe o estado partilhado e prepara a vista e o desenho vetorial.

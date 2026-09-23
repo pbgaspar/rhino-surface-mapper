@@ -4,13 +4,13 @@ import html
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QSize, QRectF, QPointF
-from PyQt6.QtGui import QColor, QPainter, QPen, QIcon
-from PyQt6.QtWidgets import (QDialog, QLabel, QLineEdit, QListWidget,
+from PySide6.QtCore import Qt, QSize, QRectF, QPointF
+from PySide6.QtGui import QColor, QPainter, QPen, QIcon
+from PySide6.QtWidgets import (QDialog, QLabel, QLineEdit, QListWidget,
     QSplitter, QTextEdit, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
     QSizePolicy, QCheckBox, QHBoxLayout, QMessageBox, QPushButton, QStyledItemDelegate)
 from deposit_marker import draw_deposit
-from PyQt6.QtSvg import QSvgRenderer
+from PySide6.QtSvg import QSvgRenderer
 
 from app_paths import maps_directory
 from map_pml import infer_legacy_pml

@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 from mapper_core import MapperState, SRV_FLAG
 from radar import RadarPulse
 from rhino_surface_mapper_qt import MapperWindow
@@ -261,8 +261,8 @@ class ProtectionTests(unittest.TestCase):
             library.close()
 
     def test_real_choice_dialog_restores_timers_on_cancel(self):
-        from PyQt6.QtCore import QTimer
-        from PyQt6.QtWidgets import QMessageBox
+        from PySide6.QtCore import QTimer
+        from PySide6.QtWidgets import QMessageBox
         w = self.make_window()
         w.timer.start(10000)
         observed = []
@@ -309,7 +309,7 @@ class ProtectionTests(unittest.TestCase):
         self.assertEqual(w.state.body, 'Kappa 2')
 
     def test_deposit_box_is_clickable_on_both_lines(self):
-        from PyQt6.QtCore import QPointF
+        from PySide6.QtCore import QPointF
         from deposit_marker import deposit_bounds
         w = self.make_window()
         w.state = w.view.state = self.state

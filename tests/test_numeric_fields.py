@@ -1,8 +1,8 @@
 import os
 import unittest
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PyQt6.QtWidgets import QApplication, QSizePolicy
-from PyQt6.QtGui import QValidator
+from PySide6.QtWidgets import QApplication, QSizePolicy
+from PySide6.QtGui import QValidator
 from numeric_fields import MetresSpinBox, DegreesSpinBox, KilometresSpinBox
 
 

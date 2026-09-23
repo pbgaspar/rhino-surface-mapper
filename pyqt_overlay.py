@@ -1,9 +1,9 @@
-"""Overlay PyQt6 transparente, movível e redimensionável para o Mapper."""
+"""Transparent, movable and resizable Qt overlay for the Mapper."""
 
 
-from PyQt6.QtCore import QPoint, QRectF, Qt
-from PyQt6.QtGui import QColor, QFont, QPainter, QPen
-from PyQt6.QtWidgets import QWidget
+from PySide6.QtCore import QPoint, QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtWidgets import QWidget
 
 
 class OverlayWindow(QWidget):

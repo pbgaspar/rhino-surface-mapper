@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PyQt6.QtWidgets import QApplication, QPushButton, QSpinBox
-from PyQt6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QPushButton, QSpinBox
+from PySide6.QtCore import Qt
 from layout_options import _theme_is_dark
 from rhino_surface_mapper_qt import MapperWindow
 
@@ -85,9 +85,9 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('background: #2c3239; border: 1px solid #46515d;', w.styleSheet())
 
     def test_spin_arrows_with_mouse_in_both_themes(self):
-        from PyQt6.QtCore import Qt
-        from PyQt6.QtWidgets import QStyle, QStyleOptionSpinBox
-        from PyQt6.QtTest import QTest
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QStyle, QStyleOptionSpinBox
+        from PySide6.QtTest import QTest
         w = self.window
         w.options_button.setChecked(True)
         for theme in ('Light', 'Dark'):
@@ -114,7 +114,7 @@ class LayoutTests(unittest.TestCase):
 
     def test_dark_map_uses_selected_background(self):
         from unittest.mock import patch
-        from PyQt6.QtGui import QColor
+        from PySide6.QtGui import QColor
         w = self.window
         w.preferences.pop('map_background',None)
         w.apply_theme('Dark')

@@ -4,8 +4,8 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from PyQt6.QtCore import QPointF, Qt
-from PyQt6.QtWidgets import (QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
     QComboBox, QSpinBox, QFileDialog, QMessageBox, QMenu, QApplication, QDoubleSpinBox,
     QInputDialog)
 from app_paths import maps_directory

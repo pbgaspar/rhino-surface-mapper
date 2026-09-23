@@ -16,7 +16,7 @@ The application does not detect obstacles. Radar input observation does not conf
 ## Requirements
 
 - Python 3.13 is the current development baseline.
-- Runtime dependencies are listed in [`requirements.txt`](requirements.txt), including PyQt6 and Requests.
+- Runtime dependencies are listed in [`requirements.txt`](requirements.txt), including PySide6 and Requests.
 - Development and test dependencies are listed in [`requirements-dev.txt`](requirements-dev.txt).
 - For live game integration, an Elite Dangerous `Status.json` file. The application uses the standard Saved Games location by default and allows selecting another file in its settings.
 
@@ -40,7 +40,7 @@ Run the verified pytest workflow from the repository root:
 .venv\Scripts\python.exe -m pytest tests -ra
 ```
 
-Some Qt tests skip when PyQt6 is unavailable. Automated tests do not replace validation in the game, across monitor setups, or across Windows display scales.
+Some Qt tests skip when PySide6 is unavailable. Automated tests do not replace validation in the game, across monitor setups, or across Windows display scales.
 
 ## Project structure
 

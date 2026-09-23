@@ -6,11 +6,11 @@ from pathlib import Path
 from unittest.mock import patch
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 
-@unittest.skipUnless(importlib.util.find_spec('PyQt6'), 'PyQt6 não instalado')
+@unittest.skipUnless(importlib.util.find_spec('PySide6'), 'PySide6 não instalado')
 class MapOperationsTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
         cls.app = QApplication.instance() or QApplication([])
 
     def setUp(self):
@@ -27,8 +27,8 @@ class MapOperationsTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_deposit_duplicate_edit_rig_cancel_and_delete(self):
-        from PyQt6.QtCore import QPointF
-        from PyQt6.QtWidgets import QMessageBox
+        from PySide6.QtCore import QPointF
+        from PySide6.QtWidgets import QMessageBox
         w = self.window
         with patch.object(w,'edit_deposit_values',return_value=dict(name='A',size='Grande',rigs=3)):
             w.mark_deposit()
@@ -57,7 +57,7 @@ class MapOperationsTests(unittest.TestCase):
         self.assertEqual(w.state.deposits,[])
 
     def test_save_load_round_trip_and_invalid_file_preserves_map(self):
-        from PyQt6.QtWidgets import QMessageBox
+        from PySide6.QtWidgets import QMessageBox
         w = self.window
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory)/'map.json')
@@ -86,7 +86,7 @@ class MapOperationsTests(unittest.TestCase):
             self.assertFalse(w.overlay_button.isEnabled())
 
     def test_pml_center_azimuth_dialog_wraps_without_changing_contract(self):
-        from PyQt6.QtWidgets import QDialog, QInputDialog, QSpinBox
+        from PySide6.QtWidgets import QDialog, QInputDialog, QSpinBox
         w = self.window
 
         def inspect_spin(dialog):
@@ -116,7 +116,7 @@ class MapOperationsTests(unittest.TestCase):
         self.assertEqual(dialog.intValue(), 0)
     def test_load_rereads_unchanged_status_immediately(self):
         import json
-        from PyQt6.QtWidgets import QMessageBox
+        from PySide6.QtWidgets import QMessageBox
         w = self.window
         with tempfile.TemporaryDirectory() as directory:
             status_path = Path(directory)/'Status.json'
@@ -139,8 +139,8 @@ class MapOperationsTests(unittest.TestCase):
 
     def test_mark_position_persistence_rename_and_delete(self):
         from mapper_core import MapperState
-        from PyQt6.QtCore import QPointF
-        from PyQt6.QtWidgets import QMessageBox
+        from PySide6.QtCore import QPointF
+        from PySide6.QtWidgets import QMessageBox
         w = self.window
         for azimuth, expected_x, expected_y in [(0, 0, 1000), (90, 1000, 0), (180, 0, -1000), (270, -1000, 0)]:
             with patch.object(w, 'edit_mark_values', return_value=dict(name='Local', azimuth=azimuth, distance=1000)):

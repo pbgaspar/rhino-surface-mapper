@@ -3,9 +3,9 @@ import time
 import math
 from pathlib import Path
 from datetime import datetime
-from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QShortcut, QKeySequence
-from PyQt6.QtWidgets import QPushButton, QLabel, QMessageBox
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QShortcut, QKeySequence
+from PySide6.QtWidgets import QPushButton, QLabel, QMessageBox
 from steering import SteeringAssist
 from steering_input import SteeringInput
 from turn_trial import TurnTrial

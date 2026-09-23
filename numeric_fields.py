@@ -1,6 +1,6 @@
 """Entradas de medidas com formatos e larguras consistentes."""
-from PyQt6.QtCore import QLocale
-from PyQt6.QtWidgets import QSpinBox, QDoubleSpinBox, QSizePolicy, QWidget, QHBoxLayout, QLabel
+from PySide6.QtCore import QLocale
+from PySide6.QtWidgets import QSpinBox, QDoubleSpinBox, QSizePolicy, QWidget, QHBoxLayout, QLabel
 
 
 def compact(field):

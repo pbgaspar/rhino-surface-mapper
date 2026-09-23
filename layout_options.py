@@ -1,8 +1,8 @@
 """Painel de preferências recolhível e organização das barras principais."""
 from pathlib import Path
-from PyQt6.QtCore import Qt, QByteArray
-from PyQt6.QtGui import QColor, QFont
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
+from PySide6.QtCore import Qt, QByteArray
+from PySide6.QtGui import QColor, QFont
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QPushButton, QToolButton, QScrollArea, QMenu, QComboBox, QSpinBox,
     QLineEdit, QFileDialog, QLabel, QColorDialog, QMessageBox, QSizePolicy, QFontComboBox, QStyleFactory, QAbstractSpinBox)
 from settings_persistence import (read_exported_settings, save_preferences,
@@ -390,4 +390,4 @@ class LayoutOptions:
         self.view.update()
 
 
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication

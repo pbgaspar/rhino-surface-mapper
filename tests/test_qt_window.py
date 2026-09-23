@@ -6,11 +6,11 @@ import unittest
 from pathlib import Path
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 
-@unittest.skipUnless(importlib.util.find_spec('PyQt6'), 'PyQt6 não instalado')
+@unittest.skipUnless(importlib.util.find_spec('PySide6'), 'PySide6 não instalado')
 class QtWindowTests(unittest.TestCase):
     def test_overlay_can_drag_and_resize_across_refresh_without_game_focus(self):
         from types import SimpleNamespace
-        from PyQt6.QtCore import QPoint, QPointF, Qt
+        from PySide6.QtCore import QPoint, QPointF, Qt
         from rhino_surface_mapper_qt import MapperWindow
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'Status.json'
@@ -49,7 +49,7 @@ class QtWindowTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
         cls.app = QApplication.instance() or QApplication([])
 
     def test_travel_coverage_survives_save_without_bridging_breaks(self):
@@ -78,7 +78,7 @@ class QtWindowTests(unittest.TestCase):
                 view.close()
 
     def test_live_status_map_zoom_and_shutdown(self):
-        from PyQt6.QtCore import QPointF
+        from PySide6.QtCore import QPointF
         from rhino_surface_mapper_qt import MapperWindow
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'Status.json'
@@ -147,8 +147,8 @@ class QtWindowTests(unittest.TestCase):
         """Verifica 1080p, 4K e escalas Windows sem exigir dois monitores físicos."""
         from types import SimpleNamespace
         from unittest.mock import patch
-        from PyQt6.QtCore import QRect
-        from PyQt6.QtGui import QFont
+        from PySide6.QtCore import QRect
+        from PySide6.QtGui import QFont
         from rhino_surface_mapper_qt import MapView
         source = SimpleNamespace(font=lambda: QFont('Arial',10))
         for width,height,expected in [(1920,1080,10),(3840,2160,20),(2560,1440,10*4/3),(1080,1920,10)]:
@@ -180,8 +180,8 @@ class QtWindowTests(unittest.TestCase):
             view.close()
 
     def test_angle_inputs_are_integer_and_polling_is_50_ms(self):
-        from PyQt6.QtGui import QValidator
-        from PyQt6.QtWidgets import QSpinBox
+        from PySide6.QtGui import QValidator
+        from PySide6.QtWidgets import QSpinBox
         from qt_map_operations import MarkDialog
         from rhino_surface_mapper_qt import MapperWindow
         test_dir = tempfile.TemporaryDirectory()
@@ -277,7 +277,7 @@ class QtWindowTests(unittest.TestCase):
 
     def test_start_new_and_loaded_map_accept_first_click_without_file_change(self):
         from unittest.mock import patch
-        from PyQt6.QtWidgets import QMessageBox
+        from PySide6.QtWidgets import QMessageBox
         from rhino_surface_mapper_qt import MapperWindow
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'Status.json'

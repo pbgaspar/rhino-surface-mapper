@@ -1,4 +1,4 @@
-"""Testes de interação do overlay PyQt6, executáveis sem monitor físico."""
+"""Qt overlay interaction tests runnable without a physical display."""
 
 import os
 import unittest
@@ -7,14 +7,14 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 try:
-    from PyQt6.QtCore import QPoint
-    from PyQt6.QtWidgets import QApplication
+    from PySide6.QtCore import QPoint
+    from PySide6.QtWidgets import QApplication
     from pyqt_overlay import OverlayWindow
 except ImportError:
     QApplication = None
 
 
-@unittest.skipUnless(QApplication is not None, "PyQt6 não está instalado")
+@unittest.skipUnless(QApplication is not None, "PySide6 não está instalado")
 class OverlayWindowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

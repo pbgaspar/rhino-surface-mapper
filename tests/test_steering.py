@@ -280,7 +280,7 @@ class SteeringInputTests(unittest.TestCase):
 class SteeringWindowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
         cls.app=QApplication.instance() or QApplication([])
 
     def setUp(self):
@@ -340,7 +340,7 @@ class SteeringWindowTests(unittest.TestCase):
         self.driver.pulse.assert_not_called()
 
     def test_options_save_integer_tolerance(self):
-        from PyQt6.QtWidgets import QSpinBox
+        from PySide6.QtWidgets import QSpinBox
         self.w.options_path=Path(self.temp.name)/'options.json'
         self.w.radar_options()
         field=self.w.options_panel.findChild(QSpinBox,'assist_tolerance_deg')
