@@ -722,7 +722,12 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
     def show_map_library(self):
         """Abre uma janela de consulta independente do mapa e do jogo."""
         if not hasattr(self, 'map_library') or self.map_library is None:
-            self.map_library = MapLibraryWindow(self, self.view.dark_theme)
+            self.map_library = MapLibraryWindow(
+                self,
+                self.view.dark_theme,
+                preferences=self.preferences,
+                save_preference=self.save_preference,
+            )
         self.map_library.show()
         self.map_library.raise_()
         self.map_library.activateWindow()
@@ -1190,6 +1195,9 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.radar_timer.stop()
         self.assist_timer.stop()
         self.stop_assistance()
+        map_library = getattr(self, 'map_library', None)
+        if map_library is not None:
+            map_library.close()
         self.steering_input.close()
         self.overlay.close()
         super().closeEvent(event)

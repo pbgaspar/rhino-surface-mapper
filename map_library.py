@@ -1,16 +1,17 @@
 """Janela de consulta dos mapas guardados, sem alterar o mapa activo."""
 import json
 import html
+import math
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QFile, Qt, QSize, QRectF, QPointF
-from PySide6.QtGui import QColor, QPainter, QPen, QIcon
+from PySide6.QtCore import QFile, Qt, QSize, QRectF, QPointF, QTimer
+from PySide6.QtGui import QColor, QPainter, QPen, QIcon, QFontMetricsF
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import (QDialog, QLabel, QLineEdit, QListWidget,
     QSplitter, QTextEdit, QTreeWidget, QTreeWidgetItem, QWidget, QCheckBox,
     QMessageBox, QPushButton, QStyledItemDelegate)
-from deposit_marker import draw_deposit
+from deposit_marker import deposit_bounds, draw_deposit
 from PySide6.QtSvg import QSvgRenderer
 
 from app_paths import maps_directory
@@ -158,6 +159,50 @@ class MapPreview(QWidget):
         self.state = state
         self.update()
 
+    @staticmethod
+    def _annotation_extents(font, state):
+        """Return pixel extents required around map anchors for annotations."""
+        metrics = QFontMetricsF(font)
+        left = top = right = bottom = 20.0
+
+        def include(rect):
+            nonlocal left, top, right, bottom
+            left = max(left, -rect.left())
+            top = max(top, -rect.top())
+            right = max(right, rect.right())
+            bottom = max(bottom, rect.bottom())
+
+        for item in state.deposits:
+            include(deposit_bounds(QPointF(0, 0), font, item))
+        for collection in (state.marks, state.rigs):
+            default_name = 'Marca' if collection is state.marks else 'Rig'
+            for item in collection:
+                label = item.get('name', default_name)
+                include(QRectF(-4, -4, 12 + metrics.horizontalAdvance(label),
+                               metrics.height() + 8))
+
+        safety = 3.0
+        return left + safety, top + safety, right + safety, bottom + safety
+
+    @classmethod
+    def _framing(cls, state, width, height, font):
+        """Calculate a positive preview scale and center including annotations."""
+        items = state.points + state.deposits + state.rigs + state.marks
+        xs = [item['x'] for item in items]
+        ys = [item['y'] for item in items]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        span = max(1000.0, max_x - min_x, max_y - min_y)
+        left, top, right, bottom = cls._annotation_extents(font, state)
+        usable_width = max(1.0, width - left - right)
+        usable_height = max(1.0, height - top - bottom)
+        scale = max(0.0001, min(usable_width / span, usable_height / span))
+        anchor_center_x = (min_x + max_x) / 2
+        anchor_center_y = (min_y + max_y) / 2
+        center_x = anchor_center_x - (left - right) / (2 * scale)
+        center_y = anchor_center_y + (top - bottom) / (2 * scale)
+        return scale, center_x, center_y
+
     def paintEvent(self, event):
         painter = QPainter(self)
         colors = _theme_values(self.dark_theme)
@@ -172,10 +217,12 @@ class MapPreview(QWidget):
             painter.setPen(QColor(colors['preview_foreground']))
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, 'Este mapa ainda não contém registos.')
             return
-        xs, ys = [item['x'] for item in items], [item['y'] for item in items]
-        span = max(1000.0, max(xs)-min(xs), max(ys)-min(ys))
-        scale = min((self.width()-40)/span, (self.height()-40)/span)
-        cx, cy = (min(xs)+max(xs))/2, (min(ys)+max(ys))/2
+        scale, cx, cy = self._framing(
+            state=self.state,
+            width=self.width(),
+            height=self.height(),
+            font=painter.font(),
+        )
         def point(item):
             return ((self.width()/2)+(item['x']-cx)*scale,
                     (self.height()/2)-(item['y']-cy)*scale)
@@ -204,7 +251,12 @@ class MapPreview(QWidget):
 
 class MapLibraryWindow(QDialog):
     """Consulta sistemas, planetas, versões e conteúdos dos ficheiros em MAPAS."""
-    def __init__(self, parent=None, dark=True):
+    HORIZONTAL_SPLIT_KEY = 'map_library_horizontal_split_ratio'
+    VERTICAL_SPLIT_KEY = 'map_library_vertical_split_ratio'
+    DEFAULT_HORIZONTAL_SPLIT = 760 / (760 + 390)
+    DEFAULT_VERTICAL_SPLIT = 450 / (450 + 300)
+
+    def __init__(self, parent=None, dark=True, preferences=None, save_preference=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowMinMaxButtonsHint |
                             Qt.WindowType.WindowCloseButtonHint)
@@ -215,6 +267,8 @@ class MapLibraryWindow(QDialog):
         self.selected_path = None
         self.selected_item = None
         self.dark_theme = dark
+        self.preferences = preferences if isinstance(preferences, dict) else {}
+        self.save_preference = save_preference
         ui_path = Path(__file__).resolve().parent / 'ui' / 'map_library_window.ui'
         ui_file = QFile(str(ui_path))
         if not ui_file.open(QFile.OpenModeFlag.ReadOnly):
@@ -225,10 +279,16 @@ class MapLibraryWindow(QDialog):
             raise RuntimeError(f'Unable to load UI resource: {ui_path}')
 
         body = self.findChild(QSplitter, 'librarySplitter')
+        preview_details_splitter = self.findChild(QSplitter, 'previewDetailsSplitter')
         preview_host = self.findChild(QWidget, 'previewHost')
         tree_host = self.findChild(QWidget, 'treeHost')
-        if body is None or preview_host is None or tree_host is None:
+        if (body is None or preview_details_splitter is None or preview_host is None
+                or tree_host is None):
             raise RuntimeError('MapLibraryWindow.ui is missing a required container')
+        for splitter in (body, preview_details_splitter):
+            splitter.setChildrenCollapsible(False)
+            for index in range(splitter.count()):
+                splitter.setCollapsible(index, False)
 
         preview_layout = preview_host.layout()
         self.preview = MapPreview()
@@ -249,7 +309,6 @@ class MapLibraryWindow(QDialog):
         self.open_button.setEnabled(False)
         self.open_button.clicked.connect(self.open_selected_map)
         self.info_panel = self.findChild(QWidget, 'mapDetails')
-        self.info_panel.setObjectName('map_details')
         self.system_title = self.findChild(QLabel, 'systemTitle')
         self.search = self.findChild(QLineEdit, 'searchInput')
         self.suggestions = self.findChild(QListWidget, 'suggestionsList')
@@ -274,6 +333,8 @@ class MapLibraryWindow(QDialog):
         '''.replace('ARROW_ROOT', arrow_root))
         tree_host.layout().addWidget(self.tree)
         body.setSizes([760, 390])
+        preview_details_splitter.setSizes([450, 300])
+        QTimer.singleShot(0, self._restore_saved_splitters)
 
         self.search.textChanged.connect(self.filter_systems)
         self.suggestions.itemClicked.connect(lambda item: self.select_system(item.text()))
@@ -286,6 +347,54 @@ class MapLibraryWindow(QDialog):
         self.load_systems()
         self.set_theme(dark)
 
+    @staticmethod
+    def _valid_split_ratio(value):
+        """Return whether a stored splitter ratio is finite and strictly usable."""
+        return isinstance(value, (int, float)) and not isinstance(value, bool) \
+            and math.isfinite(value) and 0 < value < 1
+
+    @classmethod
+    def _restore_splitter_ratio(cls, splitter, value, default):
+        """Apply a saved ratio, retaining defaults when it is invalid or unusable."""
+        ratio = value if cls._valid_split_ratio(value) else default
+        total = sum(splitter.sizes())
+        if total <= 0:
+            return
+        splitter.setSizes([round(total * ratio), round(total * (1 - ratio))])
+        if any(size <= 0 for size in splitter.sizes()):
+            splitter.setSizes([round(total * default), round(total * (1 - default))])
+
+    def _restore_saved_splitters(self):
+        """Restore saved ratios after the dialog layouts have their final size."""
+        splitters = (
+            ('librarySplitter', self.HORIZONTAL_SPLIT_KEY, self.DEFAULT_HORIZONTAL_SPLIT),
+            ('previewDetailsSplitter', self.VERTICAL_SPLIT_KEY, self.DEFAULT_VERTICAL_SPLIT),
+        )
+        for object_name, key, default in splitters:
+            splitter = self.findChild(QSplitter, object_name)
+            if splitter is not None:
+                self._restore_splitter_ratio(splitter, self.preferences.get(key), default)
+
+    def _save_splitter_preferences(self):
+        """Persist current splitter ratios through the parent settings owner."""
+        if not callable(self.save_preference):
+            return
+        splitters = (
+            ('librarySplitter', self.HORIZONTAL_SPLIT_KEY),
+            ('previewDetailsSplitter', self.VERTICAL_SPLIT_KEY),
+        )
+        for object_name, key in splitters:
+            splitter = self.findChild(QSplitter, object_name)
+            sizes = splitter.sizes() if splitter is not None else []
+            total = sum(sizes)
+            if total > 0 and all(size > 0 for size in sizes):
+                self.save_preference(key, sizes[0] / total)
+
+    def closeEvent(self, event):
+        """Save splitter positions before the Map Library closes."""
+        self._save_splitter_preferences()
+        super().closeEvent(event)
+
     def set_theme(self, dark):
         self.dark_theme = dark
         colors = _theme_values(dark)
@@ -295,7 +404,7 @@ class MapLibraryWindow(QDialog):
                          border-radius: 6px; padding: 8px; color: {colors['foreground']}; }}
         ''')
         self.info_panel.setStyleSheet(f'''
-            QWidget#map_details {{ background: {colors['panel']}; border: 1px solid {colors['border']}; border-radius: 6px; }}
+            QWidget#mapDetails {{ background: {colors['panel']}; border: 1px solid {colors['border']}; border-radius: 6px; }}
             QCheckBox {{ color: {colors['foreground']}; background: transparent; }}
             QCheckBox::indicator {{ width: 14px; height: 14px; border: 1px solid {colors['indicator_border']}; border-radius: 2px; background: {colors['indicator']}; }}
             QCheckBox::indicator:checked {{ background: {colors['selection']}; image: url("{checked_icon}"); }}

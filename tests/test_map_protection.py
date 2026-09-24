@@ -166,17 +166,30 @@ class ProtectionTests(unittest.TestCase):
             library.close()
 
     def test_map_library_ui_hosts_custom_widgets_without_transplanting_them(self):
+        from PySide6.QtCore import Qt
         from PySide6.QtWidgets import QCheckBox, QLineEdit, QListWidget, QPushButton, QSplitter, QWidget
         library = MapLibraryWindow()
         try:
             self.assertEqual(library.objectName(), 'MapLibraryWindow')
             self.assertIsNotNone(library.findChild(QSplitter, 'librarySplitter'))
+            horizontal_splitter = library.findChild(QSplitter, 'librarySplitter')
+            vertical_splitter = library.findChild(QSplitter, 'previewDetailsSplitter')
+            self.assertEqual(horizontal_splitter.orientation(), Qt.Orientation.Horizontal)
+            self.assertIsNotNone(vertical_splitter)
+            self.assertEqual(vertical_splitter.orientation(), Qt.Orientation.Vertical)
+            for splitter in (horizontal_splitter, vertical_splitter):
+                self.assertFalse(splitter.childrenCollapsible())
+                self.assertTrue(all(not splitter.isCollapsible(index)
+                                    for index in range(splitter.count())))
             self.assertIsInstance(library.findChild(QLineEdit, 'searchInput'), QLineEdit)
             self.assertIsInstance(library.findChild(QListWidget, 'suggestionsList'), QListWidget)
             self.assertIsInstance(library.findChild(QCheckBox, 'favoriteCheck'), QCheckBox)
             self.assertIsInstance(library.findChild(QPushButton, 'openButton'), QPushButton)
             preview_host = library.findChild(QWidget, 'previewHost')
+            map_details = library.findChild(QWidget, 'mapDetails')
             tree_host = library.findChild(QWidget, 'treeHost')
+            self.assertEqual(vertical_splitter.widget(0), preview_host)
+            self.assertEqual(vertical_splitter.widget(1), map_details)
             self.assertIs(library.preview.parent(), preview_host)
             self.assertIs(library.tree.parent(), tree_host)
             self.assertIs(library.preview.window(), library)

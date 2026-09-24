@@ -14,20 +14,23 @@
      <property name="orientation"><enum>Qt::Horizontal</enum></property>
      <widget class="QWidget" name="leftPane">
       <layout class="QVBoxLayout" name="leftLayout">
-       <item><widget class="QWidget" name="previewHost"><layout class="QVBoxLayout" name="previewLayout"/></widget></item>
        <item>
-        <widget class="QWidget" name="mapDetails">
-         <layout class="QVBoxLayout" name="detailsLayout">
-          <item>
-           <layout class="QHBoxLayout" name="flagsLayout">
-            <item><widget class="QCheckBox" name="favoriteCheck"><property name="text"><string>Favorito</string></property></widget></item>
-            <item><widget class="QCheckBox" name="protectedCheck"><property name="text"><string>Proteger</string></property></widget></item>
-            <item><spacer name="flagsSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
-            <item><widget class="QPushButton" name="openButton"><property name="text"><string>Abrir mapa</string></property></widget></item>
-           </layout>
-          </item>
-          <item><widget class="QWidget" name="detailsInfoHost"><layout class="QVBoxLayout" name="detailsInfoLayout"/></widget></item>
-         </layout>
+        <widget class="QSplitter" name="previewDetailsSplitter">
+         <property name="orientation"><enum>Qt::Vertical</enum></property>
+         <widget class="QWidget" name="previewHost"><layout class="QVBoxLayout" name="previewLayout"/></widget>
+         <widget class="QWidget" name="mapDetails">
+          <layout class="QVBoxLayout" name="detailsLayout">
+           <item>
+            <layout class="QHBoxLayout" name="flagsLayout">
+             <item><widget class="QCheckBox" name="favoriteCheck"><property name="text"><string>Favorito</string></property></widget></item>
+             <item><widget class="QCheckBox" name="protectedCheck"><property name="text"><string>Proteger</string></property></widget></item>
+             <item><spacer name="flagsSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+             <item><widget class="QPushButton" name="openButton"><property name="text"><string>Abrir mapa</string></property></widget></item>
+            </layout>
+           </item>
+           <item><widget class="QWidget" name="detailsInfoHost"><layout class="QVBoxLayout" name="detailsInfoLayout"/></widget></item>
+          </layout>
+         </widget>
         </widget>
        </item>
       </layout>
