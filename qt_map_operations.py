@@ -97,18 +97,20 @@ class MarkDialog(QDialog):
     """Introduz ou altera uma marca relativa ao Rhino ao abrir o diálogo."""
     def __init__(self, parent, existing=None):
         super().__init__(parent)
-        self.setWindowTitle('Alterar marca' if existing else 'Marca')
+        self.setWindowTitle(translate(
+            'MarkDialog', 'Edit marker' if existing else 'Marker'))
         form = QFormLayout(self)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form.setHorizontalSpacing(4)
         self.name = QLineEdit()
         self.name.setMaxLength(120)
         self.azimuth = DegreesSpinBox()
-        self.azimuth.setToolTip('0° Norte · 90° Este · 180° Sul · 270° Oeste')
+        self.azimuth.setToolTip(translate(
+            'MarkDialog', '0° North · 90° East · 180° South · 270° West'))
         self.distance = MetresSpinBox()
-        form.addRow('Nome da marca:', self.name)
-        form.addRow('Azimute desde o norte:', self.azimuth)
-        form.addRow('Distância ao Rhino:', self.distance)
+        form.addRow(translate('MarkDialog', 'Marker name:'), self.name)
+        form.addRow(translate('MarkDialog', 'Bearing from north:'), self.azimuth)
+        form.addRow(translate('MarkDialog', 'Distance from Rhino:'), self.distance)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
         self.name.textChanged.connect(lambda text: buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(bool(text.strip())))
@@ -125,7 +127,9 @@ class MarkDialog(QDialog):
         self.initial_azimuth = self.azimuth.value()
         self.initial_distance = self.distance.value()
         if existing and existing['distance'] > self.distance.maximum():
-            self.distance.setToolTip('Distância original superior a 99999 m. Será conservada se não alterar este campo.')
+            self.distance.setToolTip(translate(
+                'MarkDialog',
+                'Original distance exceeds 99,999 m. It will be preserved unless this field is changed.'))
 
     def values(self):
         azimuth, distance = self.azimuth.value(), self.distance.value()

@@ -77,4 +77,14 @@
         <message><source>Marks</source><translation>Marcas</translation></message>
         <message><source>Marked rigs</source><translation>Rigs marcados</translation></message>
     </context>
+    <context>
+        <name>MarkDialog</name>
+        <message><source>Edit marker</source><translation>Alterar marca</translation></message>
+        <message><source>Marker</source><translation>Marca</translation></message>
+        <message><source>Marker name:</source><translation>Nome da marca:</translation></message>
+        <message><source>Bearing from north:</source><translation>Azimute desde o norte:</translation></message>
+        <message><source>Distance from Rhino:</source><translation>Distância ao Rhino:</translation></message>
+        <message><source>0° North · 90° East · 180° South · 270° West</source><translation>0° Norte · 90° Este · 180° Sul · 270° Oeste</translation></message>
+        <message><source>Original distance exceeds 99,999 m. It will be preserved unless this field is changed.</source><translation>A distância original excede 99 999 m. Será conservada se não alterar este campo.</translation></message>
+    </context>
 </TS>

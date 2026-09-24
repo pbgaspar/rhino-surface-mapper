@@ -27,14 +27,15 @@ class MapLibraryI18nTests(unittest.TestCase):
             self.assertIn(f'<string>{source}</string>', ui_text)
 
         ts_root = ElementTree.parse(root / 'translations' / 'rsm_pt_PT.ts').getroot()
-        contexts = ts_root.findall('context')
-        self.assertEqual(
-            [context.findtext('name') for context in contexts],
-            ['DepositDialog', 'MapLibraryWindow'],
+        map_library_context = next(
+            (context for context in ts_root.findall('context')
+             if context.findtext('name') == 'MapLibraryWindow'),
+            None,
         )
+        self.assertIsNotNone(map_library_context)
         messages = {
             message.findtext('source'): message.findtext('translation')
-            for message in contexts[1].findall('message')
+            for message in map_library_context.findall('message')
         }
         self.assertEqual(messages['View and manage maps'], 'Ver e gerir mapas')
         self.assertEqual(messages['{count} deposits'], '{count} depósitos')
