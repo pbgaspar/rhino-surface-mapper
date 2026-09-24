@@ -17,6 +17,7 @@ from map_pml import (PML_MATCH_DISTANCE_M, infer_legacy_pml, matching_candidates
                      safe_filename_component, surface_distance as pml_surface_distance,
                      corresponds_to_map)
 from numeric_fields import MetresSpinBox, DegreesSpinBox, compact
+from i18n import translate
 
 
 class _DepositDialogLoader(QUiLoader):
@@ -62,7 +63,8 @@ class DepositDialog(QDialog):
         ui_file.close()
         if loaded is None or loaded.layout() is None:
             raise RuntimeError(f'Unable to load UI resource: {ui_path}')
-        self.setWindowTitle('Editar depósito' if existing else 'Marcar depósito')
+        self.setWindowTitle(translate(
+            'DepositDialog', 'Edit deposit' if existing else 'Mark deposit'))
         data = existing or {}
         self.name = self.findChild(QLineEdit, 'name')
         self.size = self.findChild(QComboBox, 'size')
@@ -71,9 +73,14 @@ class DepositDialog(QDialog):
         if not all((self.name, self.size, self.rigs, buttons)):
             raise RuntimeError('DepositDialog.ui is missing a required widget')
         self.name.setText(data.get('name', ''))
-        self.size.addItems(['Pequeno','Médio','Grande','Enorme'])
-        self.size.setCurrentText(data.get('size','Pequeno'))
-        self.rigs.setSuffix(' rigs')
+        size_values = ('Pequeno', 'Médio', 'Grande', 'Enorme')
+        size_labels = ('Small', 'Medium', 'Large', 'Huge')
+        for value, label in zip(size_values, size_labels):
+            self.size.addItem(translate('DepositDialog', label), userData=value)
+        size = data.get('size', 'Pequeno')
+        index = self.size.findData(size)
+        self.size.setCurrentIndex(index if index >= 0 else 0)
+        self.rigs.setSuffix(f" {translate('DepositDialog', 'rigs')}")
         self.rigs.setRange(1,6)
         self.rigs.setValue(int(data.get('rigs',1)))
         compact(self.rigs)
@@ -83,7 +90,7 @@ class DepositDialog(QDialog):
     def values(self):
         """Devolve um dicionário com os três campos editáveis.
         Um nome vazio recebe o texto Depósito; os outros campos são limitados pelos controlos."""
-        return dict(name=self.name.text().strip() or 'Depósito', size=self.size.currentText(), rigs=self.rigs.value())
+        return dict(name=self.name.text().strip() or 'Depósito', size=self.size.currentData(), rigs=self.rigs.value())
 
 
 class MarkDialog(QDialog):

@@ -28,7 +28,7 @@ class MapOperationsTests(unittest.TestCase):
 
     def test_deposit_dialog_ui_preserves_widget_contract_and_defaults(self):
         from qt_map_operations import DepositDialog
-        from PySide6.QtWidgets import QDialogButtonBox
+        from PySide6.QtWidgets import QDialogButtonBox, QLabel
         dialog = DepositDialog(self.window)
         self.addCleanup(dialog.close)
         self.assertEqual(dialog.name.objectName(), 'name')
@@ -36,7 +36,13 @@ class MapOperationsTests(unittest.TestCase):
         self.assertEqual(dialog.rigs.objectName(), 'rigs')
         self.assertEqual(dialog.size.count(), 4)
         self.assertEqual((dialog.rigs.minimum(), dialog.rigs.maximum()), (1, 6))
+        self.assertEqual(dialog.windowTitle(), 'Mark deposit')
+        self.assertEqual(dialog.findChild(QLabel, 'nameLabel').text(), 'Name:')
+        self.assertEqual(dialog.findChild(QLabel, 'sizeLabel').text(), 'Size:')
+        self.assertEqual(dialog.findChild(QLabel, 'rigsLabel').text(), 'Number of rigs:')
         self.assertEqual(dialog.values(), {'name': 'Depósito', 'size': 'Pequeno', 'rigs': 1})
+        self.assertEqual(dialog.size.itemText(0), 'Small')
+        self.assertEqual(dialog.size.itemData(0), 'Pequeno')
         self.assertIsNotNone(dialog.findChild(QDialogButtonBox, 'buttonBox'))
 
     def test_deposit_dialog_ui_populates_existing_values_and_rejects(self):
@@ -47,6 +53,15 @@ class MapOperationsTests(unittest.TestCase):
         self.assertEqual(dialog.values(), {'name': 'A', 'size': 'Grande', 'rigs': 3})
         dialog.reject()
         self.assertEqual(dialog.result(), QDialog.DialogCode.Rejected)
+
+    def test_deposit_dialog_keeps_portuguese_size_values_separate_from_labels(self):
+        from qt_map_operations import DepositDialog
+
+        dialog = DepositDialog(self.window, {'name': 'A', 'size': 'Médio', 'rigs': 3})
+        self.addCleanup(dialog.close)
+        self.assertEqual(dialog.size.currentText(), 'Medium')
+        self.assertEqual(dialog.size.currentData(), 'Médio')
+        self.assertEqual(dialog.values()['size'], 'Médio')
 
     def test_deposit_duplicate_edit_rig_cancel_and_delete(self):
         from PySide6.QtCore import QPointF

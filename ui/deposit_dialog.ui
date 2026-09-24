@@ -3,7 +3,7 @@
  <class>DepositDialog</class>
  <widget class="QDialog" name="DepositDialog">
   <property name="windowTitle">
-   <string>Marcar depósito</string>
+   <string>Mark deposit</string>
   </property>
   <layout class="QFormLayout" name="formLayout">
    <property name="horizontalSpacing">
@@ -14,7 +14,7 @@
    </property>
    <item row="0" column="0">
     <widget class="QLabel" name="nameLabel">
-     <property name="text"><string>Nome:</string></property>
+     <property name="text"><string>Name:</string></property>
     </widget>
    </item>
    <item row="0" column="1">
@@ -22,7 +22,7 @@
    </item>
    <item row="1" column="0">
     <widget class="QLabel" name="sizeLabel">
-     <property name="text"><string>Tamanho:</string></property>
+     <property name="text"><string>Size:</string></property>
     </widget>
    </item>
    <item row="1" column="1">
@@ -30,7 +30,7 @@
    </item>
    <item row="2" column="0">
     <widget class="QLabel" name="rigsLabel">
-     <property name="text"><string>Nº rigs:</string></property>
+     <property name="text"><string>Number of rigs:</string></property>
     </widget>
    </item>
    <item row="2" column="1">
