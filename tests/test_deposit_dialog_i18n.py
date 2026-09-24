@@ -16,14 +16,18 @@ class DepositDialogI18nTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
-    def test_catalogue_contains_only_deposit_dialog_translations(self):
+    def test_catalogue_preserves_deposit_dialog_translations(self):
         path = Path(__file__).resolve().parents[1] / 'translations' / 'rsm_pt_PT.ts'
         root = ElementTree.parse(path).getroot()
-        contexts = root.findall('context')
-        self.assertEqual([context.findtext('name') for context in contexts], ['DepositDialog'])
+        deposit_context = next(
+            (context for context in root.findall('context')
+             if context.findtext('name') == 'DepositDialog'),
+            None,
+        )
+        self.assertIsNotNone(deposit_context)
         messages = {
             message.findtext('source'): message.findtext('translation')
-            for message in contexts[0].findall('message')
+            for message in deposit_context.findall('message')
         }
         self.assertEqual(messages, {
             'Mark deposit': 'Marcar depósito',

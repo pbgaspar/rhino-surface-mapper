@@ -17,6 +17,7 @@ from PySide6.QtSvg import QSvgRenderer
 from app_paths import maps_directory
 from map_pml import infer_legacy_pml
 from mapper_core import MapperState
+from i18n import translate
 
 
 class _MapLibraryLoader(QUiLoader):
@@ -483,7 +484,12 @@ class MapLibraryWindow(QDialog):
     def update_badges(self, item, state):
         item.setData(0, Qt.ItemDataRole.UserRole+1, (len(state.deposits), state.favorite, state.protected))
         self.tree.viewport().update()
-        item.setToolTip(0, f'{len(state.deposits)} depósitos' + (' · Favorito' if state.favorite else '') + (' · Protegido' if state.protected else ''))
+        tooltip = translate('MapLibraryWindow', '{count} deposits').format(count=len(state.deposits))
+        if state.favorite:
+            tooltip += translate('MapLibraryWindow', ' · Favourite')
+        if state.protected:
+            tooltip += translate('MapLibraryWindow', ' · Protected')
+        item.setToolTip(0, tooltip)
 
     def clear_selection(self):
         self.selected_path = self.selected_item = None
@@ -526,7 +532,7 @@ class MapLibraryWindow(QDialog):
             else:
                 self.select_map(self.selected_item, 0)
         except (OSError, ValueError, TypeError) as exc:
-            QMessageBox.critical(self, 'Erro ao atualizar mapa', str(exc))
+            QMessageBox.critical(self, translate('MapLibraryWindow', 'Error updating map'), str(exc))
             self.select_map(self.selected_item, 0)
 
     def open_selected_map(self):
@@ -542,7 +548,7 @@ class MapLibraryWindow(QDialog):
                 return
             parent.install_loaded_map(state, source_path=self.selected_path)
         except (OSError, ValueError, TypeError, KeyError) as exc:
-            QMessageBox.critical(self, 'Erro ao abrir mapa', str(exc))
+            QMessageBox.critical(self, translate('MapLibraryWindow', 'Error opening map'), str(exc))
 
     def close_other_planets(self, opened):
         """Mantém só um planeta expandido para a lista continuar legível."""
@@ -566,7 +572,8 @@ class MapLibraryWindow(QDialog):
                 state.save(path, update_saved_at=False)
         except (OSError, ValueError, TypeError, KeyError) as exc:
             self.clear_selection()
-            self.info.setPlainText(f'Não foi possível ler o mapa:\n{exc}')
+            self.info.setPlainText(translate(
+                'MapLibraryWindow', 'Unable to read map:\n{error}').format(error=exc))
             return
         self.selected_path, self.selected_item = path, item
         self.update_badges(item, state)
@@ -581,29 +588,34 @@ class MapLibraryWindow(QDialog):
         completed = len(state.route_history)
         skipped = sum(item.get('status') == 'skipped' for item in state.route_history)
         if state.search_started or completed:
-            search = f'Sim ({completed}/{state.search_total_points}) · saltos {skipped}'
+            search = translate(
+                'MapLibraryWindow', 'Yes ({completed}/{total}) · skips {skipped}').format(
+                    completed=completed, total=state.search_total_points, skipped=skipped)
         else:
-            search = 'Não'
+            search = translate('MapLibraryWindow', 'No')
         def esc(value):
             return html.escape(str(value))
         cards = (f'<table width="100%" cellspacing="6"><tr>'
                  f'<td><b>PML</b><br>{esc(state.pml_id or "—")}</td>'
-                 f'<td><b>Busca efetuada</b><br>{search}</td>'
-                 f'<td><b>Percurso</b><br>{len(state.points)} pontos</td>'
-                 f'<td><b>Registos</b><br>{len(state.deposits)} depósitos · {len(state.rigs)} rigs · {len(state.marks)} marcas</td>'
+                 f'<td><b>{translate("MapLibraryWindow", "Search completed")}</b><br>{search}</td>'
+                 f'<td><b>{translate("MapLibraryWindow", "Route")}</b><br>{translate("MapLibraryWindow", "{count} points").format(count=len(state.points))}</td>'
+                 f'<td><b>{translate("MapLibraryWindow", "Records")}</b><br>'
+                 f'{translate("MapLibraryWindow", "{deposits} deposits · {rigs} rigs · {marks} marks").format(deposits=len(state.deposits), rigs=len(state.rigs), marks=len(state.marks))}</td>'
                  f'</tr></table>')
         sections = [f'<h3 style="margin:0">{esc(path.name)}</h3>', cards,
-                    f'<p><b>Criado:</b> {esc(state.created_at or "não registado")}<br>'
-                    f'<b>Última gravação:</b> {esc(state.last_saved_at or modified)}</p>']
+                    f'<p><b>{translate("MapLibraryWindow", "Created:")}</b> '
+                    f'{esc(state.created_at or translate("MapLibraryWindow", "not recorded"))}<br>'
+                    f'<b>{translate("MapLibraryWindow", "Last saved:")}</b> '
+                    f'{esc(state.last_saved_at or modified)}</p>']
         if state.deposits:
-            sections.append('<h4>Depósitos</h4><ul>' + ''.join(
-                f"<li><b>{esc(item['name'])}</b> — {esc(item['size'])}, {item['rigs']} rigs · {item['lat']:.5f}, {item['lon']:.5f}</li>"
+            sections.append(f'<h4>{translate("MapLibraryWindow", "Deposits")}</h4><ul>' + ''.join(
+                f"<li><b>{esc(item['name'])}</b> — {esc(item['size'])}, {item['rigs']} {translate('MapLibraryWindow', 'rigs')} · {item['lat']:.5f}, {item['lon']:.5f}</li>"
                 for item in state.deposits) + '</ul>')
         if state.marks:
-            sections.append('<h4>Marcas</h4><ul>' + ''.join(
+            sections.append(f'<h4>{translate("MapLibraryWindow", "Marks")}</h4><ul>' + ''.join(
                 f"<li><b>{esc(item['name'])}</b> · {item['lat']:.5f}, {item['lon']:.5f}</li>"
                 for item in state.marks) + '</ul>')
         if state.rigs:
-            sections.append('<h4>Rigs marcados</h4><ul>' + ''.join(
+            sections.append(f'<h4>{translate("MapLibraryWindow", "Marked rigs")}</h4><ul>' + ''.join(
                 f"<li>{item.get('lat', 0):.5f}, {item.get('lon', 0):.5f}</li>" for item in state.rigs) + '</ul>')
         self.info.setHtml(''.join(sections))
