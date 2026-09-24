@@ -89,6 +89,20 @@ This project must follow a clear, modular, and sustainable Python architecture. 
 - Validate inputs and limits explicitly when relevant.
 - Keep the code predictable and easy to debug.
 
+### 11. Qt UI architecture
+
+- PySide6 is the canonical Qt binding for Rhino Surface Mapper. Do not replace it with PyQt6 or introduce another UI technology without an explicit architectural decision.
+- Qt Designer `.ui` files are part of the UI architecture, but their use is selective rather than universal.
+- Use `.ui` when presentation structure is predominantly static and doing so improves layout clarity, inspection, AI-assisted work, or human collaboration without creating runtime ownership ambiguity.
+- `.ui` files should normally contain static widget hierarchy, layouts, splitters, static containers, stable object names, and suitable static presentation properties.
+- Keep application behavior, domain rules, persistence, lifecycle handling, dynamic content, custom widgets, custom painting, delegates, runtime-dependent themes, and runtime asset/icon behavior in Python.
+- Components that are primarily dynamic, custom-rendered, stateful, model-driven, runtime-created, or tightly coupled to application lifecycle should remain programmatic even when Qt Designer could technically represent them.
+- MapPreview, MapTree, and MapRowDelegate are intentionally programmatic components. Do not mass-convert existing Python UI to `.ui`.
+- When modifying an existing screen, introduce or extend `.ui` structure only when the change is primarily static presentation and preserves clear ownership and runtime behavior.
+- Stable `.ui` object names consumed by Python are runtime contracts. Preserve them deliberately and cover important contracts with focused tests.
+- Load runtime `.ui` files with an ownership model that preserves one clear root-widget owner and lifecycle. Do not load a separate root and then transplant or reparent it into an existing runtime window without an explicit safe ownership design.
+- Keep packaging and distribution validation for runtime-loaded `.ui` files separate from the UI architecture decision.
+
 ## Main rule
 The priority is to build clear, testable, and sustainable software while respecting the existing project structure and avoiding expansive changes without necessity.
 
