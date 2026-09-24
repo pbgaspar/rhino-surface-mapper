@@ -37,6 +37,13 @@
        <item><widget class="QLabel" name="systemLabel"><property name="text"><string>Sistema:</string></property></widget></item>
        <item><widget class="QLineEdit" name="searchInput"><property name="placeholderText"><string>Escreve pelo menos 2 caracteres</string></property></widget></item>
        <item><widget class="QListWidget" name="suggestionsList"><property name="maximumHeight"><number>125</number></property></widget></item>
+       <item>
+        <layout class="QHBoxLayout" name="mapFilterLayout">
+         <item><widget class="QCheckBox" name="favoriteFilterCheck"><property name="text"><string>Favoritos</string></property></widget></item>
+         <item><widget class="QCheckBox" name="protectedFilterCheck"><property name="text"><string>Protegidos</string></property></widget></item>
+         <item><spacer name="mapFilterSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+        </layout>
+       </item>
        <item><widget class="QLabel" name="systemTitle"><property name="text"><string>Procura um sistema</string></property></widget></item>
        <item><widget class="QWidget" name="treeHost"><layout class="QVBoxLayout" name="treeLayout"/></widget></item>
       </layout>

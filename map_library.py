@@ -239,6 +239,8 @@ class MapLibraryWindow(QDialog):
         self.findChild(QWidget, 'detailsInfoHost').layout().addWidget(self.info)
         self.favorite_check = self.findChild(QCheckBox, 'favoriteCheck')
         self.protected_check = self.findChild(QCheckBox, 'protectedCheck')
+        self.favorite_filter_check = self.findChild(QCheckBox, 'favoriteFilterCheck')
+        self.protected_filter_check = self.findChild(QCheckBox, 'protectedFilterCheck')
         for checkbox, symbol in ((self.favorite_check, 'favorite'), (self.protected_check, 'protected')):
             checkbox.setIcon(QIcon(str(Path(__file__).resolve().parent/'assets'/f'{symbol}.svg')))
             checkbox.setIconSize(QSize(22, 22))
@@ -279,6 +281,8 @@ class MapLibraryWindow(QDialog):
         self.tree.itemClicked.connect(self.select_map)
         self.favorite_check.toggled.connect(self.change_flags)
         self.protected_check.toggled.connect(self.change_flags)
+        self.favorite_filter_check.toggled.connect(self.refresh_map_filter)
+        self.protected_filter_check.toggled.connect(self.refresh_map_filter)
         self.load_systems()
         self.set_theme(dark)
 
@@ -312,8 +316,26 @@ class MapLibraryWindow(QDialog):
             return
         self.suggestions.addItems([name for name in self.systems if value in name.casefold()])
 
+    def map_matches_filters(self, state):
+        """Return whether a map state satisfies the active library filters."""
+        return ((not self.favorite_filter_check.isChecked() or state.favorite)
+                and (not self.protected_filter_check.isChecked() or state.protected))
+
+    def refresh_map_filter(self):
+        """Rebuild the selected system after a map-level filter changes."""
+        if self.current_system is not None:
+            self.select_system(self.current_system)
+
     def select_system(self, system):
         """Agrupa os ficheiros por planeta no sistema seleccionado."""
+        expanded_body = None
+        if self.current_system == system:
+            expanded_body = next(
+                (self.tree.topLevelItem(index).text(0)
+                 for index in range(self.tree.topLevelItemCount())
+                 if self.tree.topLevelItem(index).isExpanded()),
+                None,
+            )
         self.current_system = system
         self.system_title.setText(system)
         self.tree.clear()
@@ -338,10 +360,16 @@ class MapLibraryWindow(QDialog):
             self.tree.addTopLevelItem(planet)
             planet.setFirstColumnSpanned(True)
             for path, state in sorted(paths, key=lambda item: item[0].stat().st_mtime, reverse=True):
+                if not self.map_matches_filters(state):
+                    continue
                 child = QTreeWidgetItem([path.name])
                 child.setData(0, Qt.ItemDataRole.UserRole, str(path))
                 self.update_badges(child, state)
                 planet.addChild(child)
+            if planet.childCount() == 0:
+                self.tree.takeTopLevelItem(self.tree.indexOfTopLevelItem(planet))
+            elif planet.text(0) == expanded_body:
+                planet.setExpanded(True)
 
     def update_badges(self, item, state):
         item.setData(0, Qt.ItemDataRole.UserRole+1, (len(state.deposits), state.favorite, state.protected))
@@ -384,7 +412,10 @@ class MapLibraryWindow(QDialog):
                     parent.view.radar.waves.clear()
                     parent.stop_assistance()
                 parent.refresh()
-            self.select_map(self.selected_item, 0)
+            if self.favorite_filter_check.isChecked() or self.protected_filter_check.isChecked():
+                self.select_system(self.current_system)
+            else:
+                self.select_map(self.selected_item, 0)
         except (OSError, ValueError, TypeError) as exc:
             QMessageBox.critical(self, 'Erro ao atualizar mapa', str(exc))
             self.select_map(self.selected_item, 0)
