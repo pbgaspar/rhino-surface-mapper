@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 
 @unittest.skipUnless(importlib.util.find_spec('PySide6'), 'PySide6 não instalado')
@@ -151,6 +151,42 @@ class MapOperationsTests(unittest.TestCase):
         self.assertEqual(dialog.windowTitle(), 'Centro do PML [PML]')
         self.assertEqual(dialog.labelText(), 'Azimute do Rhino para o centro do PML (0° = norte):')
         self.assertEqual(dialog.intValue(), 0)
+
+    def test_choose_list_item_returns_selected_index_and_preserves_cancellation(self):
+        from PySide6.QtWidgets import QDialog, QInputDialog
+
+        w = self.window
+        dialog = Mock()
+        combo = Mock()
+        combo.currentIndex.return_value = 1
+        dialog.findChild.return_value = combo
+        dialog.exec.return_value = QDialog.DialogCode.Accepted
+        with patch('qt_map_operations.QInputDialog', return_value=dialog):
+            self.assertEqual(w.choose_list_item('Title', 'Choose:', ['same', 'same']), 1)
+
+        dialog.exec.return_value = QDialog.DialogCode.Rejected
+        with patch('qt_map_operations.QInputDialog', return_value=dialog):
+            self.assertIsNone(w.choose_list_item('Title', 'Choose:', ['same', 'same']))
+
+    def test_replace_confirmation_uses_explicit_prompt_text(self):
+        from PySide6.QtWidgets import QMessageBox
+
+        w = self.window
+        w.state.pml_id = 'PML'
+        discard, new_version, save, cancel = object(), object(), object(), object()
+        box = Mock()
+        box.addButton.side_effect = [discard, new_version, save, cancel]
+        box.clickedButton.return_value = discard
+        message_box = Mock(return_value=box)
+        message_box.ButtonRole = QMessageBox.ButtonRole
+        with patch('qt_map_operations.QMessageBox', message_box), \
+                patch.object(w, 'pml_path', return_value=Path('map.json')), \
+                patch.object(w, 'refresh'):
+            self.assertTrue(w.prepare_to_replace_current_map(
+                'Display title', 'open the map'))
+
+        box.setText.assert_called_once_with(
+            'Que queres fazer ao mapa atual antes de open the map?')
     def test_load_rereads_unchanged_status_immediately(self):
         import json
         from PySide6.QtWidgets import QMessageBox
@@ -384,7 +420,8 @@ class MapOperationsTests(unittest.TestCase):
             self.assertIs(w.resolve_pending_transition(), destination)
             self.assertIs(w.resolve_pending_transition(), destination)
 
-        replace.assert_called_once_with('Mudar de localização', allow_cancel=False)
+        replace.assert_called_once_with(
+            'Mudar de localização', 'mudar de localização', allow_cancel=False)
         prepare.assert_called_once_with()
         self.assertTrue(w.pending_old_map_resolved)
         self.assertIs(w.pending_destination, destination)
@@ -398,7 +435,8 @@ class MapOperationsTests(unittest.TestCase):
                 patch.object(w, 'prepare_pending_destination') as prepare:
             self.assertIsNone(w.resolve_pending_transition())
 
-        replace.assert_called_once_with('Mudar de localização', allow_cancel=False)
+        replace.assert_called_once_with(
+            'Mudar de localização', 'mudar de localização', allow_cancel=False)
         prepare.assert_not_called()
         self.assertFalse(w.pending_old_map_resolved)
         self.assertIsNone(w.pending_destination)
@@ -413,7 +451,8 @@ class MapOperationsTests(unittest.TestCase):
             self.assertIsNone(w.resolve_pending_transition())
             self.assertIs(w.resolve_pending_transition(), destination)
 
-        replace.assert_called_once_with('Mudar de localização', allow_cancel=False)
+        replace.assert_called_once_with(
+            'Mudar de localização', 'mudar de localização', allow_cancel=False)
         self.assertTrue(w.pending_old_map_resolved)
         self.assertIs(w.pending_destination, destination)
 

@@ -137,7 +137,7 @@ class ProtectionTests(unittest.TestCase):
             w.save_map()
         self.assertEqual(expected, w.state.to_dict())
         self.assertTrue(w.confirm_pml_exit())
-        self.assertTrue(w.prepare_to_replace_current_map('Abrir'))
+        self.assertTrue(w.prepare_to_replace_current_map('Abrir', 'abrir'))
         w.refresh()
         self.assertFalse(w.search_button.isEnabled())
         self.assertFalse(w.op_buttons['Marca'].isEnabled())

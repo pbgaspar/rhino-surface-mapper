@@ -968,7 +968,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         try:
             if not self.pending_old_map_resolved:
                 if not self.prepare_to_replace_current_map(
-                        'Mudar de localização', allow_cancel=False):
+                        'Mudar de localização', 'mudar de localização', allow_cancel=False):
                     return None
                 self.pending_old_map_resolved = True
             self.pending_destination = self.prepare_pending_destination()
@@ -1071,10 +1071,10 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                 f'{path.name}'
                 for _, path, candidate in matches
             ]
-            chosen = self.choose_list_item('Vários PML próximos', 'Escolhe o PML:', labels)
-            if chosen is None:
+            chosen_index = self.choose_list_item('Vários PML próximos', 'Escolhe o PML:', labels)
+            if chosen_index is None:
                 return None
-            path, candidate = matches[labels.index(chosen)][1:]
+            path, candidate = matches[chosen_index][1:]
         elif matches:
             _, path, candidate = matches[0]
         else:

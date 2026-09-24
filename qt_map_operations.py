@@ -174,7 +174,7 @@ class MapOperations:
                 'border: 1px solid #9fd4ff; }')
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return None
-        return dialog.textValue()
+        return combo.currentIndex() if combo is not None else None
 
     @staticmethod
     def infer_legacy_pml(state, path, system, body):
@@ -512,7 +512,7 @@ class MapOperations:
             chosen = self.choose_list_item('Vários PML próximos', 'Escolhe o PML:', labels)
             if chosen is None:
                 return
-            index = labels.index(chosen)
+            index = chosen
             _, path, candidate = matches[index]
             status = dict(self.live_status)
             status['StarSystem'] = candidate.system
@@ -598,7 +598,7 @@ class MapOperations:
             QMessageBox.critical(self, 'Erro ao guardar', str(exc))
             return False
 
-    def prepare_to_replace_current_map(self, next_action, allow_cancel=True):
+    def prepare_to_replace_current_map(self, next_action, action_prompt, allow_cancel=True):
         """Resolve o destino das alterações antes de Abrir ou Novo.
 
         Apagar descarta apenas as alterações em memória; nunca apaga um
@@ -618,7 +618,7 @@ class MapOperations:
                     == QMessageBox.StandardButton.Yes)
         message = QMessageBox(self)
         message.setWindowTitle(next_action)
-        message.setText(f'Que queres fazer ao mapa atual antes de {next_action.lower()}?')
+        message.setText(f'Que queres fazer ao mapa atual antes de {action_prompt}?')
         discard = message.addButton('Não gravar', QMessageBox.ButtonRole.DestructiveRole)
         new_version = message.addButton('Nova Versão', QMessageBox.ButtonRole.ActionRole)
         save = message.addButton('Gravar', QMessageBox.ButtonRole.AcceptRole)
@@ -652,7 +652,7 @@ class MapOperations:
     def new_map(self):
         """Pede confirmação quando há dados e limpa o mapa, mantendo telemetria.
         Cancela uma colocação pendente e atualiza o overlay ao terminar o modo de busca."""
-        if not self.prepare_to_replace_current_map('Novo mapa'):
+        if not self.prepare_to_replace_current_map('Novo mapa', 'criar um novo mapa'):
             return
         s = self.state
         if (s.pml_center_lat is not None and s.rhino_lat is not None
@@ -780,12 +780,12 @@ class MapOperations:
             versions.sort(key=lambda item: item[0].stat().st_mtime, reverse=True)
             labels = [f'{datetime.fromtimestamp(path.stat().st_mtime):%Y-%m-%d %H:%M} — {path.name}'
                       for path, _ in versions]
-            selected = self.choose_list_item(f'Abrir PML [{s.pml_id}]', 'Versão:', labels)
-            if selected is None:
+            selected_index = self.choose_list_item(f'Abrir PML [{s.pml_id}]', 'Versão:', labels)
+            if selected_index is None:
                 return
-            path, candidate = versions[labels.index(selected)]
+            path, candidate = versions[selected_index]
         try:
-            if not self.prepare_to_replace_current_map('Abrir mapa'):
+            if not self.prepare_to_replace_current_map('Abrir mapa', 'abrir o mapa'):
                 return
             if not self.install_loaded_map(candidate, source_path=path):
                 return
