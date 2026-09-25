@@ -9,8 +9,44 @@ from settings_persistence import (read_exported_settings, save_preferences,
                                   write_exported_settings)
 
 
+OP_MAPS = 'maps'
+OP_MARK = 'mark'
+OP_MARK_DEPOSIT = 'mark_deposit'
+OP_MARK_RIG = 'mark_rig'
+OP_EXIT = 'exit'
+
+SECTION_SEARCH = 'search_navigation'
+SECTION_RADAR = 'radar'
+SECTION_RHINO = 'rhino'
+SECTION_ASSIST = 'steering_assistance'
+SECTION_ED_PARAMETERS = 'ed_parameters'
+SECTION_MAP = 'map'
+SECTION_OVERLAY = 'overlay'
+SECTION_LAYOUT = 'layout'
+
+THEME_SYSTEM = 'system'
+THEME_DARK = 'dark'
+THEME_LIGHT = 'light'
+THEME_LABELS = {
+    THEME_SYSTEM: 'Como o Windows',
+    THEME_DARK: 'Dark',
+    THEME_LIGHT: 'Light',
+}
+THEME_LEGACY_VALUES = {label: value for value, label in THEME_LABELS.items()}
+
+
+def normalize_theme_value(value):
+    """Return the stable theme ID for a current or legacy persisted value."""
+    if not isinstance(value, str):
+        return None
+    if value in THEME_LABELS:
+        return value
+    return THEME_LEGACY_VALUES.get(value)
+
+
 def _theme_is_dark(theme, system_scheme):
-    return theme == 'Dark' or (theme == 'Como o Windows' and system_scheme == Qt.ColorScheme.Dark)
+    theme = normalize_theme_value(theme)
+    return theme == THEME_DARK or (theme == THEME_SYSTEM and system_scheme == Qt.ColorScheme.Dark)
 
 
 def _widget_theme_colors(dark):
@@ -48,6 +84,10 @@ class LayoutOptions:
         self.setting_fields = {}
         self.loading_settings = False
         self.preferences = dict(options) if isinstance(options, dict) else {}
+        if 'theme' in self.preferences:
+            theme = normalize_theme_value(self.preferences['theme'])
+            if theme is not None:
+                self.preferences['theme'] = theme
         self.option_resets = {}
         self.option_sections = {}
         self.fixed_buttons = []
@@ -68,9 +108,9 @@ class LayoutOptions:
         maps.setObjectName("maps_menu")
         maps.setMenu(menu)
         operations.addWidget(maps)
-        self.op_buttons['Mapas'] = maps
+        self.op_buttons[OP_MAPS] = maps
         self.fixed_buttons.append((maps, 90))
-        for key, title in [('Marca','Marca'), ('Marcar depósito','Depósito'), ('Marcar rig','Rig')]:
+        for key, title in [(OP_MARK,'Marca'), (OP_MARK_DEPOSIT,'Depósito'), (OP_MARK_RIG,'Rig')]:
             button = self.op_buttons[key]
             button.setText(title)
             button.show()
@@ -79,9 +119,9 @@ class LayoutOptions:
         self.options_button = QPushButton('Configurações')
         self.options_button.setCheckable(True)
         operations.addWidget(self.options_button)
-        operations.addWidget(self.op_buttons['Sair'])
-        self.op_buttons['Sair'].show()
-        self.fixed_buttons.extend([(self.options_button,125), (self.op_buttons['Sair'],90)])
+        operations.addWidget(self.op_buttons[OP_EXIT])
+        self.op_buttons[OP_EXIT].show()
+        self.fixed_buttons.extend([(self.options_button,125), (self.op_buttons[OP_EXIT],90)])
         operations.addStretch()
         for button, width in [(self.search_button,140),(self.skip_button,150),(self.overlay_button,90)]:
             controls.addWidget(button)
@@ -115,7 +155,7 @@ class LayoutOptions:
         self.options_panel.hide()
         self.options_button.toggled.connect(self.toggle_options_panel)
 
-        def section(title):
+        def section(section_id, title):
             header = QToolButton()
             header.setText(title)
             header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -131,8 +171,8 @@ class LayoutOptions:
             header.toggled.connect(lambda opened: header.setArrowType(Qt.ArrowType.DownArrow if opened else Qt.ArrowType.RightArrow))
             panel_layout.addWidget(header)
             panel_layout.addWidget(content)
-            self.option_sections[title] = (header, content)
-            self.option_resets[title] = []
+            self.option_sections[section_id] = (header, content)
+            self.option_resets[section_id] = []
             return form
 
         def number(form, theme, label, key, default, low, high, callback, suffix=''):
@@ -187,31 +227,31 @@ class LayoutOptions:
             if type(value) is int and spin.minimum() <= value <= spin.maximum():
                 spin.setValue(value)
             spin.valueChanged.connect(lambda value, field=field:self.save_preference(field,value))
-        form = section('Busca e navegação')
+        form = section(SECTION_SEARCH, 'Busca e navegação')
         for field, label in [('coverage_width_m','Cobertura'), ('search_azimuth','AZ Busca')]:
             form.addRow(label, self.parameter_spins[field])
             self.parameter_spins[field].show()
-        self.option_resets['Busca e navegação'].extend([lambda:self.parameter_spins['coverage_width_m'].setValue(2000),lambda:self.search_azimuth_spin.setValue(0)])
-        form = section('Radar')
-        self.option_resets['Radar'].append(lambda:self.parameter_spins['scanner_range_m'].setValue(2000))
+        self.option_resets[SECTION_SEARCH].extend([lambda:self.parameter_spins['coverage_width_m'].setValue(2000),lambda:self.search_azimuth_spin.setValue(0)])
+        form = section(SECTION_RADAR, 'Radar')
+        self.option_resets[SECTION_RADAR].append(lambda:self.parameter_spins['scanner_range_m'].setValue(2000))
         form.addRow('Alcance do scanner', self.parameter_spins['scanner_range_m'])
         self.parameter_spins['scanner_range_m'].show()
-        number(form,'Radar','Velocidade da onda','radar_speed',667,100,3000,lambda v: setattr(self.view.radar,'SPEED_M_S',v),' m/s')
-        color(form,'Radar','Cor da onda','wave_color','#69b574')
+        number(form,SECTION_RADAR,'Velocidade da onda','radar_speed',667,100,3000,lambda v: setattr(self.view.radar,'SPEED_M_S',v),' m/s')
+        color(form,SECTION_RADAR,'Cor da onda','wave_color','#69b574')
         form.addRow(self.radar_info)
         self.radar_info.show()
         self.radar_info.setWordWrap(True)
-        form = section('Rhino')
-        number(form,'Rhino','Tamanho','rhino_size',56,20,160,lambda v: setattr(self.view,'rhino_height',v),' px')
-        color(form,'Rhino','Cor da blindagem','rhino_color','#e6ebf0')
-        form = section('Assistência de direção')
-        number(form,'Assistência de direção','Velocidade máxima estimada','assist_speed',15,15,40,lambda v:setattr(self.assist,'max_speed',v),' m/s')
-        number(form,'Assistência de direção','Duração máxima base','assist_pulse_ms',800,200,1000,lambda v:setattr(self.assist,'max_pulse',v/1000),' ms')
-        number(form,'Assistência de direção','Tolerância do rumo','assist_tolerance_deg',3,0,180,lambda v:setattr(self.assist,'tolerance',v),'°')
+        form = section(SECTION_RHINO, 'Rhino')
+        number(form,SECTION_RHINO,'Tamanho','rhino_size',56,20,160,lambda v: setattr(self.view,'rhino_height',v),' px')
+        color(form,SECTION_RHINO,'Cor da blindagem','rhino_color','#e6ebf0')
+        form = section(SECTION_ASSIST, 'Assistência de direção')
+        number(form,SECTION_ASSIST,'Velocidade máxima estimada','assist_speed',15,15,40,lambda v:setattr(self.assist,'max_speed',v),' m/s')
+        number(form,SECTION_ASSIST,'Duração máxima base','assist_pulse_ms',800,200,1000,lambda v:setattr(self.assist,'max_pulse',v/1000),' ms')
+        number(form,SECTION_ASSIST,'Tolerância do rumo','assist_tolerance_deg',3,0,180,lambda v:setattr(self.assist,'tolerance',v),'°')
         self.assist_info.setWordWrap(True)
         form.addRow(self.assist_info)
         self.assist_info.show()
-        form = section('Parâmetros ED')
+        form = section(SECTION_ED_PARAMETERS, 'Parâmetros ED')
         group = QComboBox()
         group.addItems([chr(65+i) for i in range(26)])
         group.setCurrentIndex(self.scanner_group)
@@ -239,22 +279,24 @@ class LayoutOptions:
         status = QPushButton('Escolher Status.json')
         status.clicked.connect(self.choose_status)
         form.addRow(status)
-        self.option_resets['Parâmetros ED'].extend([lambda:group.setCurrentIndex(0),lambda:(path.clear(),apply_bindings())])
-        form = section('Mapa')
+        self.option_resets[SECTION_ED_PARAMETERS].extend([lambda:group.setCurrentIndex(0),lambda:(path.clear(),apply_bindings())])
+        form = section(SECTION_MAP, 'Mapa')
         for label,key,default in [('Fundo','map_background','#ffffff'),('Grelha','grid_color','#eeeeee'),('Rasto','trail_color','#2f7d32'),('Cobertura','coverage_color','#8cbd8c')]:
-            color(form,'Mapa',label,key,default)
-        number(form,'Mapa','Escala do texto','map_text_scale',100,75,175,lambda v:setattr(self.view,'text_scale',v/100),' %')
-        form = section('Overlay')
-        number(form,'Overlay','Largura','overlay_width',360,240,900,lambda v:self.overlay.resize(v,round(v/self.overlay.aspect_ratio)),' px')
-        number(form,'Overlay','Opacidade','overlay_opacity',100,25,100,lambda v:self.overlay.setWindowOpacity(v/100),' %')
-        form = section('Layout')
+            color(form,SECTION_MAP,label,key,default)
+        number(form,SECTION_MAP,'Escala do texto','map_text_scale',100,75,175,lambda v:setattr(self.view,'text_scale',v/100),' %')
+        form = section(SECTION_OVERLAY, 'Overlay')
+        number(form,SECTION_OVERLAY,'Largura','overlay_width',360,240,900,lambda v:self.overlay.resize(v,round(v/self.overlay.aspect_ratio)),' px')
+        number(form,SECTION_OVERLAY,'Opacidade','overlay_opacity',100,25,100,lambda v:self.overlay.setWindowOpacity(v/100),' %')
+        form = section(SECTION_LAYOUT, 'Layout')
         theme = QComboBox()
-        theme.addItems(['Como o Windows','Dark','Light'])
-        theme.setCurrentText(self.preferences.get('theme','Como o Windows'))
+        for value, label in THEME_LABELS.items():
+            theme.addItem(label, value)
+        theme_value = normalize_theme_value(self.preferences.get('theme', THEME_SYSTEM)) or THEME_SYSTEM
+        theme.setCurrentIndex(theme.findData(theme_value))
         form.addRow('Tema',theme)
-        self.setting_fields['theme'] = (theme.currentText, theme.setCurrentText, lambda v:v in ('Como o Windows','Dark','Light'))
-        theme.currentTextChanged.connect(lambda v:(self.apply_theme(v),self.save_preference('theme',v)))
-        self.option_resets['Layout'].append(lambda: theme.setCurrentIndex(0))
+        self.setting_fields['theme'] = (theme.currentData, lambda v: theme.setCurrentIndex(max(0, theme.findData(normalize_theme_value(v) or v))), lambda v: normalize_theme_value(v) is not None)
+        theme.currentIndexChanged.connect(lambda _: (self.apply_theme(theme.currentData()),self.save_preference('theme',theme.currentData())))
+        self.option_resets[SECTION_LAYOUT].append(lambda: theme.setCurrentIndex(0))
         family = QFontComboBox()
         family.setCurrentFont(QFont(self.preferences.get('font_family','Segoe UI')))
         form.addRow('Tipo de letra', family)
@@ -272,14 +314,14 @@ class LayoutOptions:
             font = QFont(self.font())
             font.setPointSize(value)
             self.setFont(font)
-        number(form,'Layout','Tamanho da letra','font_size',9,8,11,font_size,' pt')
-        self.option_resets['Layout'].append(lambda:family.setCurrentFont(QFont('Segoe UI')))
-        number(form,'Layout','Largura do painel','panel_width',320,280,440,lambda v:self.options_panel.setFixedWidth(v),' px')
-        number(form,'Layout','Altura dos botões','button_height',34,28,44,self.resize_buttons,' px')
-        for title,(header,content) in self.option_sections.items():
-            if self.option_resets[title]:
+        number(form,SECTION_LAYOUT,'Tamanho da letra','font_size',9,8,11,font_size,' pt')
+        self.option_resets[SECTION_LAYOUT].append(lambda:family.setCurrentFont(QFont('Segoe UI')))
+        number(form,SECTION_LAYOUT,'Largura do painel','panel_width',320,280,440,lambda v:self.options_panel.setFixedWidth(v),' px')
+        number(form,SECTION_LAYOUT,'Altura dos botões','button_height',34,28,44,self.resize_buttons,' px')
+        for section_id,(header,content) in self.option_sections.items():
+            if self.option_resets[section_id]:
                 reset = QPushButton('Repor valores padrão')
-                reset.clicked.connect(lambda checked=False,title=title:[callback() for callback in self.option_resets[title]])
+                reset.clicked.connect(lambda checked=False,section_id=section_id:[callback() for callback in self.option_resets[section_id]])
                 content.layout().addRow(reset)
         actions = QHBoxLayout()
         for title, callback in [('Guardar',self.export_settings),('Carregar',self.import_settings),('Repor',self.reset_settings)]:
@@ -298,7 +340,7 @@ class LayoutOptions:
             spin.setStyle(numeric_style)
             spin.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.theme_selector = theme
-        self.apply_theme(theme.currentText())
+        self.apply_theme(theme.currentData())
         self.setMinimumSize(1150,560)
         QApplication.styleHints().colorSchemeChanged.connect(self.system_theme_changed)
 
@@ -332,27 +374,27 @@ class LayoutOptions:
             self.preferences.update({key:getter() for key,(getter,_,_) in self.setting_fields.items()})
         finally:
             self.loading_settings = False
-        self.save_preference('theme',self.theme_selector.currentText())
+        self.save_preference('theme',self.theme_selector.currentData())
         self.view.update()
 
     def reset_settings(self):
         self.loading_settings = True
         try:
-            for callback in self.option_resets['Layout']:
+            for callback in self.option_resets[SECTION_LAYOUT]:
                 callback()
-            for title,callbacks in self.option_resets.items():
-                if title != 'Layout':
+            for section_id,callbacks in self.option_resets.items():
+                if section_id != SECTION_LAYOUT:
                     for callback in callbacks:
                         callback()
             self.preferences.update({key:getter() for key,(getter,_,_) in self.setting_fields.items()})
         finally:
             self.loading_settings = False
-        self.save_preference('theme',self.theme_selector.currentText())
+        self.save_preference('theme',self.theme_selector.currentData())
         self.view.update()
 
     def system_theme_changed(self, scheme):
-        if self.preferences.get("theme", "Como o Windows") == "Como o Windows":
-            self.apply_theme("Como o Windows")
+        if self.preferences.get('theme', THEME_SYSTEM) == THEME_SYSTEM:
+            self.apply_theme(THEME_SYSTEM)
 
     def resize_buttons(self, height):
         for button,width in self.fixed_buttons:
@@ -364,6 +406,10 @@ class LayoutOptions:
         self.options_panel.setVisible(visible)
 
     def save_preference(self, key, value):
+        if key == 'theme':
+            value = normalize_theme_value(value)
+            if value is None:
+                return
         self.preferences[key] = value
         if self.loading_settings:
             return

@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtWidgets import QApplication
+from layout_options import OP_MARK
 from mapper_core import MapperState, SRV_FLAG
 from radar import RadarPulse
 from rhino_surface_mapper_qt import MapperWindow
@@ -140,7 +141,7 @@ class ProtectionTests(unittest.TestCase):
         self.assertTrue(w.prepare_to_replace_current_map('Abrir', 'abrir'))
         w.refresh()
         self.assertFalse(w.search_button.isEnabled())
-        self.assertFalse(w.op_buttons['Marca'].isEnabled())
+        self.assertFalse(w.op_buttons[OP_MARK].isEnabled())
         self.assertIn('Mining only', w.map_file_info.text())
         # O modo simples não percorre sequer os caminhos de exploração.
         with patch.object(w.view, 'trajectory_paths', side_effect=AssertionError('rasto em mineração')):

@@ -20,7 +20,8 @@ from qt_map_operations import MapOperations
 from radar import RadarPulse
 from radar_input import RadarInput
 from steering_ui import SteeringUI
-from layout_options import LayoutOptions
+from layout_options import (LayoutOptions, OP_EXIT, OP_MARK, OP_MARK_DEPOSIT,
+                            OP_MARK_RIG)
 from map_library import MapLibraryWindow
 from deposit_marker import draw_deposit, deposit_bounds
 from numeric_fields import MetresSpinBox, DegreesSpinBox
@@ -602,11 +603,14 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         operations = QHBoxLayout()
         layout.addLayout(operations)
         self.op_buttons = {}
-        for title, callback in [('Marca',self.mark),('Marcar depósito',self.mark_deposit),('Marcar rig',self.mark_rig),('Sair',self.close)]:
+        for button_id, title, callback in [(OP_MARK,'Marca',self.mark),
+                                           (OP_MARK_DEPOSIT,'Marcar depósito',self.mark_deposit),
+                                           (OP_MARK_RIG,'Marcar rig',self.mark_rig),
+                                           (OP_EXIT,'Sair',self.close)]:
             button = QPushButton(title)
             button.clicked.connect(callback)
             operations.addWidget(button)
-            self.op_buttons[title] = button
+            self.op_buttons[button_id] = button
         layout.addLayout(controls)
         for label, field, minimum in [('Cobertura:','coverage_width_m',100),('Scanner:','scanner_range_m',500)]:
             spin = MetresSpinBox()
@@ -873,8 +877,8 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         
         # Botões de marcação e operações
         if hasattr(self, 'op_buttons'):
-            for btn_text, btn in self.op_buttons.items():
-                if btn_text in ('Marca', 'Marcar depósito', 'Marcar rig'):
+            for button_id, btn in self.op_buttons.items():
+                if button_id in (OP_MARK, OP_MARK_DEPOSIT, OP_MARK_RIG):
                     btn.setEnabled(in_srv and not s.read_only and not self.transition_required)
 
         # Atualizar textos e estilos dos botões de busca e salto/pausa

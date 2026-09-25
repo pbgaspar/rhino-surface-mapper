@@ -7,7 +7,9 @@ from pathlib import Path
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtWidgets import QApplication, QPushButton, QSpinBox
 from PySide6.QtCore import Qt
-from layout_options import _theme_is_dark
+from layout_options import (OP_MAPS, OP_MARK, SECTION_LAYOUT, THEME_DARK,
+                            THEME_LABELS, THEME_LIGHT, THEME_SYSTEM,
+                            _theme_is_dark)
 from rhino_surface_mapper_qt import MapperWindow
 
 
@@ -47,7 +49,7 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual([a.text() for a in menu.actions()],['Abrir','Guardar','Novo','Ver e manter'])
         maps = w.findChildren(QPushButton, 'maps_menu')
         self.assertEqual(len(maps), 1)
-        self.assertIs(w.op_buttons['Mapas'], maps[0])
+        self.assertIs(w.op_buttons[OP_MAPS], maps[0])
         self.assertTrue(maps[0].isVisible())
         self.assertEqual(len([button for button in w.findChildren(QPushButton)
                               if button.text() == 'Configurações']), 1)
@@ -63,16 +65,16 @@ class LayoutTests(unittest.TestCase):
         saved = json.loads(w.options_path.read_text(encoding='utf-8'))
         self.assertEqual(saved['rhino_size'],73)
         self.assertEqual(saved['future_setting'],'preservar')
-        self.assertEqual(saved['theme'],'Dark')
+        self.assertEqual(saved['theme'],THEME_DARK)
         self.assertEqual(w.view.rhino_height,73)
         self.assertTrue(w.view.dark_theme)
 
     def test_theme_resolution_and_widget_stylesheet(self):
         w = self.window
-        self.assertFalse(_theme_is_dark('Light', Qt.ColorScheme.Dark))
-        self.assertTrue(_theme_is_dark('Dark', Qt.ColorScheme.Light))
-        self.assertTrue(_theme_is_dark('Como o Windows', Qt.ColorScheme.Dark))
-        self.assertFalse(_theme_is_dark('Como o Windows', Qt.ColorScheme.Light))
+        self.assertFalse(_theme_is_dark(THEME_LIGHT, Qt.ColorScheme.Dark))
+        self.assertTrue(_theme_is_dark(THEME_DARK, Qt.ColorScheme.Light))
+        self.assertTrue(_theme_is_dark(THEME_SYSTEM, Qt.ColorScheme.Dark))
+        self.assertFalse(_theme_is_dark(THEME_SYSTEM, Qt.ColorScheme.Light))
 
         w.apply_theme('Light')
         self.assertFalse(w.view.dark_theme)
@@ -154,7 +156,7 @@ class LayoutTests(unittest.TestCase):
             w.export_settings()
         w.reset_settings()
         self.assertEqual(w.view.rhino_height,56)
-        self.assertEqual(w.theme_selector.currentText(),'Como o Windows')
+        self.assertEqual(w.theme_selector.currentText(),THEME_LABELS[THEME_SYSTEM])
         with patch('layout_options.QFileDialog.getOpenFileName',return_value=(str(target),'')):
             w.import_settings()
         self.assertEqual(w.view.rhino_height,81)
@@ -166,3 +168,53 @@ class LayoutTests(unittest.TestCase):
             w.import_settings()
         warning.assert_called_once()
         self.assertEqual(w.view.rhino_height,81)
+
+    def test_operation_and_section_identity_is_not_display_text(self):
+        w = self.window
+        button = w.op_buttons[OP_MARK]
+        w.op_buttons[OP_MARK].setText('Texto alterado')
+        self.assertIs(w.op_buttons[OP_MARK], button)
+
+        header, content = w.option_sections[SECTION_LAYOUT]
+        header.setText('Título alterado')
+        w.setting_fields['font_size'][1](11)
+        for callback in w.option_resets[SECTION_LAYOUT]:
+            callback()
+        self.assertEqual(w.setting_fields['font_size'][0](),9)
+        self.assertEqual(header.text(),'Título alterado')
+
+    def test_theme_uses_stable_values_and_accepts_legacy_label(self):
+        w = self.window
+        w.theme_selector.setCurrentText('Dark')
+        self.assertEqual(w.theme_selector.currentData(), THEME_DARK)
+        self.assertEqual(json.loads(w.options_path.read_text(encoding='utf-8'))['theme'], THEME_DARK)
+
+        w.setting_fields['theme'][1]('Como o Windows')
+        self.assertEqual(w.theme_selector.currentData(), THEME_SYSTEM)
+        self.assertTrue(w.setting_fields['theme'][2]('Como o Windows'))
+        self.assertTrue(w.setting_fields['theme'][2](THEME_LIGHT))
+
+    def test_legacy_persisted_theme_loads_as_system_theme(self):
+        from unittest.mock import patch
+        with patch('rhino_surface_mapper_qt.load_preferences', return_value={'theme': 'Como o Windows'}):
+            window = MapperWindow(Path(self.temp.name)/'Status-legacy.json')
+        try:
+            for timer in (window.timer,window.radar_timer,window.assist_timer):
+                timer.stop()
+            self.assertEqual(window.preferences['theme'], THEME_SYSTEM)
+            self.assertEqual(window.theme_selector.currentData(), THEME_SYSTEM)
+        finally:
+            window.close()
+
+    def test_stable_persisted_theme_loads_directly(self):
+        from unittest.mock import patch
+        with patch('rhino_surface_mapper_qt.load_preferences', return_value={'theme': THEME_DARK}):
+            window = MapperWindow(Path(self.temp.name)/'Status-stable.json')
+        try:
+            for timer in (window.timer,window.radar_timer,window.assist_timer):
+                timer.stop()
+            self.assertEqual(window.preferences['theme'], THEME_DARK)
+            self.assertEqual(window.theme_selector.currentData(), THEME_DARK)
+            self.assertTrue(window.view.dark_theme)
+        finally:
+            window.close()
