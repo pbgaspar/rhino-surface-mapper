@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from mapper_core import MapperState
 from map_pml import corresponds_to_map, newest_by_pml
 from settings_persistence import load_preferences
-from elite_dangerous.status import read_status_if_changed
+from elite_dangerous.status import elite_dangerous_is_running, read_status_if_changed
 from pyqt_overlay import OverlayWindow
 from qt_map_operations import MapOperations
 from radar import RadarPulse
@@ -559,7 +559,7 @@ class MapView(QWidget):
 class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
     """Janela principal: liga controlos, estado, mapa, diálogos e overlay.
     MapOperations fornece operações de ficheiros e marcadores; QMainWindow fornece a janela Qt."""
-    def __init__(self, status_path=None):
+    def __init__(self, status_path=None, game_running_check=None):
         """Constrói a interface e o temporizador de leitura de telemetria.
         status_path opcional permite testar com um ficheiro temporário, sem usar o jogo."""
         super().__init__()
@@ -582,6 +582,9 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.live_status = {}
         self.status_valid = False
         self.retry_status = False
+        self._game_running_check = game_running_check or elite_dangerous_is_running
+        self._game_running = False
+        self._next_game_running_check = 0.0
         self.transition_required = False
         self.pending_status_update = None
         self.pending_status_snapshot = None
@@ -1131,11 +1134,52 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                     source_text=translate(
                         'MapperWindow', 'PML [{pml_id}] prepared').format(pml_id=candidate.pml_id))
 
+    def game_is_running(self):
+        """Check the game process at a bounded rate for the 50 ms poll loop."""
+        now = time.monotonic()
+        if now >= self._next_game_running_check:
+            self._game_running = bool(self._game_running_check())
+            self._next_game_running_check = now + 1.0
+        return self._game_running
+
+    def set_offline(self):
+        """Clear live-session telemetry without changing persistent map data."""
+        had_live_state = bool(
+            self.status_valid or self.live_status or self.transition_required
+            or self.state.in_srv or self.state.fuel_percent is not None
+            or self.state.rhino_lat is not None or self.state.rhino_lon is not None
+            or self.state.rhino_heading is not None)
+        try:
+            self.last_mtime = self.status_path.stat().st_mtime_ns
+        except OSError:
+            self.last_mtime = None
+        self.retry_status = False
+        self.status_valid = False
+        self.live_status = {}
+        if self.transition_required:
+            self.clear_transition_state()
+        self.state.in_srv = False
+        self.state.fuel_reservoir = None
+        self.state.fuel_percent = None
+        self.state.fuel_low = False
+        self.state.rhino_lat = None
+        self.state.rhino_lon = None
+        self.state.rhino_heading = None
+        if had_live_state:
+            self.stop_assistance()
+            self.view.radar.waves.clear()
+        self.info_left.setText(translate('MapperWindow', 'Waiting for Status.json'))
+
     def poll(self, reloading_map=False):
         """Lê Status.json se a data mudou e atualiza a telemetria e a vista.
         reloading_map protege a abertura inicial de um mapa contra dados de outro corpo.
         Uma leitura incompleta não regista a data: será repetida no próximo disparo do temporizador."""
         changed = False
+        if not self.game_is_running():
+            before = self.map_signature()
+            self.set_offline()
+            self.refresh(redraw_map=before != self.map_signature())
+            return
         try:
             status = read_status_if_changed(
                 self.status_path,

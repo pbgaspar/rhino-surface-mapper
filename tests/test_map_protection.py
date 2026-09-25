@@ -48,7 +48,8 @@ class ProtectionTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def make_window(self):
-        self.window = MapperWindow(self.root/'absent-status.json')
+        self.window = MapperWindow(
+            self.root/'absent-status.json', game_running_check=lambda: True)
         for timer in (self.window.timer, self.window.radar_timer, self.window.assist_timer):
             timer.stop()
         return self.window

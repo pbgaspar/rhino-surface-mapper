@@ -16,7 +16,8 @@ class MapOperationsTests(unittest.TestCase):
     def setUp(self):
         from rhino_surface_mapper_qt import MapperWindow
         self.temp = tempfile.TemporaryDirectory()
-        self.window = MapperWindow(Path(self.temp.name)/'Status.json')
+        self.window = MapperWindow(
+            Path(self.temp.name)/'Status.json', game_running_check=lambda: True)
         self.window.timer.stop()
         self.window.state.process_status(dict(Flags=0x04000000,Latitude=38,Longitude=-9,Heading=0,BodyName='Test'))
 
@@ -226,6 +227,62 @@ class MapOperationsTests(unittest.TestCase):
                          ('Teste', 'Test', 'Teste|Test'))
         self.assertFalse(w.transition_required)
         open_pml.assert_called_once_with()
+
+    def test_stale_srv_status_stays_offline_when_game_is_not_running(self):
+        import json
+        from rhino_surface_mapper_qt import MapperWindow
+
+        status_path = Path(self.temp.name)/'stale-status.json'
+        status_path.write_text(json.dumps(dict(
+            Flags=0x04000000, Fuel=dict(FuelReservoir=0.4),
+            Latitude=38, Longitude=-9, Heading=90,
+            StarSystem='Kappa', BodyName='Kappa 2 a')), encoding='utf-8')
+        with patch.object(
+                MapperWindow, 'open_or_create_pml_for_current_position') as open_pml:
+            window = MapperWindow(status_path, game_running_check=lambda: False)
+        self.addCleanup(window.close)
+        window.timer.stop()
+        window.radar_timer.stop()
+
+        self.assertFalse(window.status_valid)
+        self.assertFalse(window.state.in_srv)
+        self.assertEqual(window.live_status, {})
+        self.assertIsNone(window.state.fuel_percent)
+        self.assertEqual(
+            (window.state.rhino_lat, window.state.rhino_lon, window.state.rhino_heading),
+            (None, None, None))
+        self.assertFalse(window.search_button.isEnabled())
+        open_pml.assert_not_called()
+
+    def test_game_closing_clears_only_live_session_state(self):
+        import json
+
+        w = self.window
+        w.status_path.write_text(json.dumps(dict(
+            Flags=0x04000000, Fuel=dict(FuelReservoir=0.4),
+            Latitude=38, Longitude=-9, Heading=90,
+            StarSystem='Teste', BodyName='Test')), encoding='utf-8')
+        with patch.object(w, 'open_or_create_pml_for_current_position'):
+            w.poll()
+        w.state.pml_id = 'PML-1'
+        w.state.deposits.append({'name': 'Deposit'})
+        persistent = (w.state.system, w.state.body, w.state.body_key,
+                      w.state.pml_id, list(w.state.deposits))
+
+        w._game_running_check = lambda: False
+        w._next_game_running_check = 0.0
+        w.poll()
+
+        self.assertFalse(w.status_valid)
+        self.assertFalse(w.state.in_srv)
+        self.assertEqual(w.live_status, {})
+        self.assertIsNone(w.state.fuel_percent)
+        self.assertEqual(
+            (w.state.rhino_lat, w.state.rhino_lon, w.state.rhino_heading),
+            (None, None, None))
+        self.assertEqual(
+            (w.state.system, w.state.body, w.state.body_key,
+             w.state.pml_id, w.state.deposits), persistent)
 
     def test_mark_position_persistence_rename_and_delete(self):
         from mapper_core import MapperState

@@ -2,8 +2,9 @@ import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
-from elite_dangerous.status import read_status_if_changed
+from elite_dangerous.status import elite_dangerous_is_running, read_status_if_changed
 
 
 class StatusInputTests(unittest.TestCase):
@@ -57,3 +58,11 @@ class StatusInputTests(unittest.TestCase):
         result = read_status_if_changed(self.path, None)
 
         self.assertEqual(result[1], payload)
+
+    def test_game_process_detection_uses_exact_executable_name(self):
+        with patch('elite_dangerous.status._windows_process_names', return_value=(
+                'explorer.exe', 'EliteDangerous64.exe')):
+            self.assertTrue(elite_dangerous_is_running())
+        with patch('elite_dangerous.status._windows_process_names', return_value=(
+                'EliteDangerous.exe', 'EliteDangerous64.exe.backup')):
+            self.assertFalse(elite_dangerous_is_running())

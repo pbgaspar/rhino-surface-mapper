@@ -16,7 +16,7 @@ class QtWindowTests(unittest.TestCase):
             path = Path(directory)/'Status.json'
             path.write_text(json.dumps(dict(Flags=0x04000000, Latitude=0,
                 Longitude=0, Heading=0, BodyName='Test')), encoding='utf-8')
-            window = MapperWindow(path)
+            window = MapperWindow(path, game_running_check=lambda: True)
             try:
                 window.timer.stop()
                 window.radar_timer.stop()
@@ -83,7 +83,7 @@ class QtWindowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'Status.json'
             path.write_text(json.dumps({'Flags':0x04000000,'Latitude':38,'Longitude':-9,'Heading':90,'BodyName':'Test','PlanetRadius':6371000}),encoding='utf-8')
-            window = MapperWindow(path)
+            window = MapperWindow(path, game_running_check=lambda: True)
             try:
                 window.radar_input.game_focused = lambda: True
                 window.show()
@@ -186,7 +186,8 @@ class QtWindowTests(unittest.TestCase):
         from rhino_surface_mapper_qt import MapperWindow
         test_dir = tempfile.TemporaryDirectory()
         self.addCleanup(test_dir.cleanup)
-        window = MapperWindow(Path(test_dir.name)/'Status.json')
+        window = MapperWindow(
+            Path(test_dir.name)/'Status.json', game_running_check=lambda: True)
         dialog = MarkDialog(window)
         try:
             self.assertEqual(window.timer.interval(), 50)
@@ -216,7 +217,7 @@ class QtWindowTests(unittest.TestCase):
             path = Path(directory)/'Status.json'
             data = dict(Flags=0x04000000, Latitude=38, Longitude=-9, Heading=90, BodyName='Test')
             path.write_text(json.dumps(data), encoding='utf-8')
-            window = MapperWindow(path)
+            window = MapperWindow(path, game_running_check=lambda: True)
             try:
                 window.poll()
                 with patch.object(window.view, 'update') as redraw:
@@ -242,7 +243,8 @@ class QtWindowTests(unittest.TestCase):
         from rhino_surface_mapper_qt import MapperWindow
         test_dir = tempfile.TemporaryDirectory()
         self.addCleanup(test_dir.cleanup)
-        window = MapperWindow(Path(test_dir.name)/'Status.json')
+        window = MapperWindow(
+            Path(test_dir.name)/'Status.json', game_running_check=lambda: True)
         try:
             data = dict(Flags=0x04000000|0x08000000, Latitude=0, Longitude=0,
                         BodyName='Test', FireGroup=0, GuiFocus=0)
@@ -285,7 +287,7 @@ class QtWindowTests(unittest.TestCase):
             data = dict(Flags=0x04000000|0x08000000, Latitude=0, Longitude=0,
                         BodyName='Test', Heading=0, FireGroup=0, GuiFocus=0)
             path.write_text(json.dumps(data), encoding='utf-8')
-            window = MapperWindow(path)
+            window = MapperWindow(path, game_running_check=lambda: True)
             window.timer.stop()
             window.radar_timer.stop()
             try:

@@ -310,7 +310,7 @@ class SteeringWindowTests(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory()
         self.path=Path(self.temp.name)/'Status.json'
         self.path.write_text(json.dumps(dict(Flags=0x04000000,Latitude=0,Longitude=0,Heading=0,BodyName='Test')))
-        self.w=MapperWindow(self.path)
+        self.w=MapperWindow(self.path, game_running_check=lambda: True)
         self.w.direction_test=False
         self.w.turn_results_directory=Path(self.temp.name)
         for timer in (self.w.timer,self.w.radar_timer,self.w.assist_timer): timer.stop()

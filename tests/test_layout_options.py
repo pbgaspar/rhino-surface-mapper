@@ -20,7 +20,8 @@ class LayoutTests(unittest.TestCase):
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.window = MapperWindow(Path(self.temp.name)/'Status.json')
+        self.window = MapperWindow(
+            Path(self.temp.name)/'Status.json', game_running_check=lambda: True)
         self.window.options_path = Path(self.temp.name)/'options.json'
         for timer in (self.window.timer,self.window.radar_timer,self.window.assist_timer):
             timer.stop()
@@ -208,7 +209,8 @@ class LayoutTests(unittest.TestCase):
     def test_legacy_persisted_theme_loads_as_system_theme(self):
         from unittest.mock import patch
         with patch('rhino_surface_mapper_qt.load_preferences', return_value={'theme': 'Como o Windows'}):
-            window = MapperWindow(Path(self.temp.name)/'Status-legacy.json')
+            window = MapperWindow(
+                Path(self.temp.name)/'Status-legacy.json', game_running_check=lambda: True)
         try:
             for timer in (window.timer,window.radar_timer,window.assist_timer):
                 timer.stop()
@@ -220,7 +222,8 @@ class LayoutTests(unittest.TestCase):
     def test_stable_persisted_theme_loads_directly(self):
         from unittest.mock import patch
         with patch('rhino_surface_mapper_qt.load_preferences', return_value={'theme': THEME_DARK}):
-            window = MapperWindow(Path(self.temp.name)/'Status-stable.json')
+            window = MapperWindow(
+                Path(self.temp.name)/'Status-stable.json', game_running_check=lambda: True)
         try:
             for timer in (window.timer,window.radar_timer,window.assist_timer):
                 timer.stop()

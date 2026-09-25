@@ -116,7 +116,8 @@ class MapLibrarySplitterPersistenceTests(unittest.TestCase):
     def test_parent_shutdown_persists_open_map_library(self):
         from rhino_surface_mapper_qt import MapperWindow
 
-        self.parent = MapperWindow(self.root / 'status.json')
+        self.parent = MapperWindow(
+            self.root / 'status.json', game_running_check=lambda: True)
         for timer in (self.parent.timer, self.parent.radar_timer, self.parent.assist_timer):
             timer.stop()
         self.parent.options_path = self.root / 'options.json'
