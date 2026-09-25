@@ -441,7 +441,10 @@ class MapView(QWidget):
                 p.setPen(QPen(QColor('#00bfff'), 2.5, Qt.PenStyle.DashLine))
                 p.drawLine(q, nav_pos)
                 p.drawEllipse(nav_pos, 8, 8)
-                p.drawText(nav_pos + QPointF(12, -12), f"NAVEGAR: {s.active_nav_target.get('name', '')}")
+                p.drawText(
+                    nav_pos + QPointF(12, -12),
+                    translate('MapperWindow', 'NAVIGATE: {name}').format(
+                        name=s.active_nav_target.get('name', '')))
             elif s.return_to_pause and s.search_pause_point is not None:
                 pause_screen = self.screen(*s.search_pause_point)
                 p.setPen(QPen(QColor('#ffb300'), 2.5, Qt.PenStyle.DashLine))

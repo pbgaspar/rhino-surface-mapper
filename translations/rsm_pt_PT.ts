@@ -146,6 +146,36 @@
         <message><source>Change location</source><translation>Mudar de localização</translation></message>
         <message><source>Error preparing map change</source><translation>Erro ao preparar mudança de mapa</translation></message>
         <message><source>Error activating map change</source><translation>Erro ao ativar mudança de mapa</translation></message>
+        <message><source>Marker</source><translation>Marca</translation></message>
+        <message><source>Enter the Rhino first and wait for its position.</source><translation>Primeiro entre no Rhino e aguarde a posição.</translation></message>
+        <message><source>Edit marker</source><translation>Alterar marca</translation></message>
+        <message><source>Rig</source><translation>Rig</translation></message>
+        <message><source>Enter the Rhino first.</source><translation>Primeiro entre no Rhino.</translation></message>
+        <message><source>Click the map to place the rig. Escape cancels.</source><translation>Clique no mapa para colocar o rig. Escape cancela.</translation></message>
+        <message><source>Delete marker</source><translation>Apagar marcador</translation></message>
+        <message><source>Delete this marker?</source><translation>Apagar este marcador?</translation></message>
+        <message><source>Navigate</source><translation>Navegar</translation></message>
+        <message><source>Stop navigation</source><translation>Parar navegação</translation></message>
+        <message><source>Navigating to: {name}</source><translation>A navegar para: {name}</translation></message>
+        <message><source>Navigation stopped.</source><translation>Navegação parada.</translation></message>
+        <message><source>Navigation stopped. Returning to Pause Point ⏸.</source><translation>Navegação parada. A regressar ao Ponto de Pausa ⏸.</translation></message>
+        <message><source>NAVIGATE: {name}</source><translation>NAVEGAR: {name}</translation></message>
+        <message><source>[Marker] {name}</source><translation>[Marca] {name}</translation></message>
+        <message><source>[Deposit] {name}</source><translation>[Depósito] {name}</translation></message>
+        <message><source>Deposit</source><translation>Depósito</translation></message>
+        <message><source>Information</source><translation>Informações</translation></message>
+        <message><source>Copy coordinates</source><translation>Copiar coordenadas</translation></message>
+        <message><source>Edit</source><translation>Alterar</translation></message>
+        <message><source>Edit deposit</source><translation>Editar depósito</translation></message>
+        <message><source>Delete</source><translation>Apagar</translation></message>
+        <message><source>Delete deposit</source><translation>Apagar depósito</translation></message>
+        <message><source>Delete rig</source><translation>Apagar rig</translation></message>
+        <message><source>Marked point</source><translation>Ponto marcado</translation></message>
+        <message><source>Name: {name}</source><translation>Nome: {name}</translation></message>
+        <message><source>Size: {size}</source><translation>Tamanho: {size}</translation></message>
+        <message><source>Rigs: {count}</source><translation>Rigs: {count}</translation></message>
+        <message><source>Latitude: {latitude}°</source><translation>Latitude: {latitude}°</translation></message>
+        <message><source>Longitude: {longitude}°</source><translation>Longitude: {longitude}°</translation></message>
     </context>
     <context>
         <name>MarkDialog</name>

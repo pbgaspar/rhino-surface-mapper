@@ -874,7 +874,9 @@ class MapOperations:
             return
         s = self.state
         if s.rhino_lat is None or s.center_lat is None:
-            QMessageBox.information(self, 'Marca', 'Primeiro entra no Rhino e aguarda a posição.')
+            QMessageBox.information(
+                self, translate('MapperWindow', 'Marker'),
+                translate('MapperWindow', 'Enter the Rhino first and wait for its position.'))
             return
         self.cancel_placement()
         lat, lon, body = s.rhino_lat, s.rhino_lon, s.body_key
@@ -890,7 +892,9 @@ class MapOperations:
             return
         s = self.state
         if s.rhino_lat is None or s.center_lat is None:
-            QMessageBox.information(self, 'Alterar marca', 'Primeiro entra no Rhino e aguarda a posição.')
+            QMessageBox.information(
+                self, translate('MapperWindow', 'Edit marker'),
+                translate('MapperWindow', 'Enter the Rhino first and wait for its position.'))
             return
         lat, lon, body = s.rhino_lat, s.rhino_lon, s.body_key
         phi, target_phi = math.radians(lat), math.radians(item['lat'])
@@ -928,10 +932,13 @@ class MapOperations:
         if self.map_is_read_only():
             return
         if self.state.center_lat is None:
-            QMessageBox.information(self,'Rig','Primeiro entra no Rhino.')
+            QMessageBox.information(
+                self, translate('MapperWindow', 'Rig'),
+                translate('MapperWindow', 'Enter the Rhino first.'))
             return
         self.placing_rig = True
-        self.statusBar().showMessage('Clica no mapa para colocar o rig. Escape cancela.')
+        self.statusBar().showMessage(translate(
+            'MapperWindow', 'Click the map to place the rig. Escape cancels.'))
 
     def cancel_placement(self):
         """Desativa a colocação pendente e limpa a instrução da barra de estado."""
@@ -964,7 +971,9 @@ class MapOperations:
         Comparar com is evita apagar outro dicionário que tenha os mesmos valores."""
         if self.map_is_read_only():
             return
-        if QMessageBox.question(self,'Apagar marcador','Apagar este marcador?') == QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(
+                self, translate('MapperWindow', 'Delete marker'),
+                translate('MapperWindow', 'Delete this marker?')) == QMessageBox.StandardButton.Yes:
             items = getattr(self.state,kind)
             for index, candidate in enumerate(items):
                 if candidate is item:
@@ -987,16 +996,19 @@ class MapOperations:
         if s.read_only and kind == 'route':
             return
         if s.rhino_lat is None or s.center_lat is None:
-            QMessageBox.information(self, 'Navegar', 'Primeiro entra no Rhino e aguarda a posição.')
+            QMessageBox.information(
+                self, translate('MapperWindow', 'Navigate'),
+                translate('MapperWindow', 'Enter the Rhino first and wait for its position.'))
             return
 
         if kind == 'marks':
             x, y = s.llxy(item['lat'], item['lon'])
-            name = f"[Marca] {item['name']}"
+            name = translate('MapperWindow', '[Marker] {name}').format(name=item['name'])
             target_data = {'type': kind, 'item': item, 'name': name, 'x': x, 'y': y, 'lat': item['lat'], 'lon': item['lon']}
         elif kind == 'deposits':
             x, y = item['x'], item['y']
-            name = f"[Depósito] {item.get('name', 'Depósito')}"
+            name = translate('MapperWindow', '[Deposit] {name}').format(
+                name=item.get('name', translate('MapperWindow', 'Deposit')))
             target_data = {'type': kind, 'item': item, 'name': name, 'x': x, 'y': y, 'lat': item.get('lat'), 'lon': item.get('lon')}
         elif kind == 'rigs':
             x, y = item['x'], item['y']
@@ -1016,7 +1028,8 @@ class MapOperations:
 
         s.return_to_pause = False
         s.active_nav_target = target_data
-        self.statusBar().showMessage(f"A navegar para: {name}")
+        self.statusBar().showMessage(translate(
+            'MapperWindow', 'Navigating to: {name}').format(name=name))
         self.refresh()
 
     def stop_navigation(self):
@@ -1025,12 +1038,13 @@ class MapOperations:
         s.active_nav_target = None
         if s.search_paused and s.search_pause_point is not None:
             s.return_to_pause = True
-            self.statusBar().showMessage("Navegação parada. A regressar ao Ponto de Pausa ⏸.")
+            self.statusBar().showMessage(translate(
+                'MapperWindow', 'Navigation stopped. Returning to Pause Point ⏸.'))
         else:
             s.search_paused = False
             s.search_pause_point = None
             s.return_to_pause = False
-            self.statusBar().showMessage("Navegação parada.")
+            self.statusBar().showMessage(translate('MapperWindow', 'Navigation stopped.'))
         self.refresh()
 
     def marker_menu(self, position):
@@ -1044,34 +1058,48 @@ class MapOperations:
 
         # Opção Navegar / Parar navegação para todos os tipos de marcadores
         if self.is_navigating_to(kind, item):
-            menu.addAction('Parar navegação', self.stop_navigation)
+            menu.addAction(translate('MapperWindow', 'Stop navigation'), self.stop_navigation)
         else:
-            menu.addAction('Navegar', lambda: self.start_navigation(kind, item))
+            menu.addAction(translate('MapperWindow', 'Navigate'),
+                           lambda: self.start_navigation(kind, item))
         menu.addSeparator()
 
         if self.state.read_only:
-            details = f"Nome: {item.get('name', 'Rig' if kind == 'rigs' else 'Marca')}"
+            fallback_name = (translate('MapperWindow', 'Rig')
+                             if kind == 'rigs'
+                             else translate('MapperWindow', 'Marker'))
+            details = translate('MapperWindow', 'Name: {name}').format(
+                name=item.get('name', fallback_name))
             if kind == 'deposits':
-                details += f"\nTamanho: {item.get('size', '—')}\nRigs: {item.get('rigs', 0)}"
-            details += f"\nLatitude: {item.get('lat', 0):.5f}°\nLongitude: {item.get('lon', 0):.5f}°"
-            menu.addAction('Informações', lambda: QMessageBox.information(self, 'Ponto marcado', details))
-            menu.addAction('Copiar coordenadas', lambda: QApplication.clipboard().setText(
+                details += '\n' + translate('MapperWindow', 'Size: {size}').format(
+                    size=item.get('size', '—'))
+                details += '\n' + translate('MapperWindow', 'Rigs: {count}').format(
+                    count=item.get('rigs', 0))
+            details += '\n' + translate('MapperWindow', 'Latitude: {latitude}°').format(
+                latitude=f"{item.get('lat', 0):.5f}")
+            details += '\n' + translate('MapperWindow', 'Longitude: {longitude}°').format(
+                longitude=f"{item.get('lon', 0):.5f}")
+            menu.addAction(
+                translate('MapperWindow', 'Information'),
+                lambda: QMessageBox.information(
+                    self, translate('MapperWindow', 'Marked point'), details))
+            menu.addAction(translate('MapperWindow', 'Copy coordinates'), lambda: QApplication.clipboard().setText(
                 f"{item.get('lat', 0):.5f} {item.get('lon', 0):.5f}"))
             menu.exec(self.view.mapToGlobal(position.toPoint()))
             return
 
         if kind == 'marks':
-            menu.addAction('Alterar', lambda: self.alter_mark(item))
-            menu.addAction('Apagar', lambda: self.delete_marker(kind, item))
+            menu.addAction(translate('MapperWindow', 'Edit'), lambda: self.alter_mark(item))
+            menu.addAction(translate('MapperWindow', 'Delete'), lambda: self.delete_marker(kind, item))
         elif kind == 'deposits':
-            menu.addAction('Copiar coordenadas', lambda: QApplication.clipboard().setText(f"{item['lat']:.5f} {item['lon']:.5f}"))
-            menu.addAction('Editar depósito', lambda: self.edit_deposit(item))
-            menu.addAction('Apagar depósito', lambda: self.delete_marker(kind, item))
+            menu.addAction(translate('MapperWindow', 'Copy coordinates'), lambda: QApplication.clipboard().setText(f"{item['lat']:.5f} {item['lon']:.5f}"))
+            menu.addAction(translate('MapperWindow', 'Edit deposit'), lambda: self.edit_deposit(item))
+            menu.addAction(translate('MapperWindow', 'Delete deposit'), lambda: self.delete_marker(kind, item))
         elif kind == 'rigs':
-            menu.addAction('Apagar rig', lambda: self.delete_marker(kind, item))
+            menu.addAction(translate('MapperWindow', 'Delete rig'), lambda: self.delete_marker(kind, item))
         elif kind == 'route':
             pass
 
         menu.addSeparator()
-        menu.addAction('Cancelar')
+        menu.addAction(translate('MapperWindow', 'Cancel'))
         menu.exec(self.view.mapToGlobal(position.toPoint()))
