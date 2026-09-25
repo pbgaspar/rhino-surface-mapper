@@ -1,0 +1,73 @@
+Rhino Surface Mapper Beta 1 - source availability
+=================================================
+
+Rhino Surface Mapper
+--------------------
+The source repository is:
+
+https://github.com/pbgaspar/rhino-surface-mapper
+
+For each Beta 1 binary GitHub Release, publish a source archive generated from
+the exact same release commit/tag and place a direct link to that archive next
+to the binary ZIP. The corresponding source includes the maintained
+RhinoSurfaceMapper.spec and the scripts/configuration in that revision needed
+to build the application. The release tag has not yet been chosen: insert and
+verify the final tag in the release notes instead of inventing one here.
+
+The project is licensed under GNU GPL version 3; see LICENSE.
+
+PySide6 and Shiboken6 6.11.2
+----------------------------
+The source corresponding to PySide6, PySide6_Essentials, PySide6_Addons, and
+shiboken6 6.11.2 is the official Qt for Python source archive:
+
+https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.11.2-src/pyside-setup-everywhere-src-6.11.2.zip
+
+Qt 6.11.2
+---------
+The distributed Qt binaries map to these official versioned source archives:
+
+- qtbase (Core, GUI, Network, OpenGL, OpenGLWidgets, Widgets, and Windows/TLS
+  plugins):
+  https://download.qt.io/archive/qt/6.11/6.11.2/submodules/qtbase-everywhere-src-6.11.2.zip
+- qtdeclarative (QML and Quick runtime dependencies):
+  https://download.qt.io/archive/qt/6.11/6.11.2/submodules/qtdeclarative-everywhere-src-6.11.2.zip
+- qtimageformats (TIFF and WebP plugins):
+  https://download.qt.io/archive/qt/6.11/6.11.2/submodules/qtimageformats-everywhere-src-6.11.2.zip
+- qtsvg (Qt SVG and SVG plugins):
+  https://download.qt.io/archive/qt/6.11/6.11.2/submodules/qtsvg-everywhere-src-6.11.2.zip
+- qttools (Qt UiTools):
+  https://download.qt.io/archive/qt/6.11/6.11.2/submodules/qttools-everywhere-src-6.11.2.zip
+- qttranslations (Qt translation files copied by the deployment tools):
+  https://download.qt.io/archive/qt/6.11/6.11.2/submodules/qttranslations-everywhere-src-6.11.2.zip
+- qtvirtualkeyboard (Qt Virtual Keyboard and its input methods):
+  https://download.qt.io/archive/qt/6.11/6.11.2/submodules/qtvirtualkeyboard-everywhere-src-6.11.2.zip
+- qtwebengine source archive, for the Qt PDF/PDFium sources used to build
+  Qt6Pdf.dll and qpdf.dll (Qt WebEngine binaries are not distributed):
+  https://download.qt.io/archive/qt/6.11/6.11.2/submodules/qtwebengine-everywhere-src-6.11.2.zip
+
+The complete Qt source release is available as an alternative single archive:
+
+https://download.qt.io/archive/qt/6.11/6.11.2/single/qt-everywhere-src-6.11.2.zip
+
+Embedded Qt third-party source
+------------------------------
+The versioned Qt source archives above contain the third-party source copied
+into the corresponding Qt modules, including Qt PDF/PDFium dependencies and
+the copyleft Public Suffix List data used by Qt Network. Component names,
+versions, source paths, copyrights, and upstream project links are recorded in
+the complete official Qt 6.11.2 attribution articles consolidated in
+LICENSES/Qt-6.11.2-Third-Party-Notices.html.
+
+Mesa llvmpipe (opengl32sw.dll) is documented by Qt's official attribution at
+the Mesa llvmpipe section of
+LICENSES/Qt-6.11.2-Third-Party-Notices.html. Its source is part of the
+corresponding Qt Windows source/build material identified by that attribution.
+
+Distribution mechanism
+----------------------
+The binary ZIP, this file, the licence files, and clear directions to the
+corresponding source must be offered together from the GitHub Release. The
+publisher remains responsible for keeping equivalent source access available
+for as long as required by the applicable licences. Upstream links are source
+directions; they do not transfer that responsibility to the upstream project.

@@ -54,6 +54,8 @@
         <message><source>Type at least 2 characters</source><translation>Escreva pelo menos 2 caracteres</translation></message>
         <message><source>Favourites</source><translation>Favoritos</translation></message>
         <message><source>Search for a system</source><translation>Procurar um sistema</translation></message>
+        <message><source>Select a map to preview.</source><translation>Selecione um mapa para pré-visualizar.</translation></message>
+        <message><source>This map has no records yet.</source><translation>Este mapa ainda não contém registos.</translation></message>
         <message><source>{count} deposits</source><translation>{count} depósitos</translation></message>
         <message><source> · Favourite</source><translation> · Favorito</translation></message>
         <message><source> · Protected</source><translation> · Protegido</translation></message>

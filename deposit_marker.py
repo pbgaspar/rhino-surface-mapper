@@ -3,10 +3,21 @@ from pathlib import Path
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPen, QFontMetricsF
 from PySide6.QtSvg import QSvgRenderer
+from i18n import translate
+
+
+_DEPOSIT_SIZE_LABELS = {
+    'Pequeno': 'Small',
+    'Médio': 'Medium',
+    'Grande': 'Large',
+    'Enorme': 'Huge',
+}
 
 
 def deposit_details(item):
-    return f"{item.get('size', 'Pequeno')} · {item.get('rigs', 1)} rigs"
+    size = item.get('size', 'Pequeno')
+    label = translate('DepositDialog', _DEPOSIT_SIZE_LABELS.get(size, size))
+    return f"{label} · {item.get('rigs', 1)} rigs"
 
 
 def deposit_bounds(point, font, item):

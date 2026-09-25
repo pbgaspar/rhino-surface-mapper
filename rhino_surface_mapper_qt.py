@@ -29,7 +29,9 @@ from i18n import install_translator, translate
 from PySide6.QtWidgets import QDialog, QFormLayout, QComboBox, QLineEdit, QDialogButtonBox
 
 
-OPTIONS_PATH = Path(__file__).resolve().parent / 'options.json'
+OPTIONS_PATH = Path(
+    sys.executable if getattr(sys, 'frozen', False) else __file__
+).resolve().parent / 'options.json'
 
 
 class AzimuthSpinBox(DegreesSpinBox):

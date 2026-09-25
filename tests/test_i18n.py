@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -29,6 +30,17 @@ class I18nContractTests(unittest.TestCase):
             Path(i18n.__file__).resolve().parent / "translations" / "rsm_pt_PT.qm",
         )
         self.assertIsNone(i18n.catalogue_path("unknown"))
+
+    def test_frozen_catalogue_path_uses_pyinstaller_runtime_resource_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime_root = Path(directory)
+            catalogue = runtime_root / "translations" / "rsm_pt_PT.qm"
+            catalogue.parent.mkdir()
+            catalogue.touch()
+
+            with patch.object(i18n.sys, "frozen", True, create=True), \
+                    patch.object(i18n.sys, "_MEIPASS", str(runtime_root), create=True):
+                self.assertEqual(i18n.catalogue_path("pt_PT"), catalogue)
 
     def test_english_does_not_install_a_translator(self):
         app = Mock(spec=QCoreApplication)

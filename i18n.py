@@ -30,9 +30,10 @@ def catalogue_path(language: object) -> Path | None:
     if normalized == DEFAULT_LANGUAGE:
         return None
 
-    application_root = Path(
-        sys.executable if getattr(sys, "frozen", False) else __file__
-    ).resolve().parent
+    if getattr(sys, "frozen", False):
+        application_root = Path(sys._MEIPASS)
+    else:
+        application_root = Path(__file__).resolve().parent
     return application_root / "translations" / f"rsm_{normalized}.qm"
 
 

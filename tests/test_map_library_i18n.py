@@ -37,6 +37,10 @@ class MapLibraryI18nTests(unittest.TestCase):
             message.findtext('source'): message.findtext('translation')
             for message in map_library_context.findall('message')
         }
+        self.assertEqual(messages['Select a map to preview.'],
+                         'Selecione um mapa para pré-visualizar.')
+        self.assertEqual(messages['This map has no records yet.'],
+                         'Este mapa ainda não contém registos.')
         self.assertEqual(messages['View and manage maps'], 'Ver e gerir mapas')
         self.assertEqual(messages['{count} deposits'], '{count} depósitos')
         self.assertEqual(messages['{deposits} deposits · {rigs} rigs · {marks} marks'],

@@ -1,0 +1,90 @@
+Rhino Surface Mapper Beta 1 - third-party runtime notices
+=========================================================
+
+This notice applies to the Windows 10/11 x64 PyInstaller onedir distribution.
+Rhino Surface Mapper itself is licensed under GNU GPL version 3; see LICENSE.
+Third-party copyrights and licences remain with their respective holders.
+
+Python 3.13.15
+--------------
+The bundle contains the CPython 3.13.15 runtime. The complete Python licence
+and incorporated notices are in LICENSES/Python-3.13.15.txt.
+
+PySide6, PySide6_Essentials, PySide6_Addons, and shiboken6 6.11.2
+-----------------------------------------------------------------
+The application dynamically loads the PySide6 bindings, Shiboken runtime, and
+Qt shared libraries. These packages declare the open-source alternatives
+LGPL-3.0-only, GPL-2.0-only, or GPL-3.0-only. This GPL-3.0 application uses the
+GPL-3.0 route for the combined distribution. The GPLv3 text is in LICENSE and
+the LGPLv3 text is in LICENSES/LGPL-3.0.txt.
+
+Qt 6.11.2 runtime footprint
+---------------------------
+The validated bundle contains QtCore, QtGui, QtNetwork, QtOpenGL,
+QtOpenGLWidgets, QtPdf, QtQml, QtQmlMeta, QtQmlModels, QtQmlWorkerScript,
+QtQuick, QtSvg, QtUiTools, QtVirtualKeyboard, and QtWidgets. It also contains
+the Windows platform, image-format, TLS, SVG icon-engine, style, touch,
+virtual-keyboard input-context, and network-information plugins. Qt Virtual
+Keyboard is distributed under GPLv3 on the chosen open-source route. Qt PDF
+is distributed under its applicable GPLv3/LGPLv3 open-source terms; Qt
+WebEngine is not bundled.
+
+The complete attribution articles from the upstream Qt 6.11.2 pages for the
+applicable embedded components are consolidated in
+LICENSES/Qt-6.11.2-Third-Party-Notices.html. The document identifies each
+original page and contains its component copyright notices and licence terms.
+
+The mapped components are:
+
+- Qt Core: Apache Tika MIME definitions, BLAKE2, zlib, Robert Penner easing
+  equations, double-conversion, MD4, MD5, PCRE2 and SLJIT, SHA-1, SHA-3,
+  SHA-384/SHA-512, SipHash, TinyCBOR, Unicode UCD, Unicode CLDR, and
+  tl::expected. These are incorporated by Qt6Core.dll.
+- Qt GUI/OpenGL/Widgets: Adobe Glyph List, FreeType (including its rasterizer,
+  BDF/PCF support and zlib code), D3D12 Memory Allocator and mipmap code,
+  Emoji Segmenter, HarfBuzz, libjpeg-turbo, libpng, MD4C, OpenGL/OpenGL ES
+  headers, Pixman, smooth-scaling code, Vulkan registry and memory allocator,
+  WebGradients, Wintab, and the embedded sRGB profile. These correspond to the
+  shipped Qt GUI/OpenGL/Widgets libraries and Windows platform/style plugins.
+- Qt Image Formats: libtiff and libwebp, corresponding to the shipped qtiff
+  and qwebp plugins.
+- Qt Network: Public Suffix List and libpsl, incorporated by Qt6Network.dll.
+- Qt QML/Quick: JavaScriptCore Macro Assembler and Yoga, incorporated by the
+  shipped Qt QML and Qt Quick libraries.
+- Qt SVG: XSVG, incorporated by Qt6Svg.dll and the SVG plugins.
+- Qt Virtual Keyboard: OpenWnn, PinyinIME, and Traditional Chinese IME,
+  corresponding to Qt6VirtualKeyboard.dll and its input-context plugin.
+- Qt PDF: Abseil, FreeType, PDFium, Chromium-origin code, fast_float, ICU,
+  libjpeg-turbo, libpng, and zlib, incorporated by Qt6Pdf.dll and qpdf.dll.
+  This does not imply that Qt WebEngine is distributed.
+- Windows software OpenGL fallback: Mesa llvmpipe and its Boost-licensed C11
+  threads emulation, corresponding to opengl32sw.dll.
+
+The shared Apache License 2.0 text is also provided as
+LICENSES/Apache-2.0.txt. Component-specific alternatives and attributions
+remain in the consolidated Qt notice document and must be kept with the ZIP.
+
+OpenSSL 3.0.21
+--------------
+The bundle contains libssl-3.dll and libcrypto-3.dll for Qt TLS support.
+OpenSSL 3.0.21 is licensed under Apache License 2.0. Its upstream licence file
+is copied unchanged as LICENSES/OpenSSL-3.0.21.txt.
+
+Microsoft Visual C++ runtime
+----------------------------
+The bundle contains Microsoft-signed MSVCP140*.dll and VCRUNTIME140*.dll files
+collected from the official Python installation and PySide6/shiboken6 wheels.
+They are redistributable runtime files subject to the Microsoft terms
+applicable to the toolchains that produced those packages. No separate
+Microsoft notice or licence text has been established as required for this
+application ZIP.
+
+The ZIP does not redistribute ucrtbase.dll or api-ms-win-core/api-ms-win-crt
+DLLs. Windows 10/11 supplies the UCRT and other operating-system components.
+
+PyInstaller 6.22.3
+------------------
+PyInstaller 6.22.3 produced the executable. Its bootloader licence exception
+permits distributing the generated executable under this project's GPLv3
+terms; PyInstaller is build provenance, not a separately bundled Python
+runtime package requiring an additional physical licence file here.

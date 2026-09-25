@@ -14,6 +14,7 @@ from mapper_core import MapperState, SRV_FLAG
 from radar import RadarPulse
 from rhino_surface_mapper_qt import MapperWindow
 from map_library import MapLibraryWindow
+from i18n import translate
 
 
 class ProtectionTests(unittest.TestCase):
@@ -364,6 +365,23 @@ class ProtectionTests(unittest.TestCase):
             self.assertEqual(library.tree.columnCount(), 1)
             self.assertEqual(library.tree.visualItemRect(planet.child(0)).height(), 48)
             self.assertTrue(planet.child(0).icon(0).isNull())
+            library.close()
+
+    def test_library_open_selected_map_passes_two_arguments_to_prepare_to_replace_current_map(self):
+        w = self.make_window()
+        w.state.pml_id = '6'
+        w.current_map_path = self.path
+        with patch('map_library.maps_directory', return_value=self.root), \
+                patch('map_library.infer_legacy_pml'), \
+                patch.object(w, 'install_loaded_map'), \
+                patch.object(w, 'prepare_to_replace_current_map', return_value=True) as mock_prepare:
+            library = MapLibraryWindow(w)
+            library.select_system('Kappa')
+            library.select_map(library.tree.topLevelItem(0).child(0), 1)
+            library.open_selected_map()
+            mock_prepare.assert_called_once_with(
+                translate('MapperWindow', 'Open map'),
+                translate('MapperWindow', 'opening the map'))
             library.close()
 
 

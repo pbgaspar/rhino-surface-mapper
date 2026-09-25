@@ -1,67 +1,71 @@
-# Rhino Surface Mapper
+# Rhino Surface Mapper — Beta 1
 
-Rhino Surface Mapper is a Python desktop application for mapping and navigating surface activity in *Elite Dangerous*. It reads the game's `Status.json` telemetry and provides a live surface map, search routes, markers, radar coverage, and optional steering assistance.
+Rhino Surface Mapper is an independent companion tool for *Elite Dangerous* Commanders, designed to help map Surface Mining activity, keep track of explored areas and recorded deposits, and navigate back to points of interest.
+
+![Rhino Surface Mapper main map](docs/images/main-map.jpg)
+
+## Why Rhino Surface Mapper?
+
+When Surface Mining and the Rhino arrived in *Elite Dangerous*, I found it difficult to search for deposits systematically: avoiding repeated coverage, knowing which areas I had already investigated, and remembering where I had found deposits of interest. What started as a simple application to solve that problem gradually gained additional functionality that I hope will be useful to other Commanders.
+
+## Download Beta 1
+
+Download the complete Beta 1 ZIP from [GitHub Releases](https://github.com/pbgaspar/rhino-surface-mapper/releases).
+
+Beta 1 is for 64-bit Windows 10 and Windows 11. Extract the complete ZIP to a writable folder, keep the extracted folder together, and run `RhinoSurfaceMapper.exe`. Do not run the executable from inside the ZIP, and avoid protected locations such as `Program Files`.
+
+This is a portable Beta. It stores `options.json` and the `MAPAS/` directory beside the executable.
 
 ## Features
 
-- Live SRV position, heading, and fuel telemetry from `Status.json`.
-- Surface maps with route tracks, search routes, deposits, rigs, named markers, and radar coverage; maps can be saved and reopened as JSON files.
-- Map library for browsing saved maps, with favorite and protection flags and a mining-only mode for protected maps.
-- Navigation to map targets and a separate transparent navigation overlay.
-- Radar pulse visualization and optional steering assistance using game telemetry and configured input controls.
-- Configurable settings, including Windows, Dark, and Light interface themes, map and overlay appearance, and radar and navigation parameters.
+- Live SRV position, heading, and fuel telemetry from *Elite Dangerous* `Status.json`.
+- Surface mapping with route tracks and search routes.
+- Planetary Mining Deposits, rigs, and named markers.
+- Radar coverage and radar pulse visualisation.
+- Saving and reopening maps as JSON files.
+- Map Library for browsing saved maps.
+- Favourite and protection functionality, including mining-only behaviour for protected maps.
+- Navigation to map targets and a transparent navigation overlay.
+- Optional steering assistance using game telemetry and configured input conditions.
+- Configurable map, overlay, radar, and navigation settings.
+- Windows, Dark, and Light interface themes.
 
-The application does not detect obstacles. Radar input observation does not confirm that the game successfully fired a pulse. Steering assistance is optional and its behavior depends on valid game telemetry and input conditions.
+![Map Library](docs/images/map-library.jpg)
 
-## Requirements
+The Map Library provides a view of saved maps and their recorded Planetary Mining Deposits, routes, rigs, and markers.
 
-- Python 3.13 is the current development baseline.
-- Runtime dependencies are listed in [`requirements.txt`](requirements.txt), including PySide6 and Requests.
-- Development and test dependencies are listed in [`requirements-dev.txt`](requirements-dev.txt).
-- For live game integration, an Elite Dangerous `Status.json` file. The application uses the standard Saved Games location by default and allows selecting another file in its settings.
+### Navigation overlay
 
-Windows-specific game input integrations are present in the project. The repository does not currently document a supported-platform matrix.
+The navigation overlay can display navigation information while *Elite Dangerous* is running. Optional steering assistance can use valid game telemetry and configured input conditions.
 
-## Development setup
+![Navigation overlay and steering assistance](docs/images/navigation-overlay.gif)
 
-From the repository root in PowerShell, create or activate the existing project `.venv`, then install development dependencies and launch the application:
+The application does not detect obstacles. Radar input observation does not prove that the game successfully fired a pulse.
 
-```powershell
-.\.venv\Scripts\Activate.ps1
-.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.venv\Scripts\python.exe rhino_surface_mapper.py
-```
+## Language
 
-## Tests
+The interface supports English and Portuguese (Portugal). Language changes apply after restarting the application.
 
-Run the verified pytest workflow from the repository root:
+## Planned features
 
-```powershell
-.venv\Scripts\python.exe -m pytest tests -ra
-```
+**Powerplay Surface Mining assistance** — planned integration of the already developed market-data core to help Commanders earn Powerplay merits by identifying the three most relevant Surface Mining commodities in the current system, together with stations showing demand and market prices.
 
-Some Qt tests skip when PySide6 is unavailable. Automated tests do not replace validation in the game, across monitor setups, or across Windows display scales.
+## Feedback and contributions
 
-## Project structure
+Please report reproducible bugs and suggestions through [GitHub Issues](https://github.com/pbgaspar/rhino-surface-mapper/issues).
 
-- `rhino_surface_mapper.py` — application entry point.
-- Core mapping and interface modules implement telemetry, navigation, maps, radar, overlay, and settings.
-- `elite_dangerous/market/` — reusable market-data domain services.
-- `assets/` — SVG interface and map resources.
-- `tests/` — automated tests.
+Contributions, documentation improvements, and translation updates are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution guidance.
 
-For repository architecture and engineering guidance, see [`AGENTS.md`](AGENTS.md).
+## Author
 
-## Development status
+Rhino Surface Mapper was created and is maintained by **CMDR Paulo Gaspar**, with development assistance from ChatGPT and AI coding tools.
 
-The project is under active development. Core mapping, navigation, radar, settings, map-library, and market-data components are present, but the project notes and task list record manual validation and additional work that remain. The automated test suite covers selected behavior; it does not establish that every feature has been validated in every game or display setup.
+Developed as an independent companion tool for the *Elite Dangerous* community.
 
-## Historical record
+## Licence and third-party components
 
-The first preserved compiled Beta dates from 11 September 2026, before the project adopted Git. It used Python 3.13, PyQt6, and PyInstaller. That Beta already included surface telemetry and mapping, deposits and markers, circular search routes, a navigation overlay, radar support, steering assistance, map persistence, and configurable settings.
+Rhino Surface Mapper is licensed under the [GNU GPL-3.0](LICENSE).
 
-The original source snapshot and compiled executable are retained privately as historical artifacts and are not public distribution assets. No preserved intermediate snapshots are available between that Beta and the start of Git history. Git history begins on 16 September 2026 with commit [`546a856`](https://github.com/pbgaspar/rhino-surface-mapper/commit/546a856) (`Baseline before repository cleanup`). No original semantic version number has been established for the Beta.
+Runtime component notices are listed in [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt), with corresponding source information in [`SOURCE_AVAILABILITY.txt`](SOURCE_AVAILABILITY.txt).
 
-## License
-
-No license has been selected for Rhino Surface Mapper. Until one is added, do not assume that the project may be reused, modified, or redistributed. Third-party components have their own licenses.
+Rhino Surface Mapper is an independent project and is not affiliated with or endorsed by Frontier Developments. *Elite Dangerous* and related marks belong to Frontier Developments plc.

@@ -211,12 +211,20 @@ class MapPreview(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if self.state is None:
             painter.setPen(QColor(colors['preview_foreground']))
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, 'Selecciona um mapa para o pré-visualizar.')
+            painter.drawText(
+                self.rect(),
+                Qt.AlignmentFlag.AlignCenter,
+                translate('MapLibraryWindow', 'Select a map to preview.'),
+            )
             return
         items = self.state.points + self.state.deposits + self.state.rigs + self.state.marks
         if not items:
             painter.setPen(QColor(colors['preview_foreground']))
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, 'Este mapa ainda não contém registos.')
+            painter.drawText(
+                self.rect(),
+                Qt.AlignmentFlag.AlignCenter,
+                translate('MapLibraryWindow', 'This map has no records yet.'),
+            )
             return
         scale, cx, cy = self._framing(
             state=self.state,
@@ -544,7 +552,8 @@ class MapLibraryWindow(QDialog):
             state.load(self.selected_path)
             infer_legacy_pml(state, self.selected_path,
                              self.current_system or self.selected_path.parent.name, state.body)
-            if not parent.prepare_to_replace_current_map('Abrir mapa'):
+            if not parent.prepare_to_replace_current_map(
+                    translate('MapperWindow', 'Open map'), translate('MapperWindow', 'opening the map')):
                 return
             parent.install_loaded_map(state, source_path=self.selected_path)
         except (OSError, ValueError, TypeError, KeyError) as exc:
