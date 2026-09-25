@@ -141,7 +141,7 @@ class ProtectionTests(unittest.TestCase):
         w.refresh()
         self.assertFalse(w.search_button.isEnabled())
         self.assertFalse(w.op_buttons['Marca'].isEnabled())
-        self.assertIn('Só minerar', w.map_file_info.text())
+        self.assertIn('Mining only', w.map_file_info.text())
         # O modo simples não percorre sequer os caminhos de exploração.
         with patch.object(w.view, 'trajectory_paths', side_effect=AssertionError('rasto em mineração')):
             w.view.grab()

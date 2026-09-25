@@ -24,6 +24,7 @@ from layout_options import LayoutOptions
 from map_library import MapLibraryWindow
 from deposit_marker import draw_deposit, deposit_bounds
 from numeric_fields import MetresSpinBox, DegreesSpinBox
+from i18n import translate
 from PySide6.QtWidgets import QDialog, QFormLayout, QComboBox, QLineEdit, QDialogButtonBox
 
 
@@ -894,7 +895,9 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.map_flag_icons.setVisible(s.favorite or s.protected)
         if self.current_map_path and self.current_map_path.exists():
             stamp = time.strftime('%Y-%m-%d %H:%M', time.localtime(self.current_map_path.stat().st_mtime))
-            self.map_file_info.setText(f'{self.current_map_path.name} — {stamp}' + (' · Só minerar' if s.mining_only else ''))
+            self.map_file_info.setText(
+                f'{self.current_map_path.name} — {stamp}'
+                + (f" · {translate('MapperWindow', 'Mining only')}" if s.mining_only else ''))
         else:
             self.map_file_info.setText('Mapa ainda não guardado')
         if self.transition_required:
@@ -968,13 +971,15 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         try:
             if not self.pending_old_map_resolved:
                 if not self.prepare_to_replace_current_map(
-                        'Mudar de localização', 'mudar de localização', allow_cancel=False):
+                        translate('MapperWindow', 'Change location'),
+                        translate('MapperWindow', 'changing location'), allow_cancel=False):
                     return None
                 self.pending_old_map_resolved = True
             self.pending_destination = self.prepare_pending_destination()
         except (OSError, ValueError, TypeError, KeyError, AttributeError,
                 OverflowError, ZeroDivisionError) as exc:
-            QMessageBox.critical(self, 'Erro ao preparar mudança de mapa', str(exc))
+            QMessageBox.critical(
+                self, translate('MapperWindow', 'Error preparing map change'), str(exc))
             return None
         return self.pending_destination
 
@@ -1014,12 +1019,13 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                 return False
             self.install_prepared_map(
                 candidate,
-                destination.get('source_text', 'Mapa carregado'),
+                destination.get('source_text', translate('MapperWindow', 'Loaded map')),
                 destination.get('path'),
                 poll_after_install=False)
         except (OSError, ValueError, TypeError, KeyError, AttributeError,
                 OverflowError, ZeroDivisionError) as exc:
-            QMessageBox.critical(self, 'Erro ao ativar mudança de mapa', str(exc))
+            QMessageBox.critical(
+                self, translate('MapperWindow', 'Error activating map change'), str(exc))
             return False
         if not corresponds_to_map(self.state, system, body, latitude, longitude):
             return False
@@ -1028,7 +1034,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.refresh()
         return True
 
-    def install_loaded_map(self, candidate, source_text='Mapa carregado', source_path=None):
+    def install_loaded_map(self, candidate, source_text='Loaded map', source_path=None):
         """Install a manual map and supersede pending lifecycle state if valid."""
         result = super().install_loaded_map(candidate, source_text, source_path)
         if result and self.transition_required:
@@ -1066,12 +1072,15 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         if len(matches) > 1:
             matches.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
             labels = [
-                f'[{candidate.pml_id}] — guardado '
-                f'{datetime.fromtimestamp(path.stat().st_mtime):%Y-%m-%d %H:%M} — '
-                f'{path.name}'
+                translate('MapperWindow', '[{pml_id}] — saved {timestamp} — {filename}').format(
+                    pml_id=candidate.pml_id,
+                    timestamp=datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d %H:%M'),
+                    filename=path.name)
                 for _, path, candidate in matches
             ]
-            chosen_index = self.choose_list_item('Vários PML próximos', 'Escolhe o PML:', labels)
+            chosen_index = self.choose_list_item(
+                translate('MapperWindow', 'Several nearby PMLs'),
+                translate('MapperWindow', 'Choose the PML:'), labels)
             if chosen_index is None:
                 return None
             path, candidate = matches[chosen_index][1:]
@@ -1088,7 +1097,8 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
             path.parent.mkdir(parents=True, exist_ok=True)
             candidate.save(path)
             return dict(state=candidate, path=path,
-                        source_text=f'PML [{candidate.pml_id}] criado')
+                        source_text=translate(
+                            'MapperWindow', 'PML [{pml_id}] created').format(pml_id=candidate.pml_id))
 
         status['StarSystem'] = candidate.system
         status['BodyName'] = candidate.body
@@ -1098,7 +1108,8 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
             return None
         candidate, path = prepared
         return dict(state=candidate, path=path,
-                    source_text=f'PML [{candidate.pml_id}] preparado')
+                    source_text=translate(
+                        'MapperWindow', 'PML [{pml_id}] prepared').format(pml_id=candidate.pml_id))
 
     def poll(self, reloading_map=False):
         """Lê Status.json se a data mudou e atualiza a telemetria e a vista.

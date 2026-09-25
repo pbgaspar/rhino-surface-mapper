@@ -148,8 +148,8 @@ class MapOperationsTests(unittest.TestCase):
         inspect_spin(dialog)
         self.assertTrue(result)
 
-        self.assertEqual(dialog.windowTitle(), 'Centro do PML [PML]')
-        self.assertEqual(dialog.labelText(), 'Azimute do Rhino para o centro do PML (0° = norte):')
+        self.assertEqual(dialog.windowTitle(), 'PML centre [PML]')
+        self.assertEqual(dialog.labelText(), 'Bearing from Rhino to the PML centre (0° = north):')
         self.assertEqual(dialog.intValue(), 0)
 
     def test_choose_list_item_returns_selected_index_and_preserves_cancellation(self):
@@ -186,7 +186,7 @@ class MapOperationsTests(unittest.TestCase):
                 'Display title', 'open the map'))
 
         box.setText.assert_called_once_with(
-            'Que queres fazer ao mapa atual antes de open the map?')
+            'What would you like to do with the current map before open the map?')
     def test_load_rereads_unchanged_status_immediately(self):
         import json
         from PySide6.QtWidgets import QMessageBox
@@ -421,7 +421,7 @@ class MapOperationsTests(unittest.TestCase):
             self.assertIs(w.resolve_pending_transition(), destination)
 
         replace.assert_called_once_with(
-            'Mudar de localização', 'mudar de localização', allow_cancel=False)
+            'Change location', 'changing location', allow_cancel=False)
         prepare.assert_called_once_with()
         self.assertTrue(w.pending_old_map_resolved)
         self.assertIs(w.pending_destination, destination)
@@ -436,7 +436,7 @@ class MapOperationsTests(unittest.TestCase):
             self.assertIsNone(w.resolve_pending_transition())
 
         replace.assert_called_once_with(
-            'Mudar de localização', 'mudar de localização', allow_cancel=False)
+            'Change location', 'changing location', allow_cancel=False)
         prepare.assert_not_called()
         self.assertFalse(w.pending_old_map_resolved)
         self.assertIsNone(w.pending_destination)
@@ -452,7 +452,7 @@ class MapOperationsTests(unittest.TestCase):
             self.assertIs(w.resolve_pending_transition(), destination)
 
         replace.assert_called_once_with(
-            'Mudar de localização', 'mudar de localização', allow_cancel=False)
+            'Change location', 'changing location', allow_cancel=False)
         self.assertTrue(w.pending_old_map_resolved)
         self.assertIs(w.pending_destination, destination)
 

@@ -304,7 +304,7 @@ class MapOperations:
                 candidate.save(source_path, update_saved_at=False)
         return candidate, Path(source_path) if source_path else None
 
-    def install_prepared_map(self, candidate, source_text='Mapa carregado',
+    def install_prepared_map(self, candidate, source_text='Loaded map',
                              source_path=None, poll_after_install=True):
         """Activate a prepared candidate and optionally reread telemetry."""
         self.cancel_placement()
@@ -374,7 +374,7 @@ class MapOperations:
             raise
         return True
 
-    def install_loaded_map(self, candidate, source_text='Mapa carregado', source_path=None):
+    def install_loaded_map(self, candidate, source_text='Loaded map', source_path=None):
         """Troca o estado somente depois de um mapa já validado estar disponível."""
         prepared = self.prepare_loaded_map(candidate, source_path)
         if prepared is None:
@@ -390,12 +390,12 @@ class MapOperations:
             timer.stop()
         try:
             box = QMessageBox(self)
-            box.setWindowTitle('Mapa protegido')
-            box.setText('Como queres utilizar este mapa protegido?')
-            box.setInformativeText('Continuar exploração cria uma nova versão editável. Só minerar permite consultar os pontos e navegar, sem registar alterações.')
-            explore = box.addButton('Continuar exploração', QMessageBox.ButtonRole.AcceptRole)
-            mining = box.addButton('Só minerar', QMessageBox.ButtonRole.ActionRole)
-            box.addButton('Cancelar', QMessageBox.ButtonRole.RejectRole)
+            box.setWindowTitle(translate('MapperWindow', 'Protected map'))
+            box.setText(translate('MapperWindow', 'How would you like to use this protected map?'))
+            box.setInformativeText(translate('MapperWindow', 'Continuing exploration creates a new editable version. Mining only lets you view points and navigate without recording changes.'))
+            explore = box.addButton(translate('MapperWindow', 'Continue exploration'), QMessageBox.ButtonRole.AcceptRole)
+            mining = box.addButton(translate('MapperWindow', 'Mining only'), QMessageBox.ButtonRole.ActionRole)
+            box.addButton(translate('MapperWindow', 'Cancel'), QMessageBox.ButtonRole.RejectRole)
             box.setDefaultButton(mining)
             box.exec()
             return 'explore' if box.clickedButton() is explore else 'mining' if box.clickedButton() is mining else None
@@ -407,8 +407,8 @@ class MapOperations:
         """Impede operações de edição também quando chamadas por atalhos."""
         if not self.state.read_only:
             return False
-        QMessageBox.information(self, 'Mapa só para consulta',
-                                'Abre o mapa e escolhe Continuar exploração para criar uma nova versão editável.')
+        QMessageBox.information(self, translate('MapperWindow', 'Read-only map'),
+                                translate('MapperWindow', 'Open the map and choose Continue exploration to create a new editable version.'))
         return True
 
     def write_new_version(self, state, source_path=None):
@@ -418,7 +418,7 @@ class MapOperations:
             canonical = Path(source_path)
             canonical = canonical.with_name(re.sub(r' v\d+$', '', canonical.stem) + '.json')
         if canonical is None:
-            raise ValueError('O mapa ainda não tem um ficheiro ou PML identificado.')
+            raise ValueError(translate('MapperWindow', 'The map has no file or identified PML yet.'))
         canonical.parent.mkdir(parents=True, exist_ok=True)
         destination = next_version_path(canonical, canonical.parent.iterdir())
         state.save(destination)
@@ -427,21 +427,23 @@ class MapOperations:
     def setup_new_pml(self, state=None):
         """Pede os dados mínimos para identificar um PML ainda desconhecido."""
         s = state or self.state
-        prompt = ('Número do PML nesta zona. Deixa vazio se ainda não o conheces.')
-        pml_id, accepted = QInputDialog.getText(self, 'Novo PML', prompt)
+        prompt = translate('MapperWindow', 'PML number for this area. Leave blank if you do not know it yet.')
+        pml_id, accepted = QInputDialog.getText(self, translate('MapperWindow', 'New PML'), prompt)
         if not accepted:
             return False
         pml_id = pml_id.strip()
         if not pml_id:
             if QMessageBox.question(
-                    self, 'PML desconhecido',
-                    'Não foi indicado um PML. Criar a identificação temporária seguinte?'
+                    self, translate('MapperWindow', 'Unknown PML'),
+                    translate('MapperWindow', 'No PML was provided. Create the following temporary identifier?')
             ) != QMessageBox.StandardButton.Yes:
                 return False
             pml_id = self.next_john_doe_id(s.system, s.body)
         azimuth_dialog = QInputDialog(self)
-        azimuth_dialog.setWindowTitle(f'Centro do PML [{pml_id}]')
-        azimuth_dialog.setLabelText('Azimute do Rhino para o centro do PML (0° = norte):')
+        azimuth_dialog.setWindowTitle(
+            translate('MapperWindow', 'PML centre [{pml_id}]').format(pml_id=pml_id))
+        azimuth_dialog.setLabelText(
+            translate('MapperWindow', 'Bearing from Rhino to the PML centre (0° = north):'))
         azimuth_dialog.setInputMode(QInputDialog.InputMode.IntInput)
         azimuth_dialog.setIntRange(0, 359)
         azimuth_dialog.setIntStep(1)
@@ -453,8 +455,8 @@ class MapOperations:
             return False
         azimuth = azimuth_dialog.intValue()
         distance, accepted = QInputDialog.getDouble(
-            self, f'Centro do PML [{pml_id}]',
-            'Distância do Rhino ao centro do PML (m):', 0, 0, 100000, 0)
+            self, translate('MapperWindow', 'PML centre [{pml_id}]').format(pml_id=pml_id),
+            translate('MapperWindow', 'Distance from Rhino to the PML centre (m):'), 0, 0, 100000, 0)
         if not accepted:
             return False
         coordinates = self.mark_coordinates(s, s.rhino_lat, s.rhino_lon,
@@ -464,7 +466,8 @@ class MapOperations:
         s.created_at = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
         s.last_saved_at = None
         s.marks.append(dict(name=f'Centro [{pml_id}]', **coordinates))
-        self.statusBar().showMessage(f'PML [{pml_id}] criado. Guarda o mapa para o conservar.')
+        self.statusBar().showMessage(
+            translate('MapperWindow', 'PML [{pml_id}] created. Save the map to keep it.').format(pml_id=pml_id))
         return True
 
     def open_or_create_pml_for_current_position(self):
@@ -499,17 +502,25 @@ class MapOperations:
             status['StarSystem'] = candidate.system
             status['BodyName'] = candidate.body
             candidate.process_status(status)
-            if not self.install_loaded_map(candidate, f'PML [{candidate.pml_id}] aberto', path):
+            if not self.install_loaded_map(
+                    candidate, translate('MapperWindow', 'PML [{pml_id}] opened').format(pml_id=candidate.pml_id), path):
                 return
-            self.statusBar().showMessage(f'Mapa aberto: {path.name}')
+            self.statusBar().showMessage(
+                translate('MapperWindow', 'Map opened: {filename}').format(filename=path.name))
             return
         if len(matches) > 1:
             # Aqui cada entrada é um PML distinto; a data permite escolher a
             # cópia mais recentemente gravada quando as distâncias são próximas.
             matches.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
-            labels = [f'[{candidate.pml_id}] — guardado {datetime.fromtimestamp(path.stat().st_mtime):%Y-%m-%d %H:%M} — {distance/1000:.1f} km'
+            labels = [translate(
+                'MapperWindow', '[{pml_id}] — saved {timestamp} — {distance:.1f} km').format(
+                    pml_id=candidate.pml_id,
+                    timestamp=datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d %H:%M'),
+                    distance=distance / 1000)
                       for distance, path, candidate in matches]
-            chosen = self.choose_list_item('Vários PML próximos', 'Escolhe o PML:', labels)
+            chosen = self.choose_list_item(
+                translate('MapperWindow', 'Several nearby PMLs'),
+                translate('MapperWindow', 'Choose the PML:'), labels)
             if chosen is None:
                 return
             index = chosen
@@ -518,9 +529,11 @@ class MapOperations:
             status['StarSystem'] = candidate.system
             status['BodyName'] = candidate.body
             candidate.process_status(status)
-            if not self.install_loaded_map(candidate, f'PML [{candidate.pml_id}] aberto', path):
+            if not self.install_loaded_map(
+                    candidate, translate('MapperWindow', 'PML [{pml_id}] opened').format(pml_id=candidate.pml_id), path):
                 return
-            self.statusBar().showMessage(f'Mapa aberto: {path.name}')
+            self.statusBar().showMessage(
+                translate('MapperWindow', 'Map opened: {filename}').format(filename=path.name))
             return
         if system_is_known:
             if self.setup_new_pml():
@@ -531,11 +544,14 @@ class MapOperations:
                     path.parent.mkdir(parents=True, exist_ok=True)
                     self.state.save(path)
                     self.current_map_path = path
-                    self.statusBar().showMessage(f'PML [{self.state.pml_id}] criado: {path.name}')
+                    self.statusBar().showMessage(translate(
+                        'MapperWindow', 'PML [{pml_id}] created: {filename}').format(
+                            pml_id=self.state.pml_id, filename=path.name))
                 except OSError as exc:
-                    QMessageBox.critical(self, 'Erro ao criar PML', str(exc))
+                    QMessageBox.critical(self, translate('MapperWindow', 'Error creating PML'), str(exc))
         else:
-            self.statusBar().showMessage('O jogo não informou o sistema; não é possível criar um PML novo.')
+            self.statusBar().showMessage(translate(
+                'MapperWindow', 'The game did not provide a system; a new PML cannot be created.'))
 
     def save_new_pml_version(self):
         """Guarda uma versão adicional sem alterar as versões já existentes.
@@ -544,10 +560,12 @@ class MapOperations:
         conserva apenas a versão para não confundir "Substituir" com renomear.
         """
         if self.state.read_only:
-            raise PermissionError('Abre o mapa e escolhe Continuar exploração.')
+            raise PermissionError(translate(
+                'MapperWindow', 'Open the map and choose Continue exploration.'))
         canonical = self.pml_path()
         if canonical is None:
-            raise ValueError('O mapa ainda não tem sistema, planeta e PML identificados.')
+            raise ValueError(translate(
+                'MapperWindow', 'The map has no system, body, or identified PML yet.'))
         canonical.parent.mkdir(parents=True, exist_ok=True)
         highest = 1
         expression = re.compile(rf'^{re.escape(canonical.stem)} v(\d+)\.json$', re.IGNORECASE)
@@ -573,12 +591,14 @@ class MapOperations:
         if self.state.read_only or self.pml_path() is None:
             return True
         message = QMessageBox(self)
-        message.setWindowTitle('Guardar mapa do PML')
-        message.setText(f'PML [{self.state.pml_id}]: como queres guardar antes de sair?')
-        new_version = message.addButton('Gravar nova versão', QMessageBox.ButtonRole.ActionRole)
-        replace = message.addButton('Substituir', QMessageBox.ButtonRole.AcceptRole)
-        discard = message.addButton('Sair sem gravar', QMessageBox.ButtonRole.DestructiveRole)
-        cancel = message.addButton('Cancelar', QMessageBox.ButtonRole.RejectRole)
+        message.setWindowTitle(translate('MapperWindow', 'Save PML map'))
+        message.setText(translate(
+            'MapperWindow', 'PML [{pml_id}]: how would you like to save before exiting?').format(
+                pml_id=self.state.pml_id))
+        new_version = message.addButton(translate('MapperWindow', 'Save new version'), QMessageBox.ButtonRole.ActionRole)
+        replace = message.addButton(translate('MapperWindow', 'Replace'), QMessageBox.ButtonRole.AcceptRole)
+        discard = message.addButton(translate('MapperWindow', 'Exit without saving'), QMessageBox.ButtonRole.DestructiveRole)
+        cancel = message.addButton(translate('MapperWindow', 'Cancel'), QMessageBox.ButtonRole.RejectRole)
         message.setDefaultButton(replace)
         message.exec()
         try:
@@ -592,10 +612,11 @@ class MapOperations:
                 path = self.current_map_path or self.pml_path()
                 path.parent.mkdir(parents=True, exist_ok=True)
                 self.state.save(path)
-            self.statusBar().showMessage(f'Mapa guardado: {path.name}')
+            self.statusBar().showMessage(translate(
+                'MapperWindow', 'Map saved: {filename}').format(filename=path.name))
             return True
         except (OSError, ValueError) as exc:
-            QMessageBox.critical(self, 'Erro ao guardar', str(exc))
+            QMessageBox.critical(self, translate('MapperWindow', 'Error saving'), str(exc))
             return False
 
     def prepare_to_replace_current_map(self, next_action, action_prompt, allow_cancel=True):
@@ -614,15 +635,18 @@ class MapOperations:
         # Compatibilidade com mapas antigos, que ainda não têm um PML nem um
         # ficheiro ativo onde guardar uma versão.
         if self.pml_path() is None:
-            return (QMessageBox.question(self, next_action, 'Apagar o mapa atual?')
+            return (QMessageBox.question(
+                        self, next_action, translate('MapperWindow', 'Discard the current map?'))
                     == QMessageBox.StandardButton.Yes)
         message = QMessageBox(self)
         message.setWindowTitle(next_action)
-        message.setText(f'Que queres fazer ao mapa atual antes de {action_prompt}?')
-        discard = message.addButton('Não gravar', QMessageBox.ButtonRole.DestructiveRole)
-        new_version = message.addButton('Nova Versão', QMessageBox.ButtonRole.ActionRole)
-        save = message.addButton('Gravar', QMessageBox.ButtonRole.AcceptRole)
-        cancel = (message.addButton('Cancelar', QMessageBox.ButtonRole.RejectRole)
+        message.setText(translate(
+                'MapperWindow', 'What would you like to do with the current map before {action_prompt}?').format(
+                action_prompt=action_prompt))
+        discard = message.addButton(translate('MapperWindow', 'Do not save'), QMessageBox.ButtonRole.DestructiveRole)
+        new_version = message.addButton(translate('MapperWindow', 'New version'), QMessageBox.ButtonRole.ActionRole)
+        save = message.addButton(translate('MapperWindow', 'Save'), QMessageBox.ButtonRole.AcceptRole)
+        cancel = (message.addButton(translate('MapperWindow', 'Cancel'), QMessageBox.ButtonRole.RejectRole)
                   if allow_cancel else None)
         message.setDefaultButton(save)
         message.exec()
@@ -634,11 +658,13 @@ class MapOperations:
         try:
             if message.clickedButton() is new_version:
                 path = self.save_new_pml_version()
-                self.statusBar().showMessage(f'Nova versão gravada: {path.name}')
+                self.statusBar().showMessage(translate(
+                    'MapperWindow', 'New version saved: {filename}').format(filename=path.name))
             elif message.clickedButton() is save:
                 path = self.current_map_path or self.pml_path()
                 if path is None:
-                    raise ValueError('O mapa atual ainda não tem um ficheiro associado.')
+                    raise ValueError(translate(
+                        'MapperWindow', 'The current map has no associated file yet.'))
                 path.parent.mkdir(parents=True, exist_ok=True)
                 self.state.save(path)
                 self.current_map_path = path
@@ -646,21 +672,22 @@ class MapOperations:
             self.refresh(redraw_map=False)
             return True
         except (OSError, ValueError) as exc:
-            QMessageBox.critical(self, 'Erro ao guardar', str(exc))
+            QMessageBox.critical(self, translate('MapperWindow', 'Error saving'), str(exc))
             return False
 
     def new_map(self):
         """Pede confirmação quando há dados e limpa o mapa, mantendo telemetria.
         Cancela uma colocação pendente e atualiza o overlay ao terminar o modo de busca."""
-        if not self.prepare_to_replace_current_map('Novo mapa', 'criar um novo mapa'):
+        if not self.prepare_to_replace_current_map(
+                translate('MapperWindow', 'New map'), translate('MapperWindow', 'creating a new map')):
             return
         s = self.state
         if (s.pml_center_lat is not None and s.rhino_lat is not None
                 and not corresponds_to_map(s, s.system, s.body,
                                            s.rhino_lat, s.rhino_lon)):
             answer = QMessageBox.question(
-                self, 'Novo mapa noutro PML',
-                'Estás a mais de 13 km do centro deste PML. Trata-se de outro PML?')
+                self, translate('MapperWindow', 'New map in another PML'),
+                translate('MapperWindow', 'You are more than 13 km from this PML centre. Is this a different PML?'))
             if answer == QMessageBox.StandardButton.Yes:
                 # A partir daqui o mapa anterior deixa de ser o contexto
                 # ativo: Centro [6] não pode acompanhar Centro [JD1].
@@ -683,9 +710,10 @@ class MapOperations:
                                          lon=self.state.pml_center_lon))
         try:
             path = self.save_new_pml_version()
-            self.statusBar().showMessage(f'Novo mapa criado: {path.name}')
+            self.statusBar().showMessage(translate(
+                'MapperWindow', 'New map created: {filename}').format(filename=path.name))
         except (OSError, ValueError) as exc:
-            QMessageBox.critical(self, 'Erro ao criar mapa novo', str(exc))
+            QMessageBox.critical(self, translate('MapperWindow', 'Error creating new map'), str(exc))
         self.view.scale = 0.08
         self.view.recenter()
         self.refresh()
@@ -695,21 +723,22 @@ class MapOperations:
         if self.map_is_read_only():
             return
         if self.state.center_lat is None:
-            QMessageBox.information(self,'Guardar','Ainda não existe um mapa para guardar.')
+            QMessageBox.information(self, translate('MapperWindow', 'Save'),
+                                    translate('MapperWindow', 'There is no map to save yet.'))
             return
         try:
             directory = maps_directory()
         except OSError as exc:
-            QMessageBox.critical(self,'Erro ao preparar MAPAS',str(exc))
+            QMessageBox.critical(self, translate('MapperWindow', 'Error preparing MAPS'), str(exc))
             return
         canonical_path = self.current_map_path or self.pml_path()
         if canonical_path is not None:
             question = QMessageBox(self)
-            question.setWindowTitle('Guardar mapa')
-            question.setText('Como queres guardar este mapa?')
-            new_version = question.addButton('Gravar nova versão', QMessageBox.ButtonRole.ActionRole)
-            replace = question.addButton('Substituir', QMessageBox.ButtonRole.AcceptRole)
-            cancel = question.addButton('Cancelar', QMessageBox.ButtonRole.RejectRole)
+            question.setWindowTitle(translate('MapperWindow', 'Save map'))
+            question.setText(translate('MapperWindow', 'How would you like to save this map?'))
+            new_version = question.addButton(translate('MapperWindow', 'Save new version'), QMessageBox.ButtonRole.ActionRole)
+            replace = question.addButton(translate('MapperWindow', 'Replace'), QMessageBox.ButtonRole.AcceptRole)
+            cancel = question.addButton(translate('MapperWindow', 'Cancel'), QMessageBox.ButtonRole.RejectRole)
             question.setDefaultButton(replace)
             question.exec()
             if question.clickedButton() is cancel:
@@ -717,15 +746,17 @@ class MapOperations:
             if question.clickedButton() is new_version:
                 try:
                     path = self.save_new_pml_version()
-                    self.statusBar().showMessage(f'Mapa guardado: {path.name}')
+                    self.statusBar().showMessage(translate(
+                        'MapperWindow', 'Map saved: {filename}').format(filename=path.name))
                     self.refresh(redraw_map=False)
                 except (OSError, ValueError) as exc:
-                    QMessageBox.critical(self, 'Erro ao guardar', str(exc))
+                    QMessageBox.critical(self, translate('MapperWindow', 'Error saving'), str(exc))
                 return
             path = canonical_path
             path.parent.mkdir(parents=True, exist_ok=True)
         else:
-            path, _ = QFileDialog.getSaveFileName(self,'Guardar mapa',str(directory / 'mapa.json'),'Rhino Map (*.json)')
+            path, _ = QFileDialog.getSaveFileName(
+                self, translate('MapperWindow', 'Save map'), str(directory / 'mapa.json'), 'Rhino Map (*.json)')
             if not path:
                 return
             if not Path(path).suffix:
@@ -733,10 +764,11 @@ class MapOperations:
         try:
             self.state.save(Path(path))
             self.current_map_path = Path(path)
-            self.statusBar().showMessage(f'Mapa guardado: {Path(path).name}')
+            self.statusBar().showMessage(translate(
+                'MapperWindow', 'Map saved: {filename}').format(filename=Path(path).name))
             self.refresh(redraw_map=False)
         except OSError as exc:
-            QMessageBox.critical(self,'Erro ao guardar',str(exc))
+            QMessageBox.critical(self, translate('MapperWindow', 'Error saving'), str(exc))
 
     def load_map(self):
         """Abre uma versão do PML atual, sem navegar por todos os sistemas."""
@@ -747,22 +779,23 @@ class MapOperations:
             try:
                 directory = maps_directory()
             except OSError as exc:
-                QMessageBox.critical(self, 'Erro ao preparar MAPAS', str(exc))
+                QMessageBox.critical(self, translate('MapperWindow', 'Error preparing MAPS'), str(exc))
                 return
-            path, _ = QFileDialog.getOpenFileName(self, 'Abrir mapa', str(directory), 'Rhino Map (*.json)')
+            path, _ = QFileDialog.getOpenFileName(
+                self, translate('MapperWindow', 'Open map'), str(directory), 'Rhino Map (*.json)')
             if not path:
                 return
             try:
                 candidate = MapperState()
                 candidate.load(Path(path))
             except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError, ZeroDivisionError) as exc:
-                QMessageBox.critical(self, 'Erro ao abrir', str(exc))
+                QMessageBox.critical(self, translate('MapperWindow', 'Error opening'), str(exc))
                 return
         else:
             try:
                 directory = self.pml_path().parent
             except OSError as exc:
-                QMessageBox.critical(self,'Erro ao preparar MAPAS',str(exc))
+                QMessageBox.critical(self, translate('MapperWindow', 'Error preparing MAPS'), str(exc))
                 return
             versions = []
             for path in directory.glob('*.json'):
@@ -775,22 +808,30 @@ class MapOperations:
                 except (OSError, ValueError, TypeError, KeyError, AttributeError):
                     continue
             if not versions:
-                QMessageBox.information(self, 'Abrir', 'Ainda não existe uma versão guardada deste PML.')
+                QMessageBox.information(
+                    self, translate('MapperWindow', 'Open'),
+                    translate('MapperWindow', 'There is no saved version of this PML yet.'))
                 return
             versions.sort(key=lambda item: item[0].stat().st_mtime, reverse=True)
-            labels = [f'{datetime.fromtimestamp(path.stat().st_mtime):%Y-%m-%d %H:%M} — {path.name}'
+            labels = [translate('MapperWindow', '{timestamp} — {filename}').format(
+                          timestamp=datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d %H:%M'),
+                          filename=path.name)
                       for path, _ in versions]
-            selected_index = self.choose_list_item(f'Abrir PML [{s.pml_id}]', 'Versão:', labels)
+            selected_index = self.choose_list_item(
+                translate('MapperWindow', 'Open PML [{pml_id}]').format(pml_id=s.pml_id),
+                translate('MapperWindow', 'Version:'), labels)
             if selected_index is None:
                 return
             path, candidate = versions[selected_index]
         try:
-            if not self.prepare_to_replace_current_map('Abrir mapa', 'abrir o mapa'):
+            if not self.prepare_to_replace_current_map(
+                    translate('MapperWindow', 'Open map'), translate('MapperWindow', 'opening the map')):
                 return
-            if not self.install_loaded_map(candidate, source_path=path):
+            if not self.install_loaded_map(
+                    candidate, source_text=translate('MapperWindow', 'Loaded map'), source_path=path):
                 return
         except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError, ZeroDivisionError) as exc:
-            QMessageBox.critical(self,'Erro ao abrir',str(exc))
+            QMessageBox.critical(self, translate('MapperWindow', 'Error opening'), str(exc))
 
     def edit_deposit_values(self, existing=None):
         """Executa o editor e devolve os campos aceites, ou None se for cancelado."""
