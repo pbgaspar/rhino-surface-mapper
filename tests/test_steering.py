@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import Mock
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 from steering import SteeringAssist, angle_delta
+from steering import STATUS_CORRECTING, STATUS_SLOWING, STATUS_WAITING
 
 
 class SteeringTests(unittest.TestCase):
@@ -29,7 +30,7 @@ class SteeringTests(unittest.TestCase):
         a.start()
         a.observe(1,0,0,1)
         self.assertIsNone(a.decide(1,(100,1000)))
-        self.assertEqual(a.overlay_text(),'Aguarda nova posição')
+        self.assertEqual(a.overlay_text(),'Waiting for a new position')
         # 6 m em 2 s, não 6 m desde a última mudança de rumo há 1 s.
         a.observe(2,0,6,1)
         self.assertIsNotNone(a.decide(2,(100,1000)))
@@ -46,15 +47,36 @@ class SteeringTests(unittest.TestCase):
         self.assertIsNotNone(a.decide(4,(100,1000)))
         self.assertEqual(a.speed,.5)
         self.assertIsNone(a.decide(7,(100,1000)))
-        self.assertEqual(a.overlay_text(),'Aguarda telemetria nova')
+        self.assertEqual(a.overlay_text(),'Waiting for fresh telemetry')
 
     def test_large_turn_displays_required_limit_and_recovers(self):
         a=self.ready(movement=(0,16))
         self.assertIsNone(a.decide(1,(1000,2)))
-        self.assertEqual(a.overlay_text(),'Reduzir velocidade · até 15,0 m/s')
+        self.assertEqual(a.overlay_text(),'Reduce speed · up to 15.0 m/s')
         a.observe(2,0,30,0)
         self.assertIsNotNone(a.decide(2,(1000,2)))
-        self.assertEqual(a.overlay_text(),'A corrigir à direita')
+        self.assertEqual(a.overlay_text(),'Correcting right')
+
+    def test_correction_overlay_does_not_parse_message_wording(self):
+        a=self.ready(movement=(0,10))
+        self.assertIsNotNone(a.decide(1,(1000,10)))
+        self.assertEqual(a.status, STATUS_CORRECTING)
+        a.message='Translated correction text'
+        self.assertEqual(a.overlay_text(),'Correcting right')
+
+    def test_slowing_overlay_does_not_depend_on_message_wording(self):
+        a=self.ready(movement=(0,16))
+        self.assertIsNone(a.decide(1,(100,1000)))
+        self.assertEqual(a.status, STATUS_SLOWING)
+        a.message='Translated speed warning'
+        self.assertEqual(a.overlay_text(),'Reduce speed · up to 15.0 m/s')
+
+    def test_waiting_state_does_not_depend_on_message_wording(self):
+        a=SteeringAssist()
+        a.start()
+        a.wait('Translated text')
+        self.assertEqual(a.status, STATUS_WAITING)
+        self.assertEqual(a.overlay_text(),'Translated text')
 
     def test_no_repeated_commands_from_same_sample(self):
         assist=self.ready()
@@ -79,9 +101,9 @@ class SteeringTests(unittest.TestCase):
         self.assertAlmostEqual(a.decide(1,(1000,10))[1],1.2)
         a.observe(1.5,0,15,0)
         self.assertIsNone(a.decide(1.5,(1000,10)))
-        self.assertIn('correção',a.message)
+        self.assertIn('correcting',a.message)
         self.assertIsNone(a.decide(2.5,(1000,10)))
-        self.assertEqual(a.overlay_text(),'Aguarda resposta da direção')
+        self.assertEqual(a.overlay_text(),'Waiting for steering response')
         a.observe(2.6,0,26,0)
         self.assertIsNotNone(a.decide(2.6,(1000,10)))
 
@@ -103,7 +125,7 @@ class SteeringTests(unittest.TestCase):
         for movement,target in [((0,16),(100,1000)),((0,16),(1000,2))]:
             a=self.ready(movement=movement)
             self.assertIsNone(a.decide(1,target))
-            self.assertEqual(a.message,'Reduzir velocidade')
+            self.assertEqual(a.message,'Reduce speed')
 
     def test_stale_stationary_reverse_and_irregular_samples(self):
         for t,movement in [(31,(0,2)),(1,(0,0)),(1,(0,-2)),(.1,(0,2))]:
@@ -119,7 +141,7 @@ class SteeringTests(unittest.TestCase):
         a=self.ready()
         a.tolerance=8
         self.assertIsNone(a.decide(1,(100,1000)))
-        self.assertEqual(a.message,'Assistência: no rumo')
+        self.assertEqual(a.message,'Assistance: on course')
         b=self.ready()
         b.tolerance=3
         self.assertIsNotNone(b.decide(1,(100,1000)))
@@ -131,7 +153,7 @@ class SteeringTests(unittest.TestCase):
         a.start()
         a.observe(1,0,2,10)
         self.assertIsNone(a.decide(1,(249,1000)))
-        self.assertIn('aliviar',a.message)
+        self.assertIn('Easing',a.message)
 
     def test_heading_jump_and_recovery(self):
         a=SteeringAssist()
@@ -139,7 +161,7 @@ class SteeringTests(unittest.TestCase):
         a.start()
         a.observe(1,0,2,40)
         self.assertIsNone(a.decide(1,(100,1000)))
-        self.assertIn('estabilidade',a.message)
+        self.assertIn('stability',a.message)
         a.observe(2,1,3,40)
         self.assertIsNotNone(a.decide(2,(100,1000)))
 
@@ -365,9 +387,9 @@ class SteeringWindowTests(unittest.TestCase):
             self.w.toggle_assistance()
         self.w.refresh()
         self.assertTrue(self.w.overlay.isVisible())
-        for seconds,direction,label in [(0,-1,'ESQUERDA'),(1.9,-1,'ESQUERDA'),
-                (2,0,'EM FRENTE'),(6.9,0,'EM FRENTE'),(7,1,'DIREITA'),
-                (8.9,1,'DIREITA'),(9,0,'EM FRENTE'),(13.9,0,'EM FRENTE'),(14,-1,'ESQUERDA')]:
+        for seconds,direction,label in [(0,-1,'LEFT'),(1.9,-1,'LEFT'),
+                (2,0,'FORWARD'),(6.9,0,'FORWARD'),(7,1,'RIGHT'),
+                (8.9,1,'RIGHT'),(9,0,'FORWARD'),(13.9,0,'FORWARD'),(14,-1,'LEFT')]:
             with self.subTest(seconds=seconds):
                 self.driver.reset_mock()
                 with patch('steering_ui.time.monotonic',return_value=100+seconds):
@@ -402,7 +424,10 @@ class SteeringWindowTests(unittest.TestCase):
         self.w.assist.observe(10,0,16,0)
         with patch('steering_ui.time.monotonic',return_value=10):
             self.w.update_assistance()
-        self.assertEqual(self.w.overlay.assistance_notice,'Reduzir velocidade · até 15,0 m/s')
+        self.assertEqual(self.w.overlay.assistance_notice,'Reduce speed · up to 15.0 m/s')
+        self.assertTrue(self.w.overlay.assistance_warning)
+        self.w.overlay.set_assistance_notice('Translated warning', warning=True)
+        self.assertTrue(self.w.overlay.assistance_warning)
         self.driver.pulse.assert_not_called()
         self.driver.release.assert_called()
 

@@ -39,6 +39,7 @@ class OverlayWindow(QWidget):
         self.distance_color = QColor("white")
         self.target_name = ""
         self.assistance_notice = ''
+        self.assistance_warning = False
         self.resize(360, 150)
 
     def set_navigation(self, heading_text, distance_text, heading_color, distance_color, target_name=""):
@@ -55,10 +56,11 @@ class OverlayWindow(QWidget):
         self.target_name = target_name
         self.update()
 
-    def set_assistance_notice(self, text):
+    def set_assistance_notice(self, text, warning=False):
         """Reserva uma faixa do overlay para o estado da assistência/aviso."""
-        if text != self.assistance_notice:
+        if text != self.assistance_notice or warning != self.assistance_warning:
             self.assistance_notice = text
+            self.assistance_warning = warning
             self.update()
 
     def paintEvent(self, event):
@@ -139,7 +141,7 @@ class OverlayWindow(QWidget):
         if self.assistance_notice:
             zone = QRectF(3,self.height()*.80,self.width()-6,self.height()*.18)
             painter.fillRect(zone,QColor('#18232e'))
-            painter.setPen(QColor('#ffd21c' if self.assistance_notice.startswith('Reduzir velocidade') else '#a8d7eb'))
+            painter.setPen(QColor('#ffd21c' if self.assistance_warning else '#a8d7eb'))
             font = QFont('Segoe UI',max(8,int(self.height()*.095)),QFont.Weight.Bold)
             painter.setFont(font)
             while painter.fontMetrics().horizontalAdvance(self.assistance_notice)>zone.width()-6 and font.pointSize()>5:

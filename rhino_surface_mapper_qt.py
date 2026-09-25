@@ -25,8 +25,11 @@ from layout_options import (LayoutOptions, OP_EXIT, OP_MARK, OP_MARK_DEPOSIT,
 from map_library import MapLibraryWindow
 from deposit_marker import draw_deposit, deposit_bounds
 from numeric_fields import MetresSpinBox, DegreesSpinBox
-from i18n import translate
+from i18n import install_translator, translate
 from PySide6.QtWidgets import QDialog, QFormLayout, QComboBox, QLineEdit, QDialogButtonBox
+
+
+OPTIONS_PATH = Path(__file__).resolve().parent / 'options.json'
 
 
 class AzimuthSpinBox(DegreesSpinBox):
@@ -54,7 +57,7 @@ class MapView(QWidget):
         self.colors = {}
         self.text_scale = 1.0
         self.dark_theme = False
-        self.cursor_text = "Cursor: —"
+        self.cursor_text = translate('MapView', 'Cursor: —')
         self.cursor_changed.connect(self.set_cursor_text)
         self.center = QPointF(0, 0)
         self.scale = 0.08
@@ -152,11 +155,15 @@ class MapView(QWidget):
         if s.center_lat is not None:
             q = self.world(event.position())
             lat, lon = s.xyll(q.x(), q.y())
-            text = f'Cursor: {lat:.5f}°, {lon:.5f}°'
+            text = translate('MapView', 'Cursor: {latitude:.5f}°, {longitude:.5f}°').format(
+                latitude=lat, longitude=lon)
             if s.rhino_lat is not None:
                 x, y = s.llxy(s.rhino_lat, s.rhino_lon)
                 dx, dy = q.x()-x, q.y()-y
-                text += f' | Dist.: {math.hypot(dx,dy):.0f} m | Azimute: {math.degrees(math.atan2(dx,dy))%360:03.0f}°'
+                text += translate(
+                    'MapView', ' | Distance: {distance:.0f} m | Bearing: {bearing:03.0f}°').format(
+                        distance=math.hypot(dx,dy),
+                        bearing=math.degrees(math.atan2(dx,dy)) % 360)
             self.cursor_changed.emit(text)
 
     def mouseReleaseEvent(self, event):
@@ -350,7 +357,8 @@ class MapView(QWidget):
         s = self.state
         if s.center_lat is None:
             p.setPen(QColor('#b9c9ce' if self.dark_theme else '#233448'))
-            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, 'Entra no Rhino para começar o mapa.')
+            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter,
+                       translate('MapView', 'Enter the SRV to start mapping.'))
             self.draw_corners(p, 10 ** math.ceil(math.log10(70/self.scale)))
             return
         lo, hi = self.world(QPointF(0,self.height())), self.world(QPointF(self.width(),0))
@@ -436,7 +444,7 @@ class MapView(QWidget):
                 p.setPen(QPen(QColor('#e08a00'),2,Qt.PenStyle.DashLine))
                 p.drawLine(q,target)
                 p.drawEllipse(target,9,9)
-                p.drawText(target+QPointF(12,-12),'PRÓXIMO')
+                p.drawText(target+QPointF(12,-12), translate('MapView', 'NEXT'))
             if s.active_nav_target is not None:
                 nav_pos = self.screen(s.active_nav_target['x'], s.active_nav_target['y'])
                 p.setPen(QPen(QColor('#00bfff'), 2.5, Qt.PenStyle.DashLine))
@@ -472,7 +480,7 @@ class MapView(QWidget):
         for item in s.rigs:
             q = self.screen(item['x'],item['y'])
             p.drawRect(int(q.x()-6),int(q.y()-6),12,12)
-            p.drawText(q+QPointF(10,0),'Rig')
+            p.drawText(q+QPointF(10,0), translate('MapView', 'Rig'))
         for item in ([] if s.read_only else s.route_history):
             # Última camada de marcadores: os números ficam à frente do rasto.
             self.draw_route_marker(p, item)
@@ -490,7 +498,7 @@ class MapView(QWidget):
             p.drawRect(int(p_pos.x() + 1.5), int(p_pos.y() - 6), 3, 12)
             p.setFont(self.map_font())
             p.setPen(QPen(QColor('#b8860b'), 1))
-            p.drawText(p_pos + QPointF(15, 4), 'PAUSA')
+            p.drawText(p_pos + QPointF(15, 4), translate('MapView', 'PAUSED'))
             p.restore()
         self.draw_corners(p, step)
 
@@ -504,7 +512,7 @@ class MapView(QWidget):
         self.update()
 
     def leaveEvent(self, event):
-        self.set_cursor_text('Cursor: —')
+        self.set_cursor_text(translate('MapView', 'Cursor: —'))
         super().leaveEvent(event)
 
     def draw_corners(self, p, step):
@@ -517,12 +525,12 @@ class MapView(QWidget):
             p.fillRect(rect, bg)
             p.setPen(fg)
             p.drawText(rect.adjusted(5,0,-5,0), alignment | Qt.AlignmentFlag.AlignVCenter, value)
-        title = ' — '.join(str(v) for v in (self.state.system,self.state.body) if v) or 'Sistema e planeta: —'
+        title = ' — '.join(str(v) for v in (self.state.system,self.state.body) if v) or translate('MapView', 'System and body: —')
         metrics = p.fontMetrics()
         height = metrics.height()+10
         title = metrics.elidedText(title, Qt.TextElideMode.ElideRight, max(50,self.width()-110))
         label(QRectF(8,8,min(metrics.horizontalAdvance(title)+14,self.width()-90),height),title,Qt.AlignmentFlag.AlignLeft)
-        grid = f'Grelha: {step:g} m'
+        grid = translate('MapView', 'Grid: {step:g} m').format(step=step)
         grid_width = metrics.horizontalAdvance(grid)+14
         label(QRectF(8,self.height()-height-8,grid_width,height),grid,Qt.AlignmentFlag.AlignLeft)
         available = max(30,self.width()-grid_width-35)
@@ -553,7 +561,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         """Constrói a interface e o temporizador de leitura de telemetria.
         status_path opcional permite testar com um ficheiro temporário, sem usar o jogo."""
         super().__init__()
-        self.setWindowTitle('Rhino Surface Mapper')
+        self.setWindowTitle(translate('MapperWindow', 'Rhino Surface Mapper'))
         # As mensagens transitórias têm alternativa nos diálogos. Ocultar a
         # barra de estado evita uma segunda linha redundante sob o rodapé.
         self.statusBar().hide()
@@ -582,7 +590,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self._transition_schedule_pending = False
         self._transition_resolution_active = False
         self.radar_input = RadarInput()
-        self.options_path = Path(__file__).resolve().parent / 'options.json'
+        self.options_path = OPTIONS_PATH
         self.scanner_group = 0
         self.bindings_override = ''
         options = load_preferences(self.options_path)
@@ -603,11 +611,11 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         operations = QHBoxLayout()
         layout.addLayout(operations)
         self.op_buttons = {}
-        for button_id, title, callback in [(OP_MARK,'Marca',self.mark),
-                                           (OP_MARK_DEPOSIT,'Marcar depósito',self.mark_deposit),
-                                           (OP_MARK_RIG,'Marcar rig',self.mark_rig),
-                                           (OP_EXIT,'Sair',self.close)]:
-            button = QPushButton(title)
+        for button_id, title, callback in [(OP_MARK,'Marker',self.mark),
+                                           (OP_MARK_DEPOSIT,'Mark deposit',self.mark_deposit),
+                                           (OP_MARK_RIG,'Mark rig',self.mark_rig),
+                                           (OP_EXIT,'Exit',self.close)]:
+            button = QPushButton(translate('MapperWindow', title))
             button.clicked.connect(callback)
             operations.addWidget(button)
             self.op_buttons[button_id] = button
@@ -624,40 +632,38 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.search_azimuth_spin = AzimuthSpinBox()
         self.search_azimuth_spin.setRange(0,359)
         self.search_azimuth_spin.setValue(0)
-        self.search_azimuth_spin.setToolTip('Azimute inicial da próxima busca: 000=Norte, 090=Este, 180=Sul, 270=Oeste.')
+        self.search_azimuth_spin.setToolTip(translate('MapperWindow', 'Initial bearing for the next search: 000=North, 090=East, 180=South, 270=West.'))
         self.parameter_spins['search_azimuth'] = self.search_azimuth_spin
-        for title, callback in [('Iniciar busca',self.handle_search_button),('Saltar próximo',self.handle_skip_button),('Overlay',self.toggle_overlay)]:
-            button = QPushButton(title)
-            if title == 'Iniciar busca':
-                self.search_button = button
-            elif title == 'Saltar próximo':
-                self.skip_button = button
-            elif title == "Overlay":
-                self.overlay_button = button
-                button.setEnabled(False)
+        for control_id, title, callback, enabled in [
+                ('search_button', 'Start search', self.handle_search_button, True),
+                ('skip_button', 'Skip next', self.handle_skip_button, True),
+                ('overlay_button', 'Overlay', self.toggle_overlay, False)]:
+            button = QPushButton(translate('MapperWindow', title))
+            setattr(self, control_id, button)
+            button.setEnabled(enabled)
             button.clicked.connect(callback)
-        self.follow = QCheckBox('Centrar')
+        self.follow = QCheckBox(translate('MapperWindow', 'Centre'))
         self.follow.toggled.connect(lambda checked: self.view.recenter() if checked else None)
         # Barra inferior consolidada numa única linha
         self.info_bar = QHBoxLayout()
-        self.info_left = QLabel('A aguardar Status.json')
+        self.info_left = QLabel(translate('MapperWindow', 'Waiting for Status.json'))
         self.info_right = QLabel('FUEL : —')
         self.info_bar.addWidget(self.info_left, 1)
         self.info_bar.addWidget(self.info_right)
         layout.addLayout(self.info_bar)
         
-        self.radar_info = QLabel('Radar: a aguardar o jogo')
+        self.radar_info = QLabel(translate('MapperWindow', 'Radar: waiting for the game'))
         self.radar_info.setToolTip(self.radar_input.message)
         layout.addWidget(self.radar_info)
         layout.addWidget(self.view,1)
         # O rodapé mantém uma única linha: ficheiro ativo à esquerda e a
         # instrução de navegação alinhada à direita.
         footer = QHBoxLayout()
-        self.navigation = QLabel('Sec. Sugerido: —')
+        self.navigation = QLabel(translate('MapperWindow', 'Suggested sec.: —'))
         self.map_flag_icons = QLabel()
         self.map_flag_icons.setFixedHeight(22)
         footer.addWidget(self.map_flag_icons)
-        self.map_file_info = QLabel('Mapa: ainda não guardado')
+        self.map_file_info = QLabel(translate('MapperWindow', 'Map: not saved yet'))
         self.map_file_info.setTextFormat(Qt.TextFormat.PlainText)
         footer.addWidget(self.map_file_info, 1)
         footer.addWidget(self.navigation)
@@ -692,7 +698,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         s = self.state
         if self.transition_required:
             self.view.radar.waves.clear()
-            self.radar_info.setText('Radar: aguarda mudança de mapa')
+            self.radar_info.setText(translate('MapperWindow', 'Radar: waiting for map change'))
             return
         if s.read_only:
             self.view.radar.waves.clear()
@@ -708,16 +714,15 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         down = self.radar_input.down() if focused else None
         if self.view.radar.tick(s, now, enabled, down, (id(s), s.body_key, s.map_generation)):
             self.view.update()
-        text = ('Radar: controlos indisponíveis — ver Configurações' if not self.radar_input.bindings else
-                'Radar: pulso em curso' if self.view.radar.active is not None else
-                'Radar: pronto' if enabled else
-                'Radar: aguarda posição válida do SRV' if not self.status_valid else
-                'Radar: aguarda foco no jogo' if not focused else
-                'Radar: selecionar Analysis Mode' if not flags & 0x08000000 else
-                f'Radar: selecionar grupo {chr(65+self.scanner_group)}' if self.live_status.get('FireGroup') != self.scanner_group else
-                'Radar: fechar o painel do jogo')
-        if self.radar_info.text() != text:
-            self.radar_info.setText(text)
+        text = (translate('MapperWindow', 'Radar: controls unavailable — check Options') if not self.radar_input.bindings else
+                translate('MapperWindow', 'Radar: pulse in progress') if self.view.radar.active is not None else
+                translate('MapperWindow', 'Radar: ready') if enabled else
+                translate('MapperWindow', 'Radar: waiting for a valid SRV position') if not self.status_valid else
+                translate('MapperWindow', 'Radar: waiting for game focus') if not focused else
+                translate('MapperWindow', 'Radar: select Analysis Mode') if not flags & 0x08000000 else
+                translate('MapperWindow', 'Radar: select group {group}').format(group=chr(65+self.scanner_group)) if self.live_status.get('FireGroup') != self.scanner_group else
+                translate('MapperWindow', 'Radar: close the game panel'))
+        self.radar_info.setText(text)
 
     def set_parameter(self, field, value):
         """Atualiza um parâmetro numérico do estado e pede um novo desenho.
@@ -755,17 +760,23 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         A atualização posterior abre o overlay quando se entra neste modo."""
         if self.transition_required or self.map_is_read_only():
             return
-        if self.state.search_started and QMessageBox.question(self,'Iniciar busca','Substituir o Datum atual?') != QMessageBox.StandardButton.Yes:
+        if self.state.search_started and QMessageBox.question(
+                self, translate('MapperWindow', 'Start search'),
+                translate('MapperWindow', 'Replace the current Datum?')) != QMessageBox.StandardButton.Yes:
             return
         self.search_azimuth_spin.interpretText()
         if not self.state.start_search(self.search_azimuth_spin.value()):
-            QMessageBox.information(self,'Iniciar busca','Primeiro entra no Rhino e aguarda a posição.')
+            QMessageBox.information(
+                self, translate('MapperWindow', 'Start search'),
+                translate('MapperWindow', 'Enter the SRV first and wait for its position.'))
         self.refresh()
 
     def handle_search_button(self):
         """Alterna entre iniciar e terminar o modo de busca."""
         if self.state.search_started:
-            if QMessageBox.question(self, 'Terminar busca', 'Terminar o modo de busca atual?') == QMessageBox.StandardButton.Yes:
+            if QMessageBox.question(
+                    self, translate('MapperWindow', 'Stop search'),
+                    translate('MapperWindow', 'Stop the current search?')) == QMessageBox.StandardButton.Yes:
                 self.state.search_started = False
                 self.state.search_paused = False
                 self.state.search_pause_point = None
@@ -795,7 +806,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
             self.state.search_pause_point = None
             self.state.return_to_pause = False
             self.state.active_nav_target = None
-            self.statusBar().showMessage('Busca retomada.')
+            self.statusBar().showMessage(translate('MapperWindow', 'Search resumed.'))
             self.refresh()
         elif self.state.search_started:
             self.skip_next()
@@ -883,16 +894,16 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
 
         # Atualizar textos e estilos dos botões de busca e salto/pausa
         if hasattr(self, 'search_button'):
-            self.search_button.setText('Terminar busca' if s.search_started else 'Iniciar busca')
+            self.search_button.setText(translate('MapperWindow', 'Stop search' if s.search_started else 'Start search'))
 
         if hasattr(self, 'skip_button'):
             if s.search_paused or s.return_to_pause:
-                self.skip_button.setText('Busca em pausa')
+                self.skip_button.setText(translate('MapperWindow', 'Search paused'))
                 is_bright = int(time.monotonic() * 2) % 2 == 0
                 bg = '#ffd21c' if is_bright else '#d4a000'
                 self.skip_button.setStyleSheet(f"background-color: {bg}; color: #101010; font-weight: bold; border: 1px solid #705000; border-radius: 4px; padding: 3px 8px;")
             else:
-                self.skip_button.setText('Saltar próximo')
+                self.skip_button.setText(translate('MapperWindow', 'Skip next'))
                 self.skip_button.setEnabled(in_srv and not self.transition_required and
                                             s.search_started and s.next_target_xy is not None)
                 self.skip_button.setStyleSheet("")
@@ -906,17 +917,17 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                 f'{self.current_map_path.name} — {stamp}'
                 + (f" · {translate('MapperWindow', 'Mining only')}" if s.mining_only else ''))
         else:
-            self.map_file_info.setText('Mapa ainda não guardado')
+            self.map_file_info.setText(translate('MapperWindow', 'Map not saved yet'))
         if self.transition_required:
-            self.navigation.setText('A aguardar mudança de mapa')
+            self.navigation.setText(translate('MapperWindow', 'Waiting for map change'))
         elif s.active_nav_target is not None:
-            self.navigation.setText(f"A navegar: {navigation[4]} | {navigation[0]} | {navigation[1]}")
+            self.navigation.setText(translate('MapperWindow', 'Navigating: {system} | {body} | {target}').format(system=navigation[0], body=navigation[1], target=navigation[4]))
         elif s.return_to_pause:
-            self.navigation.setText(f"A regressar ao ponto de pausa | {navigation[0]} | {navigation[1]}")
+            self.navigation.setText(translate('MapperWindow', 'Returning to pause point | {system} | {body}').format(system=navigation[0], body=navigation[1]))
         elif s.search_started and s.next_target_xy is None:
-            self.navigation.setText('Procura circular concluída')
+            self.navigation.setText(translate('MapperWindow', 'Circular search completed'))
         else:
-            self.navigation.setText(f'Sec. Sugerido: {navigation[0]} | {navigation[1]}')
+            self.navigation.setText(translate('MapperWindow', 'Suggested sec.: {system} | {body}').format(system=navigation[0], body=navigation[1]))
 
         if redraw_map:
             self.view.update()
@@ -1141,7 +1152,9 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                 if reloading_map and f"{data.get('StarSystem','')}|{data.get('BodyName','')}" != self.state.body_key:
                     self.status_valid = False
                     self.last_mtime = mtime
-                    self.info_left.setText(f'{self.state.system} — {self.state.body} | Mapa carregado; Rhino noutro corpo')
+                    self.info_left.setText(translate(
+                        'MapperWindow', '{system} — {body} | Map loaded; Rhino on another body').format(
+                            system=self.state.system, body=self.state.body))
                     self.refresh()
                     return
                 incoming_system = data.get('StarSystem', '')
@@ -1188,17 +1201,21 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                     if self.follow.isChecked():
                         self.view.recenter()
                     s = self.state
-                    self.info_left.setText(f'{s.system} — {s.body} | Lat {s.rhino_lat:.5f}° Lon {s.rhino_lon:.5f}° | Pontos {len(s.points)}')
+                    self.info_left.setText(translate(
+                        'MapperWindow', '{system} — {body} | Lat {latitude:.5f}° Lon {longitude:.5f}° | Points {points}').format(
+                            system=s.system, body=s.body, latitude=s.rhino_lat,
+                            longitude=s.rhino_lon, points=len(s.points)))
                 else:
                     flags = int(data.get('Flags', 0))
                     if flags != 0 and not (flags & 0x04000000):
-                        self.info_left.setText('Comandante fora do Rhino (a pé ou a bordo da nave).')
+                        self.info_left.setText(translate('MapperWindow', 'Commander is not in the SRV (on foot or aboard the ship).'))
                     else:
-                        self.info_left.setText('A aguardar posição do Rhino.')
+                        self.info_left.setText(translate('MapperWindow', 'Waiting for the Rhino position.'))
         except (OSError, ValueError, TypeError, AttributeError) as exc:
             self.status_valid = False
             self.retry_status = True
-            self.info_left.setText(f'A aguardar leitura válida de Status.json: {exc}')
+            self.info_left.setText(translate(
+                'MapperWindow', 'Waiting for a valid Status.json read: {error}').format(error=exc))
 
         # Mesmo sem telemetria nova, atualizar navegação e intermitência.
         self.refresh(redraw_map=changed)
@@ -1235,6 +1252,8 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName('Rhino Surface Mapper')
     app.setWindowIcon(QIcon(str(Path(__file__).resolve().parent/'assets'/'Rhino_App.svg')))
+    options = load_preferences(OPTIONS_PATH)
+    translator = install_translator(app, options.get('language'))
     window = MapperWindow()
     window.show()
     return app.exec()

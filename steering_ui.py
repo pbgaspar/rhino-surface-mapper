@@ -6,9 +6,10 @@ from datetime import datetime
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QShortcut, QKeySequence
 from PySide6.QtWidgets import QPushButton, QLabel, QMessageBox
-from steering import SteeringAssist
+from steering import SteeringAssist, STATUS_SLOWING, STATUS_WAITING
 from steering_input import SteeringInput
 from turn_trial import TurnTrial
+from i18n import translate
 
 
 class SteeringUI:
@@ -37,7 +38,7 @@ class SteeringUI:
         self.f8_down = False
         self.braking_until = 0
         self.navigation_arrivals = 0
-        self.assist_button = QPushButton('Ass. Direção [F8]')
+        self.assist_button = QPushButton(translate('SteeringUI', 'Steering assistance [F8]'))
         self.assist_button.clicked.connect(self.toggle_assistance)
         layout.addWidget(self.assist_button)
         self.assist_info = QLabel(self.steering_input.message)
@@ -62,13 +63,15 @@ class SteeringUI:
         self.steering_input.release()
         self.assist.reset_samples()
         self.assist.wait(reason)
-        self.assist_info.setText('Assistência em espera: '+reason)
-        self.overlay.set_assistance_notice('Assistência em espera: '+reason)
+        notice = translate('SteeringUI', 'Assistance paused: {reason}').format(
+            reason=self.assist.wait_reason)
+        self.assist_info.setText(notice)
+        self.overlay.set_assistance_notice(notice)
 
-    def stop_assistance(self, reason='Assistência desligada'):
+    def stop_assistance(self, reason='Assistance off'):
         self.assist_pending = 0
         self.braking_until = 0
-        self.assist.stop(reason)
+        self.assist.stop(translate('SteeringUI', reason))
         self.steering_input.release()
         self.turn_trial.finish(time.monotonic(),complete=False)
         self.turn_index = None
@@ -80,14 +83,17 @@ class SteeringUI:
         self.steering_input.load()
         if not self.steering_input.keys:
             self.assist_info.setText(self.steering_input.message)
-            QMessageBox.information(self,'Assistência de direção',self.steering_input.message)
+            QMessageBox.information(
+                self, translate('SteeringUI', 'Steering assistance'),
+                self.steering_input.message)
             return
         if not self.status_valid or not self.state.in_srv or (not self.direction_test and self.steering_target() is None):
-            self.assist_info.setText('Primeiro entra no Rhino; a assistência normal também exige um destino.')
+            self.assist_info.setText(translate(
+                'SteeringUI', 'Enter the SRV first; normal assistance also requires a target.'))
             return
         self.assist_context = (id(self.state),self.state.body_key,self.state.map_generation)
         self.assist_pending = time.monotonic()+10
-        self.assist.message = 'Assistência: aguarda foco no jogo'
+        self.assist.wait('Waiting for game focus')
         self.update_assistance()
 
     def update_assistance(self):
@@ -95,7 +101,8 @@ class SteeringUI:
         try:
             self._update_assistance()
         except (OSError, ValueError, TypeError, KeyError) as exc:
-            self.pause_assistance(f'Falha temporária: {exc}')
+            self.pause_assistance(translate(
+                'SteeringUI', 'Temporary failure: {error}').format(error=exc))
 
     def _update_assistance(self):
         now = time.monotonic()
@@ -112,39 +119,41 @@ class SteeringUI:
         arrived = arrivals != self.navigation_arrivals and context == self.assist_context
         self.navigation_arrivals = arrivals
         if arrived and self.assist.enabled:
-            self.stop_assistance('Destino atingido')
+            self.stop_assistance('Destination reached')
             if focused and self.status_valid and s.in_srv and self.steering_input.brake():
                 self.braking_until = now+3.0
         if self.braking_until:
             if (now >= self.braking_until or not focused or not self.status_valid
                     or not s.in_srv or self.steering_input.manual() is True):
-                self.stop_assistance('Assistência desligada: chegada concluída/interrompida')
+                self.stop_assistance('Assistance off: completed/interrupted arrival')
             else:
-                self.assist_info.setText('Destino atingido: a travar (S durante 3 s)')
-                self.overlay.set_assistance_notice('Destino atingido: a travar')
+                self.assist_info.setText(translate(
+                    'SteeringUI', 'Destination reached: braking (S for 3 s)'))
+                self.overlay.set_assistance_notice(translate(
+                    'SteeringUI', 'Destination reached: braking'))
                 return
         target = self.steering_target()
         if context != self.assist_context:
-            self.pause_assistance('Aguarda posição no mapa')
+            self.pause_assistance('Waiting for map position')
             self.assist.reset_samples()
             self.assist_context = context
         if self.assist.enabled or self.assist_pending:
             manual = self.steering_input.manual()
             if not self.direction_test and target is None:
-                self.stop_assistance('Assistência desligada: navegação/busca terminada')
+                self.stop_assistance('Assistance off: navigation/search ended')
             elif manual is True:
-                self.stop_assistance('Assistência desligada: direção manual')
+                self.stop_assistance('Assistance off: manual steering')
             elif not focused:
-                self.pause_assistance('Aguarda foco no jogo')
+                self.pause_assistance('Waiting for game focus')
                 return
             elif not self.status_valid or not s.in_srv:
-                self.pause_assistance('Aguarda posição válida no Rhino')
+                self.pause_assistance('Waiting for a valid SRV position')
                 return
             elif self.live_status.get('GuiFocus',0)!=0 or int(self.live_status.get('Flags',0)) & (1<<13):
-                self.pause_assistance('Aguarda fecho do painel/torre')
+                self.pause_assistance('Waiting for the panel/turret to close')
                 return
             elif manual is None:
-                self.pause_assistance('Aguarda leitura do joystick')
+                self.pause_assistance('Waiting for joystick input')
                 return
             elif self.steering_input.error:
                 self.pause_assistance(self.steering_input.error)
@@ -166,8 +175,8 @@ class SteeringUI:
                         if self.steering_input.error:
                             self.pause_assistance(self.steering_input.error)
                         else:
-                            self.assist.wait('Comando não enviado')
-                elif self.assist.message == 'Reduzir velocidade' or 'aguarda' in self.assist.message:
+                            self.assist.wait('Command not sent')
+                elif self.assist.status in (STATUS_SLOWING, STATUS_WAITING):
                     self.steering_input.release()
         if self.direction_test and self.assist.enabled and focused:
             elapsed = max(0,now-self.direction_test_started)
@@ -188,17 +197,19 @@ class SteeringUI:
             self.turn_trial.observe(self.assist.sample,motion[2] if motion else None)
             remaining = 2-offset if offset<2 else 7-offset
             direction = turn_direction if offset<2 else 0
-            label = ('ESQUERDA' if turn_direction<0 else 'DIREITA') if direction else 'EM FRENTE'
+            label = translate(
+                'SteeringUI',
+                'LEFT' if turn_direction < 0 else 'RIGHT') if direction else translate('SteeringUI', 'FORWARD')
             if direction:
                 if self.steering_input.hold_test(direction,remaining) is False:
-                    self.stop_assistance(self.steering_input.error or 'Teste interrompido: comando não enviado')
+                    self.stop_assistance(self.steering_input.error or 'Test interrupted: command not sent')
             else:
                 self.steering_input.release()
             if self.assist.enabled:
                 self.assist.message = f'{label} {math.ceil(remaining)} s · {self.turn_trial.summary()}'
         active = self.assist.enabled or bool(self.assist_pending)
         mode = 'teste' if self.direction_test else 'assistência'
-        self.assist_button.setText('Ass. Direção [F8]')
+        self.assist_button.setText(translate('SteeringUI', 'Steering assistance [F8]'))
         self.assist_button.setCheckable(True)
         self.assist_button.setChecked(active)
         detail = self.assist.message
@@ -206,17 +217,23 @@ class SteeringUI:
             def average(side):
                 value=self.turn_trial.mean(side)
                 return '—' if value is None else f'{value:.1f}º'.replace('.',',')
-            detail += f' | {self.turn_trial.summary()} | Esq. {average("esquerda")} | Dir. {average("direita")}'
+            detail += translate('SteeringUI', ' | {summary} | Left {left} | Right {right}').format(
+                summary=self.turn_trial.summary(), left=average('esquerda'), right=average('direita'))
             self.assist_info.setToolTip(str(self.turn_trial.path or ''))
         if active and not self.direction_test:
             speed = '—' if self.assist.speed is None else f'{self.assist.speed:.1f}'.replace('.',',')
             limit = f'{self.assist.speed_limit:.1f}'.replace('.',',')
-            detail += f' | Vel. estimada: {speed} m/s | Limite: {limit} m/s | Comandos enviados: {self.steering_input.sent_pulses}'
+            detail += translate(
+                'SteeringUI', ' | Estimated speed: {speed} m/s | Limit: {limit} m/s | Commands sent: {count}').format(
+                    speed=speed, limit=limit, count=self.steering_input.sent_pulses)
         self.assist_info.setText(detail if self.steering_input.keys else self.steering_input.message)
         notice = ''
         if active:
-            notice = 'Volta ao jogo para ativar' if self.assist_pending else (self.assist.message if self.direction_test else self.assist.overlay_text())
-        self.overlay.set_assistance_notice(notice)
+            notice = (translate('SteeringUI', 'Return to the game to activate')
+                      if self.assist_pending else
+                      (self.assist.message if self.direction_test else self.assist.overlay_text()))
+        self.overlay.set_assistance_notice(
+            notice, warning=self.assist.status == STATUS_SLOWING)
 
     def direction_test_active(self):
         return self.direction_test and (self.assist.enabled or bool(self.assist_pending))
@@ -226,7 +243,7 @@ class SteeringUI:
         s = self.state
         context = (id(s),s.body_key,s.map_generation)
         if context != self.assist_context:
-            self.pause_assistance('Aguarda posição no mapa')
+            self.pause_assistance('Waiting for map position')
             self.assist.reset_samples()
             self.assist_context = context
         if s.rhino_heading is not None:

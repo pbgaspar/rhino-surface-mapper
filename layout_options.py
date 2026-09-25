@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLineEdit, QFileDialog, QLabel, QColorDialog, QMessageBox, QSizePolicy, QFontComboBox, QStyleFactory, QAbstractSpinBox)
 from settings_persistence import (read_exported_settings, save_preferences,
                                   write_exported_settings)
+from i18n import SUPPORTED_LANGUAGES, normalize_language, translate
 
 
 OP_MAPS = 'maps'
@@ -28,11 +29,12 @@ THEME_SYSTEM = 'system'
 THEME_DARK = 'dark'
 THEME_LIGHT = 'light'
 THEME_LABELS = {
-    THEME_SYSTEM: 'Como o Windows',
+    THEME_SYSTEM: 'Windows system',
     THEME_DARK: 'Dark',
     THEME_LIGHT: 'Light',
 }
 THEME_LEGACY_VALUES = {label: value for value, label in THEME_LABELS.items()}
+THEME_LEGACY_VALUES['Como o Windows'] = THEME_SYSTEM
 
 
 def normalize_theme_value(value):
@@ -98,25 +100,25 @@ class LayoutOptions:
                 item = box.takeAt(0)
                 if item.widget():
                     item.widget().hide()
-        maps = QPushButton('Mapas')
+        maps = QPushButton(translate('LayoutOptions', 'Maps'))
         menu = QMenu(maps)
         # Esta é a barra efetivamente apresentada depois de aplicar o layout.
         # A ordem segue o menu de mapas definido para a utilização normal.
-        for title, callback in [('Abrir', self.load_map), ('Guardar', self.save_map),
-                                ('Novo', self.new_map), ('Ver e manter', self.show_map_library)]:
-            menu.addAction(title, callback)
+        for title, callback in [('Open', self.load_map), ('Save', self.save_map),
+                                ('New', self.new_map), ('View and manage', self.show_map_library)]:
+            menu.addAction(translate('LayoutOptions', title), callback)
         maps.setObjectName("maps_menu")
         maps.setMenu(menu)
         operations.addWidget(maps)
         self.op_buttons[OP_MAPS] = maps
         self.fixed_buttons.append((maps, 90))
-        for key, title in [(OP_MARK,'Marca'), (OP_MARK_DEPOSIT,'Depósito'), (OP_MARK_RIG,'Rig')]:
+        for key, title in [(OP_MARK,'Marker'), (OP_MARK_DEPOSIT,'Deposit'), (OP_MARK_RIG,'Rig')]:
             button = self.op_buttons[key]
-            button.setText(title)
+            button.setText(translate('LayoutOptions', title))
             button.show()
             operations.addWidget(button)
             self.fixed_buttons.append((button, 90))
-        self.options_button = QPushButton('Configurações')
+        self.options_button = QPushButton(translate('LayoutOptions', 'Options'))
         self.options_button.setCheckable(True)
         operations.addWidget(self.options_button)
         operations.addWidget(self.op_buttons[OP_EXIT])
@@ -146,7 +148,7 @@ class LayoutOptions:
         self.options_panel.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         panel = QWidget()
         panel_layout = QVBoxLayout(panel)
-        close = QPushButton('Fechar configurações ×')
+        close = QPushButton(translate('LayoutOptions', 'Close options ×'))
         close.clicked.connect(lambda: self.options_button.setChecked(False))
         panel_layout.addWidget(close)
         self.options_panel.setWidget(panel)
@@ -156,6 +158,7 @@ class LayoutOptions:
         self.options_button.toggled.connect(self.toggle_options_panel)
 
         def section(section_id, title):
+            title = translate('LayoutOptions', title)
             header = QToolButton()
             header.setText(title)
             header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -189,7 +192,7 @@ class LayoutOptions:
                 self.save_preference(key, value)
                 self.view.update()
             spin.valueChanged.connect(changed)
-            form.addRow(label, spin)
+            form.addRow(translate('LayoutOptions', label), spin)
             self.option_resets[theme].append(lambda: spin.setValue(default))
             return spin
 
@@ -217,7 +220,7 @@ class LayoutOptions:
                 if value.isValid():
                     apply(value.name())
             button.clicked.connect(choose)
-            form.addRow(label, button)
+            form.addRow(translate('LayoutOptions', label), button)
             self.option_resets[theme].append(lambda: apply(self.view.default_map_color(key) if key in ('map_background','grid_color') else default))
 
         for field, default in [('coverage_width_m',2000),('scanner_range_m',2000),('search_azimuth',0)]:
@@ -227,40 +230,40 @@ class LayoutOptions:
             if type(value) is int and spin.minimum() <= value <= spin.maximum():
                 spin.setValue(value)
             spin.valueChanged.connect(lambda value, field=field:self.save_preference(field,value))
-        form = section(SECTION_SEARCH, 'Busca e navegação')
-        for field, label in [('coverage_width_m','Cobertura'), ('search_azimuth','AZ Busca')]:
-            form.addRow(label, self.parameter_spins[field])
+        form = section(SECTION_SEARCH, 'Search and navigation')
+        for field, label in [('coverage_width_m','Coverage'), ('search_azimuth','Search bearing')]:
+            form.addRow(translate('LayoutOptions', label), self.parameter_spins[field])
             self.parameter_spins[field].show()
         self.option_resets[SECTION_SEARCH].extend([lambda:self.parameter_spins['coverage_width_m'].setValue(2000),lambda:self.search_azimuth_spin.setValue(0)])
         form = section(SECTION_RADAR, 'Radar')
         self.option_resets[SECTION_RADAR].append(lambda:self.parameter_spins['scanner_range_m'].setValue(2000))
-        form.addRow('Alcance do scanner', self.parameter_spins['scanner_range_m'])
+        form.addRow(translate('LayoutOptions', 'Scanner range'), self.parameter_spins['scanner_range_m'])
         self.parameter_spins['scanner_range_m'].show()
-        number(form,SECTION_RADAR,'Velocidade da onda','radar_speed',667,100,3000,lambda v: setattr(self.view.radar,'SPEED_M_S',v),' m/s')
-        color(form,SECTION_RADAR,'Cor da onda','wave_color','#69b574')
+        number(form,SECTION_RADAR,'Wave speed','radar_speed',667,100,3000,lambda v: setattr(self.view.radar,'SPEED_M_S',v),' m/s')
+        color(form,SECTION_RADAR,'Wave colour','wave_color','#69b574')
         form.addRow(self.radar_info)
         self.radar_info.show()
         self.radar_info.setWordWrap(True)
         form = section(SECTION_RHINO, 'Rhino')
-        number(form,SECTION_RHINO,'Tamanho','rhino_size',56,20,160,lambda v: setattr(self.view,'rhino_height',v),' px')
-        color(form,SECTION_RHINO,'Cor da blindagem','rhino_color','#e6ebf0')
-        form = section(SECTION_ASSIST, 'Assistência de direção')
-        number(form,SECTION_ASSIST,'Velocidade máxima estimada','assist_speed',15,15,40,lambda v:setattr(self.assist,'max_speed',v),' m/s')
-        number(form,SECTION_ASSIST,'Duração máxima base','assist_pulse_ms',800,200,1000,lambda v:setattr(self.assist,'max_pulse',v/1000),' ms')
-        number(form,SECTION_ASSIST,'Tolerância do rumo','assist_tolerance_deg',3,0,180,lambda v:setattr(self.assist,'tolerance',v),'°')
+        number(form,SECTION_RHINO,'Size','rhino_size',56,20,160,lambda v: setattr(self.view,'rhino_height',v),' px')
+        color(form,SECTION_RHINO,'Hull colour','rhino_color','#e6ebf0')
+        form = section(SECTION_ASSIST, 'Steering assistance')
+        number(form,SECTION_ASSIST,'Estimated maximum speed','assist_speed',15,15,40,lambda v:setattr(self.assist,'max_speed',v),' m/s')
+        number(form,SECTION_ASSIST,'Maximum base duration','assist_pulse_ms',800,200,1000,lambda v:setattr(self.assist,'max_pulse',v/1000),' ms')
+        number(form,SECTION_ASSIST,'Bearing tolerance','assist_tolerance_deg',3,0,180,lambda v:setattr(self.assist,'tolerance',v),'°')
         self.assist_info.setWordWrap(True)
         form.addRow(self.assist_info)
         self.assist_info.show()
-        form = section(SECTION_ED_PARAMETERS, 'Parâmetros ED')
+        form = section(SECTION_ED_PARAMETERS, 'Elite Dangerous parameters')
         group = QComboBox()
         group.addItems([chr(65+i) for i in range(26)])
         group.setCurrentIndex(self.scanner_group)
         group.currentIndexChanged.connect(lambda v: (setattr(self,'scanner_group',v),self.save_preference('scanner_group',v)))
-        form.addRow('Fire group do Mineral Scanner', group)
+        form.addRow(translate('LayoutOptions', 'Mineral Scanner fire group'), group)
         self.setting_fields['scanner_group'] = (group.currentIndex, group.setCurrentIndex, lambda v: type(v) is int and 0 <= v <= 25)
         path = QLineEdit(self.bindings_override)
-        path.setPlaceholderText('Perfil SRV automático')
-        form.addRow('Ficheiro de controlos', path)
+        path.setPlaceholderText(translate('LayoutOptions', 'Automatic SRV profile'))
+        form.addRow(translate('LayoutOptions', 'Bindings file'), path)
         def apply_bindings():
             self.bindings_override = path.text().strip()
             self.radar_input.load(self.bindings_override or None)
@@ -268,38 +271,56 @@ class LayoutOptions:
             self.save_preference('bindings_path', self.bindings_override)
         path.editingFinished.connect(apply_bindings)
         self.setting_fields['bindings_path'] = (path.text, lambda v:(path.setText(v),apply_bindings()), lambda v:isinstance(v,str))
-        choose = QPushButton('Escolher .binds')
+        choose = QPushButton(translate('LayoutOptions', 'Choose .binds'))
         def browse():
-            filename, _ = QFileDialog.getOpenFileName(self,'Controlos SRV',path.text(),'Bindings (*.binds)')
+            filename, _ = QFileDialog.getOpenFileName(self,translate('LayoutOptions', 'SRV controls'),path.text(),'Bindings (*.binds)')
             if filename:
                 path.setText(filename)
                 apply_bindings()
         choose.clicked.connect(browse)
         form.addRow(choose)
-        status = QPushButton('Escolher Status.json')
+        status = QPushButton(translate('LayoutOptions', 'Choose Status.json'))
         status.clicked.connect(self.choose_status)
         form.addRow(status)
         self.option_resets[SECTION_ED_PARAMETERS].extend([lambda:group.setCurrentIndex(0),lambda:(path.clear(),apply_bindings())])
-        form = section(SECTION_MAP, 'Mapa')
-        for label,key,default in [('Fundo','map_background','#ffffff'),('Grelha','grid_color','#eeeeee'),('Rasto','trail_color','#2f7d32'),('Cobertura','coverage_color','#8cbd8c')]:
+        form = section(SECTION_MAP, 'Map')
+        for label,key,default in [('Background','map_background','#ffffff'),('Grid','grid_color','#eeeeee'),('Trail','trail_color','#2f7d32'),('Coverage','coverage_color','#8cbd8c')]:
             color(form,SECTION_MAP,label,key,default)
-        number(form,SECTION_MAP,'Escala do texto','map_text_scale',100,75,175,lambda v:setattr(self.view,'text_scale',v/100),' %')
+        number(form,SECTION_MAP,'Text scale','map_text_scale',100,75,175,lambda v:setattr(self.view,'text_scale',v/100),' %')
         form = section(SECTION_OVERLAY, 'Overlay')
-        number(form,SECTION_OVERLAY,'Largura','overlay_width',360,240,900,lambda v:self.overlay.resize(v,round(v/self.overlay.aspect_ratio)),' px')
-        number(form,SECTION_OVERLAY,'Opacidade','overlay_opacity',100,25,100,lambda v:self.overlay.setWindowOpacity(v/100),' %')
+        number(form,SECTION_OVERLAY,'Width','overlay_width',360,240,900,lambda v:self.overlay.resize(v,round(v/self.overlay.aspect_ratio)),' px')
+        number(form,SECTION_OVERLAY,'Opacity','overlay_opacity',100,25,100,lambda v:self.overlay.setWindowOpacity(v/100),' %')
         form = section(SECTION_LAYOUT, 'Layout')
+        language = QComboBox()
+        for code, label in SUPPORTED_LANGUAGES.items():
+            language.addItem(translate('LayoutOptions', label), code)
+        language.setObjectName('language_selector')
+        language_value = normalize_language(self.preferences.get('language'))
+        language.setCurrentIndex(max(0, language.findData(language_value)))
+        language.currentIndexChanged.connect(
+            lambda _: self.save_preference('language', language.currentData()))
+        form.addRow(translate('LayoutOptions', 'Language'), language)
+        restart = QLabel(translate(
+            'LayoutOptions', 'Restart the application to apply the language change.'))
+        restart.setWordWrap(True)
+        form.addRow(restart)
+        self.setting_fields['language'] = (
+            language.currentData,
+            lambda value: language.setCurrentIndex(
+                max(0, language.findData(normalize_language(value)))),
+            lambda value: isinstance(value, str) and value in SUPPORTED_LANGUAGES)
         theme = QComboBox()
         for value, label in THEME_LABELS.items():
-            theme.addItem(label, value)
+            theme.addItem(translate('LayoutOptions', label), value)
         theme_value = normalize_theme_value(self.preferences.get('theme', THEME_SYSTEM)) or THEME_SYSTEM
         theme.setCurrentIndex(theme.findData(theme_value))
-        form.addRow('Tema',theme)
+        form.addRow(translate('LayoutOptions', 'Theme'),theme)
         self.setting_fields['theme'] = (theme.currentData, lambda v: theme.setCurrentIndex(max(0, theme.findData(normalize_theme_value(v) or v))), lambda v: normalize_theme_value(v) is not None)
         theme.currentIndexChanged.connect(lambda _: (self.apply_theme(theme.currentData()),self.save_preference('theme',theme.currentData())))
         self.option_resets[SECTION_LAYOUT].append(lambda: theme.setCurrentIndex(0))
         family = QFontComboBox()
         family.setCurrentFont(QFont(self.preferences.get('font_family','Segoe UI')))
-        form.addRow('Tipo de letra', family)
+        form.addRow(translate('LayoutOptions', 'Font family'), family)
         def set_font(value):
             font = QFont(self.font())
             font.setFamily(value.family())
@@ -314,18 +335,18 @@ class LayoutOptions:
             font = QFont(self.font())
             font.setPointSize(value)
             self.setFont(font)
-        number(form,SECTION_LAYOUT,'Tamanho da letra','font_size',9,8,11,font_size,' pt')
+        number(form,SECTION_LAYOUT,'Font size','font_size',9,8,11,font_size,' pt')
         self.option_resets[SECTION_LAYOUT].append(lambda:family.setCurrentFont(QFont('Segoe UI')))
-        number(form,SECTION_LAYOUT,'Largura do painel','panel_width',320,280,440,lambda v:self.options_panel.setFixedWidth(v),' px')
-        number(form,SECTION_LAYOUT,'Altura dos botões','button_height',34,28,44,self.resize_buttons,' px')
+        number(form,SECTION_LAYOUT,'Panel width','panel_width',320,280,440,lambda v:self.options_panel.setFixedWidth(v),' px')
+        number(form,SECTION_LAYOUT,'Button height','button_height',34,28,44,self.resize_buttons,' px')
         for section_id,(header,content) in self.option_sections.items():
             if self.option_resets[section_id]:
-                reset = QPushButton('Repor valores padrão')
+                reset = QPushButton(translate('LayoutOptions', 'Reset to defaults'))
                 reset.clicked.connect(lambda checked=False,section_id=section_id:[callback() for callback in self.option_resets[section_id]])
                 content.layout().addRow(reset)
         actions = QHBoxLayout()
-        for title, callback in [('Guardar',self.export_settings),('Carregar',self.import_settings),('Repor',self.reset_settings)]:
-            button = QPushButton(title)
+        for title, callback in [('Save',self.export_settings),('Load',self.import_settings),('Reset',self.reset_settings)]:
+            button = QPushButton(translate('LayoutOptions', title))
             button.setFixedSize(78,34)
             button.clicked.connect(callback)
             actions.addWidget(button)
@@ -345,17 +366,23 @@ class LayoutOptions:
         QApplication.styleHints().colorSchemeChanged.connect(self.system_theme_changed)
 
     def export_settings(self):
-        filename, _ = QFileDialog.getSaveFileName(self,'Guardar configurações','Rhino-configuracoes.json','Configurações (*.json)')
+        filename, _ = QFileDialog.getSaveFileName(
+            self, translate('LayoutOptions', 'Save settings'),
+            'Rhino-configuracoes.json', translate('LayoutOptions', 'Settings (*.json)'))
         if not filename:
             return
         data = {key:getter() for key,(getter,_,_) in self.setting_fields.items()}
         try:
             write_exported_settings(filename, data)
         except OSError as exc:
-            QMessageBox.warning(self,'Configurações',f'Não foi possível guardar: {exc}')
+            QMessageBox.warning(
+                self, translate('LayoutOptions', 'Settings'),
+                translate('LayoutOptions', 'Could not save settings: {error}').format(error=exc))
 
     def import_settings(self):
-        filename, _ = QFileDialog.getOpenFileName(self,'Carregar configurações','','Configurações (*.json)')
+        filename, _ = QFileDialog.getOpenFileName(
+            self, translate('LayoutOptions', 'Load settings'), '',
+            translate('LayoutOptions', 'Settings (*.json)'))
         if not filename:
             return
         try:
@@ -364,7 +391,9 @@ class LayoutOptions:
                 if key not in self.setting_fields or not self.setting_fields[key][2](value):
                     raise ValueError(f'Configuração inválida: {key}')
         except (OSError,ValueError,TypeError) as exc:
-            QMessageBox.warning(self,'Configurações',f'Não foi possível carregar: {exc}')
+            QMessageBox.warning(
+                self, translate('LayoutOptions', 'Settings'),
+                translate('LayoutOptions', 'Could not load settings: {error}').format(error=exc))
             return
         self.loading_settings = True
         try:
@@ -416,7 +445,8 @@ class LayoutOptions:
         try:
             save_preferences(self.options_path, self.preferences)
         except OSError as exc:
-            self.statusBar().showMessage(f'Não foi possível guardar as configurações: {exc}')
+            self.statusBar().showMessage(translate(
+                'LayoutOptions', 'Could not save settings: {error}').format(error=exc))
 
     def apply_theme(self, theme):
         dark = _theme_is_dark(theme, QApplication.styleHints().colorScheme())

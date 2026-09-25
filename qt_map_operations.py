@@ -845,7 +845,9 @@ class MapOperations:
             return
         s = self.state
         if s.rhino_lat is None or s.center_lat is None:
-            QMessageBox.information(self,'Depósito','Primeiro entra no Rhino.')
+            QMessageBox.information(
+                self, translate('MapperWindow', 'Deposit'),
+                translate('MapperWindow', 'Enter the Rhino first.'))
             return
         lat, lon = s.rhino_lat, s.rhino_lon
         body_key = s.body_key
@@ -855,7 +857,9 @@ class MapOperations:
             # de comparar graus diretamente ou usar a escala visual do mapa.
             a = math.sin(dlat/2)**2 + math.cos(math.radians(lat))*math.cos(math.radians(deposit['lat']))*math.sin(dlon/2)**2
             if 2*s.radius*math.asin(min(1,math.sqrt(a))) < 80:
-                QMessageBox.information(self,'Depósito já marcado','Já existe um depósito a menos de 80 m.')
+                QMessageBox.information(
+                    self, translate('MapperWindow', 'Deposit already marked'),
+                    translate('MapperWindow', 'A deposit already exists within 80 m.'))
                 return
         values = self.edit_deposit_values()
         # Telemetria pode mudar durante o diálogo modal.

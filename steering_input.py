@@ -10,6 +10,7 @@ import threading
 import time
 import xml.etree.ElementTree as ET
 from radar_input import virtual_key, JoyCaps, JoyInfo
+from i18n import translate
 
 
 class KeyInput(C.Structure):
@@ -43,7 +44,7 @@ class SteeringInput:
         self.physical = set()
         self.manual_pressed = False
         self.axis = None
-        self.message = 'Direção por configurar'
+        self.message = translate('SteeringInput', 'Steering is not configured')
         self.held = None
         self.deadline = 0
         self.window = None
@@ -80,7 +81,7 @@ class SteeringInput:
         self.hook_thread.start()
         self.hook_ready.wait(1)
         if not self.hook:
-            self.message = 'Observação da direção indisponível no Windows'
+            self.message = translate('SteeringInput', 'Steering observation is unavailable on Windows')
             return
         self.thread = threading.Thread(target=self.watch_release, daemon=True)
         self.thread.start()
@@ -122,31 +123,31 @@ class SteeringInput:
         self.sent_pulses = 0
         try:
             if not self.hook or not self.radar.path:
-                raise ValueError('Observação da direção ou perfil indisponível')
+                raise ValueError(translate('SteeringInput', 'Steering observation or profile unavailable'))
             root = ET.parse(self.radar.path).getroot()
             keys = {}
             for direction, tag in ((-1, 'SteerLeftButton'), (1, 'SteerRightButton')):
                 action = root.find(tag)
                 if action is None:
-                    raise ValueError(f'Falta {tag} no perfil')
+                    raise ValueError(translate('SteeringInput', 'Missing {tag} in profile').format(tag=tag))
                 for item in action:
                     if item.get('Device') in (None, '{NoDevice}'):
                         continue
                     vk = virtual_key(item.get('Device'), item.get('Key', ''))
                     if item.get('Device') != 'Keyboard' or vk is None or item.find('Modifier') is not None:
-                        raise ValueError('Direção por botões: usar teclas simples, sem modificadores')
+                        raise ValueError(translate('SteeringInput', 'Button steering requires plain keys without modifiers'))
                     self.monitored.add(vk)
                     keys.setdefault(direction, vk)
             if len(keys)!=2 or keys[-1]==keys[1]:
-                raise ValueError('Associar F6 a virar à esquerda e F7 a virar à direita nos controlos SRV')
+                raise ValueError(translate('SteeringInput', 'Bind F6 to steer left and F7 to steer right in the SRV controls'))
             if 0x77 in keys.values():
-                raise ValueError('F8 está reservado para ligar/desligar a assistência')
+                raise ValueError(translate('SteeringInput', 'F8 is reserved to toggle assistance'))
             for item in root.iter():
                 if item.get('Device') == 'Keyboard' and item.get('Key') == 'Key_F8':
-                    raise ValueError('F8 já está associado no jogo; libertar F8 antes de usar assistência')
+                    raise ValueError(translate('SteeringInput', 'F8 is already bound in the game; unbind F8 before using assistance'))
             mouse = root.find('MouseBuggySteeringXMode')
             if mouse is not None and mouse.get('Value') not in (None, '', '0'):
-                raise ValueError('Direção pelo rato ainda não suportada pela assistência')
+                raise ValueError(translate('SteeringInput', 'Mouse steering is not yet supported by assistance'))
             binding = root.find('SteeringAxis/Binding')
             if binding is not None and binding.get('Device') not in (None, '{NoDevice}'):
                 index = self.radar.joystick_id(binding.get('Device'))
@@ -164,17 +165,17 @@ class SteeringInput:
                 axis = {'Joy_XAxis':'x','Joy_YAxis':'y','Joy_ZAxis':'z',
                         'Joy_RZAxis':'r'}.get(binding.get('Key'))
                 if index is None or axis is None:
-                    raise ValueError('Não foi possível observar o eixo de direção; assistência indisponível')
+                    raise ValueError(translate('SteeringInput', 'Unable to observe the steering axis; assistance unavailable'))
                 caps = JoyCaps()
                 if self.radar.winmm.joyGetDevCapsW(index,C.byref(caps),C.sizeof(caps)):
-                    raise ValueError('Falha ao ler limites do eixo de direção')
+                    raise ValueError(translate('SteeringInput', 'Unable to read steering axis limits'))
                 low, high = getattr(caps,axis+'min'), getattr(caps,axis+'max')
                 if high<=low:
-                    raise ValueError('Limites de direção inválidos')
+                    raise ValueError(translate('SteeringInput', 'Invalid steering limits'))
                 self.axis = (index, axis, low, high)
             self.keys = keys
             self.physical = {vk for vk in self.monitored if self.radar.user.GetAsyncKeyState(vk)&0x8000}
-            self.message = 'F8: ligar/desligar · direção manual: desligar'
+            self.message = translate('SteeringInput', 'F8: toggle · manual steering: off')
             self.error = ''
         except (OSError, ValueError, ET.ParseError) as exc:
             self.message = str(exc)
@@ -197,11 +198,11 @@ class SteeringInput:
     def send(self, vk, up=False):
         scan = self.user.MapVirtualKeyW(vk, 0)
         if not scan:
-            raise OSError('Tecla de direção sem scan code')
+            raise OSError(translate('SteeringInput', 'Steering key has no scan code'))
         flags = 0x8 | (0x2 if up else 0) | (0x1 if vk in (33,34,35,36,37,38,39,40,45,46) else 0)
         item = Input(type=1, value=InputUnion(keyboard=KeyInput(0,scan,flags,0,0)))
         if self.user.SendInput(1,C.byref(item),C.sizeof(item))!=1:
-            raise OSError('Windows não aceitou o comando de direção')
+            raise OSError(translate('SteeringInput', 'Windows rejected the steering command'))
 
     def pulse(self, direction, duration):
         with self.lock:

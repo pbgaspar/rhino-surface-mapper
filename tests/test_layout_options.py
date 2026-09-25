@@ -46,15 +46,15 @@ class LayoutTests(unittest.TestCase):
         self.app.processEvents()
         self.assertEqual(w.view.width(),width)
         menu = w.findChild(QPushButton,'maps_menu').menu()
-        self.assertEqual([a.text() for a in menu.actions()],['Abrir','Guardar','Novo','Ver e manter'])
+        self.assertEqual([a.text() for a in menu.actions()],['Open','Save','New','View and manage'])
         maps = w.findChildren(QPushButton, 'maps_menu')
         self.assertEqual(len(maps), 1)
         self.assertIs(w.op_buttons[OP_MAPS], maps[0])
         self.assertTrue(maps[0].isVisible())
         self.assertEqual(len([button for button in w.findChildren(QPushButton)
-                              if button.text() == 'Configurações']), 1)
+                              if button.text() == 'Options']), 1)
         self.assertEqual(len([button for button in w.findChildren(QPushButton)
-                              if button.text() == 'Escolher Status.json']), 1)
+                              if button.text() == 'Choose Status.json']), 1)
 
     def test_preferences_preserve_existing_keys(self):
         w = self.window
@@ -193,6 +193,17 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(w.theme_selector.currentData(), THEME_SYSTEM)
         self.assertTrue(w.setting_fields['theme'][2]('Como o Windows'))
         self.assertTrue(w.setting_fields['theme'][2](THEME_LIGHT))
+
+    def test_language_selector_uses_stable_codes_and_persists_selection(self):
+        from PySide6.QtWidgets import QComboBox
+        w = self.window
+        selector = w.options_panel.findChild(QComboBox, 'language_selector')
+        self.assertIsNotNone(selector)
+        self.assertEqual(selector.findData('en_GB') >= 0, True)
+        self.assertEqual(selector.findData('pt_PT') >= 0, True)
+        selector.setCurrentIndex(selector.findData('pt_PT'))
+        self.assertEqual(selector.currentData(), 'pt_PT')
+        self.assertEqual(json.loads(w.options_path.read_text(encoding='utf-8'))['language'], 'pt_PT')
 
     def test_legacy_persisted_theme_loads_as_system_theme(self):
         from unittest.mock import patch

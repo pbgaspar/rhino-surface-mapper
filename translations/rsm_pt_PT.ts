@@ -176,6 +176,46 @@
         <message><source>Rigs: {count}</source><translation>Rigs: {count}</translation></message>
         <message><source>Latitude: {latitude}°</source><translation>Latitude: {latitude}°</translation></message>
         <message><source>Longitude: {longitude}°</source><translation>Longitude: {longitude}°</translation></message>
+        <message><source>Rhino Surface Mapper</source><translation>Rhino Surface Mapper</translation></message>
+        <message><source>Mark deposit</source><translation>Marcar depósito</translation></message>
+        <message><source>Mark rig</source><translation>Marcar rig</translation></message>
+        <message><source>Exit</source><translation>Sair</translation></message>
+        <message><source>Centre</source><translation>Centrar</translation></message>
+        <message><source>Initial bearing for the next search: 000=North, 090=East, 180=South, 270=West.</source><translation>Azimute inicial da próxima busca: 000=Norte, 090=Este, 180=Sul, 270=Oeste.</translation></message>
+        <message><source>Start search</source><translation>Iniciar busca</translation></message>
+        <message><source>Stop search</source><translation>Terminar busca</translation></message>
+        <message><source>Skip next</source><translation>Saltar próximo</translation></message>
+        <message><source>Search paused</source><translation>Busca em pausa</translation></message>
+        <message><source>Waiting for Status.json</source><translation>A aguardar Status.json</translation></message>
+        <message><source>Radar: waiting for the game</source><translation>Radar: a aguardar o jogo</translation></message>
+        <message><source>Radar: waiting for map change</source><translation>Radar: a aguardar mudança de mapa</translation></message>
+        <message><source>Suggested sec.: —</source><translation>Sec. sugerido: —</translation></message>
+        <message><source>Map: not saved yet</source><translation>Mapa: ainda não guardado</translation></message>
+        <message><source>Map not saved yet</source><translation>Mapa ainda não guardado</translation></message>
+        <message><source>Waiting for map change</source><translation>A aguardar mudança de mapa</translation></message>
+        <message><source>Navigating: {system} | {body} | {target}</source><translation>A navegar: {system} | {body} | {target}</translation></message>
+        <message><source>Returning to pause point | {system} | {body}</source><translation>A regressar ao ponto de pausa | {system} | {body}</translation></message>
+        <message><source>Circular search completed</source><translation>Procura circular concluída</translation></message>
+        <message><source>Suggested sec.: {system} | {body}</source><translation>Sec. sugerido: {system} | {body}</translation></message>
+        <message><source>Commander is not in the SRV (on foot or aboard the ship).</source><translation>O comandante não está no SRV (a pé ou a bordo da nave).</translation></message>
+        <message><source>Waiting for the Rhino position.</source><translation>A aguardar a posição do Rhino.</translation></message>
+        <message><source>Waiting for a valid Status.json read: {error}</source><translation>A aguardar uma leitura válida de Status.json: {error}</translation></message>
+        <message><source>Radar: controls unavailable — check Options</source><translation>Radar: controlos indisponíveis — ver Opções</translation></message>
+        <message><source>Radar: pulse in progress</source><translation>Radar: pulso em curso</translation></message>
+        <message><source>Radar: ready</source><translation>Radar: pronto</translation></message>
+        <message><source>Radar: waiting for a valid SRV position</source><translation>Radar: aguarda posição válida do SRV</translation></message>
+        <message><source>Radar: waiting for game focus</source><translation>Radar: aguarda foco no jogo</translation></message>
+        <message><source>Radar: select Analysis Mode</source><translation>Radar: selecionar Analysis Mode</translation></message>
+        <message><source>Radar: select group {group}</source><translation>Radar: selecionar grupo {group}</translation></message>
+        <message><source>Radar: close the game panel</source><translation>Radar: fechar o painel do jogo</translation></message>
+        <message><source>Replace the current Datum?</source><translation>Substituir o Datum atual?</translation></message>
+        <message><source>Enter the SRV first and wait for its position.</source><translation>Primeiro entre no SRV e aguarde a posição.</translation></message>
+        <message><source>Stop the current search?</source><translation>Terminar o modo de busca atual?</translation></message>
+        <message><source>Search resumed.</source><translation>Busca retomada.</translation></message>
+        <message><source>{system} — {body} | Map loaded; Rhino on another body</source><translation>{system} — {body} | Mapa carregado; Rhino noutro corpo</translation></message>
+        <message><source>{system} — {body} | Lat {latitude:.5f}° Lon {longitude:.5f}° | Points {points}</source><translation>{system} — {body} | Lat {latitude:.5f}° Lon {longitude:.5f}° | Pontos {points}</translation></message>
+        <message><source>Deposit already marked</source><translation>Depósito já marcado</translation></message>
+        <message><source>A deposit already exists within 80 m.</source><translation>Já existe um depósito a menos de 80 m.</translation></message>
     </context>
     <context>
         <name>MarkDialog</name>
@@ -186,5 +226,150 @@
         <message><source>Distance from Rhino:</source><translation>Distância ao Rhino:</translation></message>
         <message><source>0° North · 90° East · 180° South · 270° West</source><translation>0° Norte · 90° Este · 180° Sul · 270° Oeste</translation></message>
         <message><source>Original distance exceeds 99,999 m. It will be preserved unless this field is changed.</source><translation>A distância original excede 99 999 m. Será conservada se não alterar este campo.</translation></message>
+    </context>
+    <context>
+        <name>LayoutOptions</name>
+        <message><source>Windows system</source><translation>Como o Windows</translation></message>
+        <message><source>Maps</source><translation>Mapas</translation></message>
+        <message><source>Marker</source><translation>Marca</translation></message>
+        <message><source>Deposit</source><translation>Depósito</translation></message>
+        <message><source>Rig</source><translation>Rig</translation></message>
+        <message><source>Open</source><translation>Abrir</translation></message>
+        <message><source>Save</source><translation>Guardar</translation></message>
+        <message><source>New</source><translation>Novo</translation></message>
+        <message><source>View and manage</source><translation>Ver e gerir</translation></message>
+        <message><source>Options</source><translation>Opções</translation></message>
+        <message><source>Close options ×</source><translation>Fechar opções ×</translation></message>
+        <message><source>Search and navigation</source><translation>Busca e navegação</translation></message>
+        <message><source>Coverage</source><translation>Cobertura</translation></message>
+        <message><source>Search bearing</source><translation>Azimute da busca</translation></message>
+        <message><source>Scanner range</source><translation>Alcance do scanner</translation></message>
+        <message><source>Wave speed</source><translation>Velocidade da onda</translation></message>
+        <message><source>Wave colour</source><translation>Cor da onda</translation></message>
+        <message><source>Size</source><translation>Tamanho</translation></message>
+        <message><source>Hull colour</source><translation>Cor da blindagem</translation></message>
+        <message><source>Steering assistance</source><translation>Assistência de direção</translation></message>
+        <message><source>Estimated maximum speed</source><translation>Velocidade máxima estimada</translation></message>
+        <message><source>Maximum base duration</source><translation>Duração máxima base</translation></message>
+        <message><source>Bearing tolerance</source><translation>Tolerância do rumo</translation></message>
+        <message><source>Elite Dangerous parameters</source><translation>Parâmetros de Elite Dangerous</translation></message>
+        <message><source>Mineral Scanner fire group</source><translation>Grupo de disparo do Mineral Scanner</translation></message>
+        <message><source>Automatic SRV profile</source><translation>Perfil SRV automático</translation></message>
+        <message><source>Bindings file</source><translation>Ficheiro de controlos</translation></message>
+        <message><source>Choose .binds</source><translation>Escolher .binds</translation></message>
+        <message><source>SRV controls</source><translation>Controlos SRV</translation></message>
+        <message><source>Choose Status.json</source><translation>Escolher Status.json</translation></message>
+        <message><source>Map</source><translation>Mapa</translation></message>
+        <message><source>Background</source><translation>Fundo</translation></message>
+        <message><source>Grid</source><translation>Grelha</translation></message>
+        <message><source>Trail</source><translation>Rasto</translation></message>
+        <message><source>Text scale</source><translation>Escala do texto</translation></message>
+        <message><source>Width</source><translation>Largura</translation></message>
+        <message><source>Opacity</source><translation>Opacidade</translation></message>
+        <message><source>Theme</source><translation>Tema</translation></message>
+        <message><source>Font family</source><translation>Tipo de letra</translation></message>
+        <message><source>Font size</source><translation>Tamanho da letra</translation></message>
+        <message><source>Panel width</source><translation>Largura do painel</translation></message>
+        <message><source>Button height</source><translation>Altura dos botões</translation></message>
+        <message><source>Reset to defaults</source><translation>Repor valores padrão</translation></message>
+        <message><source>Load</source><translation>Carregar</translation></message>
+        <message><source>Reset</source><translation>Repor</translation></message>
+        <message><source>English (United Kingdom)</source><translation>Inglês (Reino Unido)</translation></message>
+        <message><source>Português (Portugal)</source><translation>Português (Portugal)</translation></message>
+        <message><source>Language</source><translation>Idioma</translation></message>
+        <message><source>Restart the application to apply the language change.</source><translation>Reinicie a aplicação para aplicar a alteração de idioma.</translation></message>
+        <message><source>Save settings</source><translation>Guardar configurações</translation></message>
+        <message><source>Load settings</source><translation>Carregar configurações</translation></message>
+        <message><source>Settings (*.json)</source><translation>Configurações (*.json)</translation></message>
+        <message><source>Settings</source><translation>Configurações</translation></message>
+        <message><source>Could not save settings: {error}</source><translation>Não foi possível guardar as configurações: {error}</translation></message>
+        <message><source>Could not load settings: {error}</source><translation>Não foi possível carregar as configurações: {error}</translation></message>
+    </context>
+    <context>
+        <name>MapView</name>
+        <message><source>Cursor: —</source><translation>Cursor: —</translation></message>
+        <message><source>Cursor: {latitude:.5f}°, {longitude:.5f}°</source><translation>Cursor: {latitude:.5f}°, {longitude:.5f}°</translation></message>
+        <message><source> | Distance: {distance:.0f} m | Bearing: {bearing:03.0f}°</source><translation> | Dist.: {distance:.0f} m | Azimute: {bearing:03.0f}°</translation></message>
+        <message><source>Enter the SRV to start mapping.</source><translation>Entre no SRV para começar o mapa.</translation></message>
+        <message><source>NEXT</source><translation>PRÓXIMO</translation></message>
+        <message><source>Rig</source><translation>Rig</translation></message>
+        <message><source>PAUSED</source><translation>PAUSA</translation></message>
+        <message><source>System and body: —</source><translation>Sistema e planeta: —</translation></message>
+        <message><source>Grid: {step:g} m</source><translation>Grelha: {step:g} m</translation></message>
+    </context>
+    <context>
+        <name>SteeringAssist</name>
+        <message><source>Assistance off</source><translation>Assistência desligada</translation></message>
+        <message><source>Waiting for fresh data</source><translation>Aguarda dados novos</translation></message>
+        <message><source>Assistance: waiting for fresh data</source><translation>Assistência: aguarda dados novos</translation></message>
+        <message><source>Assistance: {reason}</source><translation>Assistência: {reason}</translation></message>
+        <message><source>Reduce speed · unstable heading</source><translation>Reduzir velocidade · rumo instável</translation></message>
+        <message><source>Reduce speed · up to {speed:.1f} m/s</source><translation>Reduzir velocidade · até {speed:.1f} m/s</translation></message>
+        <message><source>Correcting right</source><translation>A corrigir à direita</translation></message>
+        <message><source>Correcting left</source><translation>A corrigir à esquerda</translation></message>
+        <message><source>Assistance: on course</source><translation>Assistência: no rumo</translation></message>
+        <message><source>Easing steering</source><translation>A aliviar direção</translation></message>
+        <message><source>Waiting for fresh telemetry</source><translation>Aguarda telemetria nova</translation></message>
+        <message><source>Waiting for steering response</source><translation>Aguarda resposta da direção</translation></message>
+        <message><source>Waiting for a second sample</source><translation>Aguarda segunda amostra</translation></message>
+        <message><source>Waiting for regular samples</source><translation>Aguarda amostras regulares</translation></message>
+        <message><source>Waiting for a new position</source><translation>Aguarda nova posição</translation></message>
+        <message><source>Speed above the limit</source><translation>Velocidade acima do limite</translation></message>
+        <message><source>Reduce speed</source><translation>Reduzir velocidade</translation></message>
+        <message><source>Waiting for heading/position stability</source><translation>Aguarda estabilidade do rumo/posição</translation></message>
+        <message><source>Waiting for movement</source><translation>Aguarda movimento</translation></message>
+        <message><source>Waiting for steady forward motion</source><translation>Aguarda marcha à frente estável</translation></message>
+        <message><source>Assistance: correcting right</source><translation>Assistência: correção à direita</translation></message>
+        <message><source>Assistance: correcting left</source><translation>Assistência: correção à esquerda</translation></message>
+    </context>
+    <context>
+        <name>SteeringUI</name>
+        <message><source>Steering assistance [F8]</source><translation>Assistência de direção [F8]</translation></message>
+        <message><source>Assistance paused: {reason}</source><translation>Assistência em espera: {reason}</translation></message>
+        <message><source>Enter the SRV first; normal assistance also requires a target.</source><translation>Primeiro entre no Rhino; a assistência normal também exige um destino.</translation></message>
+        <message><source>Destination reached</source><translation>Destino atingido</translation></message>
+        <message><source>Assistance off: completed/interrupted arrival</source><translation>Assistência desligada: chegada concluída/interrompida</translation></message>
+        <message><source>Destination reached: braking (S for 3 s)</source><translation>Destino atingido: a travar (S durante 3 s)</translation></message>
+        <message><source>Destination reached: braking</source><translation>Destino atingido: a travar</translation></message>
+        <message><source>Waiting for map position</source><translation>Aguarda posição no mapa</translation></message>
+        <message><source>Assistance off: navigation/search ended</source><translation>Assistência desligada: navegação/busca terminada</translation></message>
+        <message><source>Assistance off: manual steering</source><translation>Assistência desligada: direção manual</translation></message>
+        <message><source>Waiting for game focus</source><translation>Aguarda foco no jogo</translation></message>
+        <message><source>Waiting for a valid SRV position</source><translation>Aguarda posição válida no Rhino</translation></message>
+        <message><source>Waiting for the panel/turret to close</source><translation>Aguarda fecho do painel/torre</translation></message>
+        <message><source>Waiting for joystick input</source><translation>Aguarda leitura do joystick</translation></message>
+        <message><source>Command not sent</source><translation>Comando não enviado</translation></message>
+        <message><source>LEFT</source><translation>ESQUERDA</translation></message>
+        <message><source>RIGHT</source><translation>DIREITA</translation></message>
+        <message><source>FORWARD</source><translation>EM FRENTE</translation></message>
+        <message><source>Test interrupted: command not sent</source><translation>Teste interrompido: comando não enviado</translation></message>
+        <message><source> | {summary} | Left {left} | Right {right}</source><translation> | {summary} | Esq. {left} | Dir. {right}</translation></message>
+        <message><source> | Estimated speed: {speed} m/s | Limit: {limit} m/s | Commands sent: {count}</source><translation> | Vel. estimada: {speed} m/s | Limite: {limit} m/s | Comandos enviados: {count}</translation></message>
+        <message><source>Return to the game to activate</source><translation>Volta ao jogo para ativar</translation></message>
+        <message><source>Temporary failure: {error}</source><translation>Falha temporária: {error}</translation></message>
+        <message><source>Steering assistance</source><translation>Assistência de direção</translation></message>
+    </context>
+    <context>
+        <name>SteeringInput</name>
+        <message><source>Steering is not configured</source><translation>Direção por configurar</translation></message>
+        <message><source>Steering observation is unavailable on Windows</source><translation>Observação da direção indisponível no Windows</translation></message>
+        <message><source>F8: toggle · manual steering: off</source><translation>F8: ligar/desligar · direção manual: desligar</translation></message>
+        <message><source>Steering observation or profile unavailable</source><translation>Observação da direção ou perfil indisponível</translation></message>
+        <message><source>Missing {tag} in profile</source><translation>Falta {tag} no perfil</translation></message>
+        <message><source>Button steering requires plain keys without modifiers</source><translation>Direção por botões: usar teclas simples, sem modificadores</translation></message>
+        <message><source>Bind F6 to steer left and F7 to steer right in the SRV controls</source><translation>Associar F6 a virar à esquerda e F7 a virar à direita nos controlos SRV</translation></message>
+        <message><source>F8 is reserved to toggle assistance</source><translation>F8 está reservado para ligar/desligar a assistência</translation></message>
+        <message><source>F8 is already bound in the game; unbind F8 before using assistance</source><translation>F8 já está associado no jogo; libertar F8 antes de usar assistência</translation></message>
+        <message><source>Mouse steering is not yet supported by assistance</source><translation>Direção pelo rato ainda não suportada pela assistência</translation></message>
+        <message><source>Unable to observe the steering axis; assistance unavailable</source><translation>Não foi possível observar o eixo de direção; assistência indisponível</translation></message>
+        <message><source>Unable to read steering axis limits</source><translation>Falha ao ler limites do eixo de direção</translation></message>
+        <message><source>Invalid steering limits</source><translation>Limites de direção inválidos</translation></message>
+        <message><source>Steering key has no scan code</source><translation>Tecla de direção sem scan code</translation></message>
+        <message><source>Windows rejected the steering command</source><translation>Windows não aceitou o comando de direção</translation></message>
+    </context>
+    <context>
+        <name>TurnTrial</name>
+        <message><source>No turns measured</source><translation>Sem guinadas medidas</translation></message>
+        <message><source>Average {value:.1f}º · {count} turns</source><translation>Média {value:.1f}º · {count} guinadas</translation></message>
     </context>
 </TS>

@@ -7,6 +7,7 @@ import csv
 import math
 from datetime import datetime, timezone
 from steering import angle_delta
+from i18n import translate
 
 
 class TurnTrial:
@@ -70,4 +71,8 @@ class TurnTrial:
     def summary(self):
         value=self.mean()
         count=sum(r['valida'] for r in self.rows)
-        return f'Média {value:.1f}º · {count} guinadas'.replace('.',',') if value is not None else 'Sem guinadas medidas'
+        if value is None:
+            return translate('TurnTrial', 'No turns measured')
+        summary = translate('TurnTrial', 'Average {value:.1f}º · {count} turns').format(
+            value=value, count=count)
+        return summary.replace('.', ',')

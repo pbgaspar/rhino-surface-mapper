@@ -4,6 +4,16 @@ Os limites são de ensaio, não um modelo da dinâmica do veículo. Uma decisão
 consome uma amostra nova; a mesma posição/rumo nunca gera toques repetidos.
 """
 import math
+from i18n import translate
+
+
+STATUS_STOPPED = 'stopped'
+STATUS_WAITING = 'waiting'
+STATUS_SLOWING = 'slowing'
+STATUS_CORRECTING = 'correcting'
+STATUS_ON_COURSE = 'on_course'
+STATUS_EASING = 'easing'
+WAIT_UNSTABLE_HEADING = 'unstable_heading'
 
 
 def angle_delta(a, b):
@@ -17,7 +27,10 @@ class SteeringAssist:
         self.max_speed = max_speed
         self.max_pulse = max_pulse
         self.enabled = False
-        self.message = 'Assistência desligada'
+        self.status = STATUS_STOPPED
+        self.wait_code = None
+        self.correction_direction = 0
+        self.message = translate('SteeringAssist', 'Assistance off')
         self.previous = None
         self.sample = None
         self.consumed = None
@@ -29,11 +42,14 @@ class SteeringAssist:
         self.speed_limit = max_speed
         self.error_degrees = None
         self.interval = None
-        self.wait_reason = 'Aguarda dados novos'
+        self.wait_reason = translate('SteeringAssist', 'Waiting for fresh data')
 
-    def stop(self, reason='Assistência desligada'):
+    def stop(self, reason=None):
         self.enabled = False
-        self.message = reason
+        self.status = STATUS_STOPPED
+        self.wait_code = None
+        self.correction_direction = 0
+        self.message = reason if reason is not None else translate('SteeringAssist', 'Assistance off')
 
     def reset_samples(self):
         self.previous = self.sample = self.consumed = None
@@ -68,26 +84,34 @@ class SteeringAssist:
         self.enabled = True
         self.wait_until = self.command_end = 0
         self.consumed = self.sample  # aguardar informação posterior à ativação
-        self.message = 'Assistência: aguarda dados novos'
-        self.wait_reason = 'Aguarda dados novos'
+        self.message = translate('SteeringAssist', 'Assistance: waiting for fresh data')
+        self.wait_reason = translate('SteeringAssist', 'Waiting for fresh data')
+        self.status = STATUS_WAITING
+        self.wait_code = None
+        self.correction_direction = 0
 
-    def wait(self, reason):
-        self.wait_reason = reason
-        self.message = 'Assistência: '+reason.lower()
+    def wait(self, reason, wait_code=None):
+        self.wait_reason = translate('SteeringAssist', reason)
+        self.wait_code = wait_code
+        self.status = STATUS_WAITING
+        self.correction_direction = 0
+        self.message = translate('SteeringAssist', 'Assistance: {reason}').format(
+            reason=self.wait_reason.lower())
         return None
 
     def overlay_text(self):
         """Distingue espera, abrandamento e correção, em vez de esconder a causa."""
-        if self.message == 'Reduzir velocidade':
-            if self.wait_reason == 'Rumo instável':
-                return 'Reduzir velocidade · rumo instável'
-            return f'Reduzir velocidade · até {self.speed_limit:.1f} m/s'.replace('.',',')
-        if self.message.startswith('Assistência: correção'):
-            return 'A corrigir à direita' if 'direita' in self.message else 'A corrigir à esquerda'
-        if self.message == 'Assistência: no rumo':
-            return 'Assistência: no rumo'
-        if self.message == 'Assistência: a aliviar direção':
-            return 'A aliviar direção'
+        if self.status == STATUS_SLOWING:
+            if self.wait_code == WAIT_UNSTABLE_HEADING:
+                return translate('SteeringAssist', 'Reduce speed · unstable heading')
+            return translate('SteeringAssist', 'Reduce speed · up to {speed:.1f} m/s').format(
+                speed=self.speed_limit)
+        if self.status == STATUS_CORRECTING:
+            return translate('SteeringAssist', 'Correcting right' if self.correction_direction > 0 else 'Correcting left')
+        if self.status == STATUS_ON_COURSE:
+            return translate('SteeringAssist', 'Assistance: on course')
+        if self.status == STATUS_EASING:
+            return translate('SteeringAssist', 'Easing steering')
         return self.wait_reason
 
     def decide(self, now, target):
@@ -95,46 +119,54 @@ class SteeringAssist:
         if not self.enabled:
             return None
         if self.sample is None or now-self.sample[0] > 2.5:
-            return self.wait('Aguarda telemetria nova')
+            return self.wait('Waiting for fresh telemetry')
         if now < self.command_end:
             return None
         if now < self.wait_until or self.sample[0] < self.wait_until:
-            return self.wait('Aguarda resposta da direção')
+            return self.wait('Waiting for steering response')
         if self.sample is self.consumed:
             return None
         self.consumed = self.sample
         if self.previous is None:
-            return self.wait('Aguarda segunda amostra')
+            return self.wait('Waiting for a second sample')
         t, x, y, heading = self.sample
         pt, px, py, ph = self.previous
         dt = t-pt
         if dt < .25 or dt > 30:
-            return self.wait('Aguarda amostras regulares')
+            return self.wait('Waiting for regular samples')
         if self.motion is None:
-            return self.wait('Aguarda nova posição')
+            return self.wait('Waiting for a new position')
         mt,position_dt,speed,travel,distance = self.motion
         self.speed, self.interval = speed, position_dt
         if position_dt>30 or now-mt>2.5:
-            return self.wait('Aguarda nova posição')
+            return self.wait('Waiting for a new position')
         rate = angle_delta(ph, heading)/dt
         bearing = math.degrees(math.atan2(target[0]-x, target[1]-y)) % 360
         error = angle_delta(heading, bearing)
         self.error_degrees = error
         self.speed_limit = self.max_speed
         if speed > self.speed_limit:
-            self.wait_reason = 'Velocidade acima do limite'
-            self.message = 'Reduzir velocidade'
+            self.wait_reason = translate('SteeringAssist', 'Speed above the limit')
+            self.wait_code = None
+            self.status = STATUS_SLOWING
+            self.correction_direction = 0
+            self.message = translate('SteeringAssist', 'Reduce speed')
             return None
         if abs(rate)>20 or distance>100:
-            return self.wait('Aguarda estabilidade do rumo/posição')
+            return self.wait('Waiting for heading/position stability', WAIT_UNSTABLE_HEADING)
         if speed < .3:
-            return self.wait('Aguarda movimento')
+            return self.wait('Waiting for movement')
         if abs(angle_delta(heading,travel))>60:
-            return self.wait('Aguarda marcha à frente estável')
+            return self.wait('Waiting for steady forward motion')
         # Aliviar antes de cruzar o rumo, usando uma previsão curta e limitada.
         predicted = error-rate*min(dt, .5)
         if abs(error)<=self.tolerance or predicted*error<=0 or abs(predicted)<=self.tolerance:
-            self.message = 'Assistência: no rumo' if abs(error)<=self.tolerance else 'Assistência: a aliviar direção'
+            self.status = STATUS_ON_COURSE if abs(error)<=self.tolerance else STATUS_EASING
+            self.wait_code = None
+            self.correction_direction = 0
+            self.message = translate(
+                'SteeringAssist',
+                'Assistance: on course' if self.status == STATUS_ON_COURSE else 'Easing steering')
             return None
         # A velocidade reduz a duração do toque, sem impor um limite oculto
         # de marcha lenta para curvas grandes. Mantém-se uma correção por amostra.
@@ -149,5 +181,11 @@ class SteeringAssist:
         duration *= factor
         self.command_end = now+duration
         self.wait_until = self.command_end+.25
-        self.message = 'Assistência: correção à direita' if error>0 else 'Assistência: correção à esquerda'
+        self.status = STATUS_CORRECTING
+        self.wait_code = None
+        self.correction_direction = 1 if error > 0 else -1
+        self.message = translate(
+            'SteeringAssist',
+            'Assistance: correcting right' if self.correction_direction > 0 else
+            'Assistance: correcting left')
         return (1 if error>0 else -1), duration

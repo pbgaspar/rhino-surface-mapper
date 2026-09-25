@@ -10,7 +10,7 @@ import i18n
 class I18nContractTests(unittest.TestCase):
     def test_source_language_and_supported_labels(self):
         self.assertEqual(i18n.DEFAULT_LANGUAGE, "en_GB")
-        self.assertEqual(i18n.SUPPORTED_LANGUAGES["en_GB"], "English (British)")
+        self.assertEqual(i18n.SUPPORTED_LANGUAGES["en_GB"], "English (United Kingdom)")
         self.assertEqual(i18n.SUPPORTED_LANGUAGES["pt_PT"], "Português (Portugal)")
 
     def test_normalize_language_accepts_supported_identifiers(self):

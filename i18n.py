@@ -12,7 +12,7 @@ from PySide6.QtCore import QCoreApplication, QTranslator
 
 DEFAULT_LANGUAGE = "en_GB"
 SUPPORTED_LANGUAGES: Mapping[str, str] = MappingProxyType({
-    "en_GB": "English (British)",
+    "en_GB": "English (United Kingdom)",
     "pt_PT": "Português (Portugal)",
 })
 
