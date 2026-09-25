@@ -6,7 +6,7 @@ Rhino Surface Mapper is an independent companion tool for *Elite Dangerous* Comm
 
 ## Why Rhino Surface Mapper?
 
-When Surface Mining and the Rhino arrived in *Elite Dangerous*, I found it difficult to search for deposits systematically: avoiding repeated coverage, knowing which areas I had already investigated, and remembering where I had found deposits of interest. What started as a simple application to solve that problem gradually gained additional functionality that I hope will be useful to other Commanders.
+When Surface Mining and the Rhino SRV arrived in *Elite Dangerous*, I found it difficult to search for deposits systematically: avoiding repeated coverage, knowing which areas I had already investigated, and remembering where I had found deposits of interest. What started as a simple application to solve that problem gradually gained additional functionality that I hope will be useful to other Commanders.
 
 ## Download Beta 1
 
@@ -18,7 +18,7 @@ This is a portable Beta. It stores `options.json` and the `MAPAS/` directory bes
 
 ## Features
 
-- Live SRV position, heading, and fuel telemetry from *Elite Dangerous* `Status.json`.
+- Live SRV state, position, heading, and fuel telemetry from *Elite Dangerous* `Status.json`, with authoritative system identity from Elite Dangerous Journal data when required.
 - Surface mapping with route tracks and search routes.
 - Planetary Mining Deposits, rigs, and named markers.
 - Radar coverage and radar pulse visualisation.
@@ -49,6 +49,12 @@ The interface supports English and Portuguese (Portugal). Language changes apply
 ## Planned features
 
 **Powerplay Surface Mining assistance** — planned integration of the already developed market-data core to help Commanders earn Powerplay merits by identifying the three most relevant Surface Mining commodities in the current system, together with stations showing demand and market prices.
+
+## Development
+
+Rhino Surface Mapper is written in Python. Its desktop interface uses PySide6 and Qt, with selected static layouts defined in Qt Designer `.ui` files to make visual UI work easier while application behaviour and state remain in Python. The codebase separates presentation, mapping and domain logic, Elite Dangerous telemetry, and persistence and I/O. Automated tests use pytest.
+
+Useful contribution areas include UI/UX, mapping and navigation, Elite Dangerous telemetry, translations and documentation, testing, and future Surface Mining and Powerplay functionality. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development guidance and contribution information.
 
 ## Feedback and contributions
 

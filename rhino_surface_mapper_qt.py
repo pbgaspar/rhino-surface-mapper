@@ -15,6 +15,7 @@ from mapper_core import MapperState
 from map_pml import corresponds_to_map, newest_by_pml
 from settings_persistence import load_preferences
 from elite_dangerous.status import elite_dangerous_is_running, read_status_if_changed
+from elite_dangerous.journal import JournalIdentityReader
 from pyqt_overlay import OverlayWindow
 from qt_map_operations import MapOperations
 from radar import RadarPulse
@@ -585,6 +586,10 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self._game_running_check = game_running_check or elite_dangerous_is_running
         self._game_running = False
         self._next_game_running_check = 0.0
+        journal_directory = (Path(status_path).parent / '__no-test-journal__'
+                             if game_running_check is not None and status_path is not None
+                             else None)
+        self.journal_identity = JournalIdentityReader(journal_directory)
         self.transition_required = False
         self.pending_status_update = None
         self.pending_status_snapshot = None
@@ -1168,6 +1173,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         if had_live_state:
             self.stop_assistance()
             self.view.radar.waves.clear()
+        self.journal_identity.reset()
         self.info_left.setText(translate('MapperWindow', 'Waiting for Status.json'))
 
     def poll(self, reloading_map=False):
@@ -1186,9 +1192,19 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                 self.last_mtime,
                 force=self.retry_status,
             )
+            if (status is None and self.status_valid and self.live_status
+                    and not self.live_status.get('StarSystem')):
+                journal_identity = self.journal_identity.current_identity()
+                if journal_identity is not None and journal_identity.system:
+                    status = (self.last_mtime, dict(self.live_status))
             if status is not None:
                 mtime, data = status
                 self.retry_status = False
+                if not data.get('StarSystem'):
+                    journal_identity = self.journal_identity.current_identity()
+                    if journal_identity is not None and journal_identity.system:
+                        data = dict(data)
+                        data['StarSystem'] = journal_identity.system
                 if not data.get('StarSystem') and data.get('BodyName') == self.state.body:
                     # A mesma regra de process_status tem de preceder a
                     # verificação de planeta feita na abertura do ficheiro.

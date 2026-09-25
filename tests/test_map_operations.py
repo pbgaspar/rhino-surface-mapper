@@ -228,6 +228,28 @@ class MapOperationsTests(unittest.TestCase):
         self.assertFalse(w.transition_required)
         open_pml.assert_called_once_with()
 
+    def test_first_map_bootstrap_uses_journal_system_when_status_omits_it(self):
+        import json
+        from elite_dangerous.journal import JournalIdentityReader
+
+        journal_root = Path(self.temp.name) / 'journal'
+        journal_root.mkdir()
+        (journal_root / 'Journal.2026-09-25T180148.01.log').write_text(
+            json.dumps(dict(event='Location', StarSystem='Teste', Body='Test')) + '\n',
+            encoding='utf-8')
+        w = self.window
+        w.journal_identity = JournalIdentityReader(journal_root)
+        w.status_path.write_text(json.dumps(dict(
+            Flags=0x04000000, Latitude=38, Longitude=-9, Heading=0,
+            BodyName='Test')), encoding='utf-8')
+
+        with patch.object(w, 'setup_new_pml', return_value=False) as setup_pml:
+            w.poll()
+
+        self.assertEqual((w.state.system, w.state.body, w.state.body_key),
+                         ('Teste', 'Test', 'Teste|Test'))
+        setup_pml.assert_called_once_with()
+
     def test_stale_srv_status_stays_offline_when_game_is_not_running(self):
         import json
         from rhino_surface_mapper_qt import MapperWindow
