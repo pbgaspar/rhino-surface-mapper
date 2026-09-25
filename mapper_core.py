@@ -203,6 +203,9 @@ class MapperState:
         if not system and self.system and body == self.body:
             system = self.system
         body_key = f"{system}|{body}"
+        if system and not self.system and self.body and body == self.body:
+            self.system = system
+            self.body_key = body_key
         if self.body_key and self.body_key != body_key:
             return StatusUpdate(True, True, system, body, latitude, longitude)
         if record_position:

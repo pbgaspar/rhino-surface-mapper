@@ -139,6 +139,22 @@ class MapperCoreTests(unittest.TestCase):
         self.assertEqual(state.body, 'A 1')
         self.assertEqual(len(state.marks), 1)
 
+    def test_late_system_completes_same_body_identity_without_resetting_map(self):
+        state = MapperState()
+        state.process_status(status(StarSystem=''))
+        state.pml_id = '6'
+        state.deposits.append({'name': 'A', 'size': 'Grande', 'rigs': 3})
+        state.marks.append({'name': 'Keep'})
+        before = copy.deepcopy((state.points, state.deposits, state.marks, state.pml_id))
+
+        result = state.process_status(status())
+
+        self.assertTrue(result)
+        self.assertFalse(result.location_changed)
+        self.assertEqual((state.system, state.body, state.body_key),
+                         ('Teste', 'A 1', 'Teste|A 1'))
+        self.assertEqual((state.points, state.deposits, state.marks, state.pml_id), before)
+
     def test_search_starts_north_of_datum_and_can_skip(self):
         state = MapperState()
         state.process_status(status())

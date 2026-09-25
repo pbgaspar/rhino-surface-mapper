@@ -210,6 +210,23 @@ class MapOperationsTests(unittest.TestCase):
             self.assertTrue(w.state.search_started)
             self.assertIsNotNone(w.state.next_target_xy)
 
+    def test_poll_opens_pml_flow_when_late_system_completes_body_identity(self):
+        import json
+
+        w = self.window
+        w.status_path.write_text(json.dumps(dict(
+            Flags=0x04000000, Latitude=38, Longitude=-9, Heading=0,
+            StarSystem='Teste', BodyName='Test')),
+            encoding='utf-8')
+
+        with patch.object(w, 'open_or_create_pml_for_current_position') as open_pml:
+            w.poll()
+
+        self.assertEqual((w.state.system, w.state.body, w.state.body_key),
+                         ('Teste', 'Test', 'Teste|Test'))
+        self.assertFalse(w.transition_required)
+        open_pml.assert_called_once_with()
+
     def test_mark_position_persistence_rename_and_delete(self):
         from mapper_core import MapperState
         from PySide6.QtCore import QPointF
