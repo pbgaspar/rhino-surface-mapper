@@ -110,7 +110,11 @@ class SurfaceMiningConsumerTests(unittest.TestCase):
                 progress=progress.append,
             )
 
-        fetch.assert_called_once_with("kappa", SURFACE_COMMODITIES)
+        fetch.assert_called_once_with(
+            "kappa",
+            SURFACE_COMMODITIES,
+            exclude_station=CONSUMER.is_carrier_name,
+        )
         self.assertIs(CONSUMER.SURFACE_COMMODITIES, SURFACE_COMMODITIES)
         self.assertEqual(exact_name, "Kappa")
         self.assertEqual(

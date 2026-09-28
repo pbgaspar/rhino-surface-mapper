@@ -789,6 +789,63 @@ class SpanshMarketTests(unittest.TestCase):
             for item in result.observations
         ))
 
+    def test_excluded_fleet_carrier_skips_station_detail_and_issue(self):
+        system = {
+            "name": "Kappa",
+            "stations": [station("ABC-123", 123, has_market=True)],
+            "bodies": [],
+        }
+        session = setup_session(system_record=system)
+
+        result = fetch_commodity_market(
+            "Kappa",
+            "Platinum",
+            session=session,
+            exclude_station=lambda name: name == "ABC-123",
+        )
+
+        self.assertEqual(result.observations, ())
+        self.assertEqual(result.issues, ())
+        self.assertNotIn(("GET", "/station/123"), [call[:2] for call in session.calls])
+
+    def test_excluded_squadron_carrier_skips_station_detail_and_issue(self):
+        system = {
+            "name": "Kappa",
+            "stations": [station("FC01", 123, has_market=True)],
+            "bodies": [],
+        }
+        session = setup_session(system_record=system)
+
+        result = fetch_commodity_market(
+            "Kappa",
+            "Platinum",
+            session=session,
+            exclude_station=lambda name: name == "FC01",
+        )
+
+        self.assertEqual(result.observations, ())
+        self.assertEqual(result.issues, ())
+        self.assertNotIn(("GET", "/station/123"), [call[:2] for call in session.calls])
+
+    def test_exclusion_is_optional_and_ordinary_station_still_maps(self):
+        system = {
+            "name": "Kappa",
+            "stations": [station("Market", 123, has_market=True)],
+            "bodies": [],
+        }
+        detail = station_detail("Market", market=[{"commodity": "Platinum", "sell_price": 10}])
+        session = setup_session(system_record=system, details={123: detail})
+
+        result = fetch_commodity_market(
+            "Kappa",
+            "Platinum",
+            session=session,
+            exclude_station=lambda name: name in {"ABC-123", "FC01"},
+        )
+
+        self.assertEqual(result.observations[0].station.name, "Market")
+        self.assertIn(("GET", "/station/123"), [call[:2] for call in session.calls])
+
     def test_batch_fatal_system_failure_remains_spansh_error(self):
         session = setup_session(pages=[response({"results": "invalid"})])
         with self.assertRaises(SpanshError):

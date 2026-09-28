@@ -31,6 +31,7 @@ from elite_dangerous.market import (  # noqa: E402
     SURFACE_COMMODITIES,
     fetch_commodity_markets,
     filter_market_observations,
+    is_carrier_name,
     load_summary_cache,
     parse_inara_summaries,
     rank_market_observations,
@@ -167,7 +168,11 @@ def query_system_markets(
         f"Querying {len(SURFACE_COMMODITIES)} commodities in {name} "
         "with one Spansh market traversal..."
     )
-    results = fetch_commodity_markets(name, SURFACE_COMMODITIES)
+    results = fetch_commodity_markets(
+        name,
+        SURFACE_COMMODITIES,
+        exclude_station=is_carrier_name,
+    )
 
     observations_by_commodity: dict[str, tuple[MarketObservation, ...]] = {}
     issues: list[MarketIssue] = []

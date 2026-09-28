@@ -1,6 +1,6 @@
 """Spansh acquisition and mapping for system commodity markets."""
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -30,12 +30,14 @@ def fetch_commodity_market(
     commodity_name: str,
     *,
     session: requests.Session | None = None,
+    exclude_station: Callable[[str], bool] | None = None,
 ) -> CommodityMarketResult:
     """Fetch one commodity's observations across a Spansh system."""
     return fetch_commodity_markets(
         system_name,
         (commodity_name,),
         session=session,
+        exclude_station=exclude_station,
     )[0]
 
 
@@ -44,6 +46,7 @@ def fetch_commodity_markets(
     commodity_names: Iterable[str],
     *,
     session: requests.Session | None = None,
+    exclude_station: Callable[[str], bool] | None = None,
 ) -> tuple[CommodityMarketResult, ...]:
     """Fetch several commodity results in one Spansh system traversal.
 
@@ -74,6 +77,7 @@ def fetch_commodity_markets(
             session,
             system_name,
             requested_by_key,
+            exclude_station=exclude_station,
         )
 
     owned_session = requests.Session()
@@ -82,6 +86,7 @@ def fetch_commodity_markets(
             owned_session,
             system_name,
             requested_by_key,
+            exclude_station=exclude_station,
         )
     finally:
         owned_session.close()
@@ -91,6 +96,8 @@ def _fetch_commodities_with_session(
     session: requests.Session,
     requested_system: str,
     requested_by_key: dict[str, str],
+    *,
+    exclude_station: Callable[[str], bool] | None,
 ) -> tuple[CommodityMarketResult, ...]:
     system_id = _find_system_id(session, requested_system)
     if system_id is None:
@@ -123,6 +130,8 @@ def _fetch_commodities_with_session(
     for market_id, discovery_record in stations.items():
         station_name = _station_name(discovery_record)
         if not _is_market_candidate(discovery_record):
+            continue
+        if exclude_station is not None and exclude_station(station_name):
             continue
 
         numeric_id = _usable_market_id(market_id)

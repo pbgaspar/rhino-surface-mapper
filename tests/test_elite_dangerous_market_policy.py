@@ -44,7 +44,7 @@ class MarketPolicyTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertFalse(is_carrier_name(name))
 
-    def test_four_character_fleet_carrier_is_excluded_by_default(self):
+    def test_four_character_squadron_carrier_is_excluded_by_default(self):
         carrier = observation(" FC01 ")
         self.assertEqual(filter_market_observations((carrier,)), ())
 
