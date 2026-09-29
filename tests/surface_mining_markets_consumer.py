@@ -580,6 +580,18 @@ def main() -> int:
         f"{diagnostics.station_http_elapsed:.2f}s | "
         f"system detail: {diagnostics.system_detail_elapsed:.2f}s"
     )
+    print(
+        "             dump requests: "
+        f"{diagnostics.dump_requests_attempted} | "
+        f"successes: {diagnostics.dump_requests_succeeded} | "
+        f"failures: {diagnostics.dump_requests_failed} | "
+        f"HTTP: {diagnostics.dump_http_elapsed:.2f}s"
+    )
+    print(
+        "             dump records: "
+        f"{diagnostics.dump_station_records} stations | "
+        f"{diagnostics.dump_market_records} markets"
+    )
     print("             slowest:")
     for station_name, elapsed in diagnostics.slowest_station_requests:
         print(f"               {station_name} — {elapsed:.2f}s")

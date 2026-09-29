@@ -84,12 +84,27 @@ def station_detail(name, *, market=None, **fields):
     return {"record": result}
 
 
+def dump_station(name, station_id=123, *, commodities=None, **fields):
+    return {
+        "name": name,
+        "id": station_id,
+        "landingPads": {"large": 1, "medium": 2, "small": 3},
+        "updateTime": "2026-09-16T12:30:00Z",
+        "market": {
+            "commodities": [] if commodities is None else commodities,
+            "updateTime": "2026-09-16T12:30:00Z",
+        },
+        **fields,
+    }
+
+
 def setup_session(
     *,
     system_record=None,
     pages=None,
     details=None,
     body_pages=None,
+    dump_system=None,
 ):
     pages = pages if pages is not None else [search_page([search_result()], 1)]
     system_record = system_record if system_record is not None else {
@@ -101,18 +116,107 @@ def setup_session(
         ("POST", "/systems/search"): pages,
         ("GET", "/system/42"): [response({"record": system_record})],
     }
+    detail_by_id = {}
     for market_id, detail in (details or {}).items():
         values = detail if isinstance(detail, list) else [detail]
-        routes[("GET", f"/station/{market_id}")] = [
-            value if isinstance(value, Exception) else response(value)
-            for value in values
-        ]
+        detail_by_id[str(market_id)] = values[0]
+    dump_system = dump_system or _dump_system_from_discovery(system_record, detail_by_id)
+    routes[("GET", "/dump/42")] = [response({"system": dump_system})]
     if body_pages is not None:
         routes[("POST", "/bodies/search")] = body_pages
     return FakeSession(routes)
 
 
+def _dump_system_from_discovery(system_record, detail_by_id):
+    """Build a dump-shaped fixture while retaining existing test scenarios."""
+    def convert(node):
+        converted = dict(node)
+        converted["stations"] = []
+        for discovered in node.get("stations", []):
+            station_id = str(discovered.get("market_id"))
+            detail = detail_by_id.get(station_id)
+            if isinstance(detail, Exception):
+                converted["stations"].append({
+                    "name": discovered.get("name"),
+                    "id": discovered.get("market_id"),
+                    "market": {"commodities": "invalid", "updateTime": None},
+                })
+                continue
+            if isinstance(detail, dict) and isinstance(detail.get("record"), dict):
+                record = detail["record"]
+                rows = []
+                for row in record.get("market", []):
+                    if isinstance(row, dict):
+                        rows.append({
+                            "name": row.get("commodity"),
+                            "sellPrice": row.get("sell_price"),
+                            "demand": row.get("demand"),
+                            "supply": row.get("supply"),
+                        })
+                converted["stations"].append({
+                    "name": record.get("name", discovered.get("name")),
+                    "id": discovered.get("market_id"),
+                    "landingPads": {
+                        "large": 1 if record.get("has_large_pad") else 0,
+                        "medium": record.get("medium_pads", 0),
+                        "small": record.get("small_pads", 0),
+                    },
+                    "updateTime": record.get("updated_at"),
+                    "market": {
+                        "commodities": rows,
+                        "updateTime": record.get("market_updated_at"),
+                    },
+                })
+            else:
+                converted["stations"].append({
+                    "name": discovered.get("name"),
+                    "id": discovered.get("market_id"),
+                    "landingPads": {},
+                    "market": {"commodities": [], "updateTime": None},
+                })
+        converted["bodies"] = [convert(body) for body in node.get("bodies", [])]
+        return converted
+
+    return convert(system_record)
+
+
 class SpanshMarketTests(unittest.TestCase):
+    def test_dump_market_mapping_avoids_station_requests(self):
+        session = setup_session(
+            system_record={"name": "Kappa", "stations": [], "bodies": []}
+        )
+        session.routes[("GET", "/dump/42")] = [response({
+            "system": {
+                "name": "Kappa",
+                "stations": [dump_station("Market", commodities=[{
+                    "name": "Platinum",
+                    "sellPrice": 725,
+                    "demand": 30,
+                    "supply": 40,
+                }])],
+                "bodies": [],
+            }
+        })]
+
+        result = fetch_commodity_market("Kappa", "Platinum", session=session)
+
+        observation = result.observations[0]
+        self.assertEqual(observation.station.name, "Market")
+        self.assertEqual(observation.station.market_id, "123")
+        self.assertEqual(observation.station.max_landing_pad, "L")
+        self.assertIsNone(observation.station.is_planetary)
+        self.assertEqual(observation.sell_price, 725)
+        self.assertEqual(observation.demand, 30)
+        self.assertEqual(observation.supply, 40)
+        self.assertEqual(
+            observation.market_updated_at,
+            datetime(2026, 9, 16, 12, 30, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            [call[1] for call in session.calls if call[0] == "GET"],
+            ["/system/42", "/dump/42"],
+        )
+
     def test_resolve_system_returns_reusable_exact_identity(self):
         session = setup_session(pages=[search_page([search_result("KAPPA")], 1)])
 
@@ -334,8 +438,9 @@ class SpanshMarketTests(unittest.TestCase):
         result = fetch_commodity_market("Kappa", "Platinum", session=session)
         self.assertEqual(len(result.observations), 1)
         self.assertEqual(result.observations[0].station.name, "Detail")
-        self.assertEqual([call[1] for call in session.calls].count("/station/123"), 1)
-        self.assertIn("/station/124", [call[1] for call in session.calls])
+        paths = [call[1] for call in session.calls]
+        self.assertEqual(paths.count("/dump/42"), 1)
+        self.assertFalse(any(path.startswith("/station/") for path in paths))
 
     def test_system_and_planetary_candidates_by_market_flag_and_service(self):
         system = {
@@ -375,9 +480,9 @@ class SpanshMarketTests(unittest.TestCase):
             "stations": [station("Gone", 123, has_market=True)],
             "bodies": [],
         }
-        detail = station_detail("Gone", market=[{"commodity": "Platinum"}], has_market=False)
+        dump = {"name": "Kappa", "stations": [dump_station("Gone")], "bodies": []}
         result = fetch_commodity_market("Kappa", "Platinum", session=setup_session(
-            system_record=system, details={123: detail}
+            system_record=system, dump_system=dump
         ))
         self.assertEqual(result.observations, ())
         self.assertEqual(result.issues, ())
@@ -388,29 +493,27 @@ class SpanshMarketTests(unittest.TestCase):
             "stations": [station("Malformed", 123, has_market=True)],
             "bodies": [],
         }
+        dump = {"name": "Kappa", "stations": [{
+            "name": "Malformed", "id": 123, "market": "invalid"
+        }], "bodies": []}
         result = fetch_commodity_market(
             "Kappa",
             "Platinum",
-            session=setup_session(system_record=system, details={123: {"invalid": True}}),
+            session=setup_session(system_record=system, dump_system=dump),
         )
         self.assertEqual(result.observations, ())
         self.assertEqual(result.issues[0].station_name, "Malformed")
 
-    def test_station_system_mismatch_is_issue_and_other_results_survive(self):
+    def test_dump_system_mismatch_is_fatal(self):
         system = {"name": "Kappa", "stations": [
             station("Wrong system", 123, has_market=True),
             station("Good", 124, has_market=True),
         ], "bodies": []}
-        details = {
-            123: station_detail("Wrong system", system_name="Other"),
-            124: station_detail("Good", market=[{"commodity": "Platinum", "sell_price": 4}]),
-        }
-        result = fetch_commodity_market("Kappa", "Platinum", session=setup_session(
-            system_record=system, details=details
-        ))
-        self.assertEqual([item.station.name for item in result.observations], ["Good"])
-        self.assertEqual(result.issues[0].station_name, "Wrong system")
-        self.assertFalse(result.is_complete)
+        with self.assertRaises(SpanshError):
+            fetch_commodity_market("Kappa", "Platinum", session=setup_session(
+                system_record=system,
+                dump_system={"name": "Other", "stations": [], "bodies": []},
+            ))
 
     def test_station_http_failure_is_recoverable_and_preserves_observation(self):
         system = {"name": "Kappa", "stations": [
@@ -487,14 +590,15 @@ class SpanshMarketTests(unittest.TestCase):
             "bodies": [],
         }
         for market, include_market in ((None, False), ("invalid", True)):
-            detail = station_detail("Market")
+            dump_station_record = dump_station("Market")
             if include_market:
-                detail["record"]["market"] = market
+                dump_station_record["market"] = market
             else:
-                del detail["record"]["market"]
+                del dump_station_record["market"]
             with self.subTest(market=market):
                 result = fetch_commodity_market("Kappa", "Platinum", session=setup_session(
-                    system_record=system, details={123: detail}
+                    system_record=system,
+                    dump_system={"name": "Kappa", "stations": [dump_station_record], "bodies": []},
                 ))
                 self.assertEqual(result.observations, ())
                 self.assertEqual(len(result.issues), 1)
@@ -671,7 +775,8 @@ class SpanshMarketTests(unittest.TestCase):
         paths = [call[1] for call in session.calls]
         self.assertEqual(paths.count("/systems/search"), 1)
         self.assertEqual(paths.count("/system/42"), 1)
-        self.assertEqual(paths.count("/station/123"), 1)
+        self.assertEqual(paths.count("/dump/42"), 1)
+        self.assertFalse(any(path.startswith("/station/") for path in paths))
 
     def test_batch_deduplicates_aliases_and_exact_requests_in_first_order(self):
         system = {
@@ -879,8 +984,9 @@ class SpanshMarketTests(unittest.TestCase):
         self.assertEqual(results[0].issues[0].station_name, "Unavailable")
         self.assertEqual(results[0].observations[0].station.name, "Available")
         self.assertEqual(results[1].observations[0].station.name, "Available")
-        self.assertEqual([call[1] for call in session.calls].count("/station/123"), 1)
-        self.assertEqual([call[1] for call in session.calls].count("/station/124"), 1)
+        paths = [call[1] for call in session.calls]
+        self.assertEqual(paths.count("/dump/42"), 1)
+        self.assertFalse(any(path.startswith("/station/") for path in paths))
 
     def test_batch_preserves_mapping_and_does_not_apply_policy_or_ranking(self):
         names = ("FC01", "ABC-123", "Ordinary")
@@ -970,6 +1076,41 @@ class SpanshMarketTests(unittest.TestCase):
         self.assertEqual(result.issues, ())
         self.assertNotIn(("GET", "/station/123"), [call[:2] for call in session.calls])
 
+    def test_excluded_carrier_is_skipped_before_any_dump_market_validation(self):
+        market_variants = (
+            {"commodities": [{"name": "Platinum", "sellPrice": 10}]},
+            None,
+            "invalid",
+            {"commodities": []},
+            {"commodities": "invalid"},
+            {"commodities": [{"name": "Platinum", "sellPrice": "invalid"}]},
+        )
+        for index, market in enumerate(market_variants, start=123):
+            with self.subTest(market=market):
+                carrier = {
+                    "name": "ABC-123",
+                    "id": index,
+                    "market": market,
+                }
+                diagnostics = MarketDiagnostics()
+                session = setup_session(
+                    system_record={"name": "Kappa", "stations": [], "bodies": []},
+                    dump_system={"name": "Kappa", "stations": [carrier], "bodies": []},
+                )
+
+                result = fetch_commodity_market(
+                    "Kappa",
+                    "Platinum",
+                    session=session,
+                    exclude_station=lambda name: name == "ABC-123",
+                    diagnostics=diagnostics,
+                )
+
+                self.assertEqual(result.observations, ())
+                self.assertEqual(result.issues, ())
+                self.assertEqual(diagnostics.carriers_excluded, 1)
+                self.assertEqual(diagnostics.excluded_carrier_names, ["ABC-123"])
+
     def test_diagnostics_records_excluded_carrier_names_in_traversal_order(self):
         system = {
             "name": "Kappa",
@@ -1000,7 +1141,8 @@ class SpanshMarketTests(unittest.TestCase):
         self.assertNotIn(("GET", "/station/123"), [call[:2] for call in session.calls])
         self.assertNotIn(("GET", "/station/125"), [call[:2] for call in session.calls])
         self.assertNotIn(("GET", "/station/126"), [call[:2] for call in session.calls])
-        self.assertIn(("GET", "/station/124"), [call[:2] for call in session.calls])
+        self.assertIn(("GET", "/dump/42"), [call[:2] for call in session.calls])
+        self.assertFalse(any(call[1].startswith("/station/") for call in session.calls))
         self.assertEqual(len(result.observations), 1)
 
     def test_diagnostics_omitted_preserves_existing_carrier_behavior(self):
@@ -1032,7 +1174,8 @@ class SpanshMarketTests(unittest.TestCase):
         )
 
         self.assertEqual(result.observations[0].station.name, "Market")
-        self.assertIn(("GET", "/station/123"), [call[:2] for call in session.calls])
+        self.assertIn(("GET", "/dump/42"), [call[:2] for call in session.calls])
+        self.assertFalse(any(call[1].startswith("/station/") for call in session.calls))
 
     def test_batch_fatal_system_failure_remains_spansh_error(self):
         session = setup_session(pages=[response({"results": "invalid"})])

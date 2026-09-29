@@ -57,6 +57,12 @@ class MarketDiagnostics:
     station_requests_failed: int = 0
     station_http_elapsed: float = 0.0
     system_detail_elapsed: float = 0.0
+    dump_requests_attempted: int = 0
+    dump_requests_succeeded: int = 0
+    dump_requests_failed: int = 0
+    dump_http_elapsed: float = 0.0
+    dump_station_records: int = 0
+    dump_market_records: int = 0
     slowest_station_requests: list[tuple[str, float]] | None = None
 
     def __post_init__(self) -> None:
@@ -251,10 +257,37 @@ def _fetch_commodities_with_session(
     ):
         raise SpanshError("Spansh system detail did not match the requested system.")
 
+    dump_started = perf_counter()
+    if diagnostics is not None:
+        diagnostics.dump_requests_attempted += 1
     try:
-        stations, discovery_issues = _collect_stations(system_record)
+        dump_system = _fetch_dump_system(session, system.id64)
+        dump_stations, discovery_issues = _collect_dump_stations(
+            dump_system,
+            requested_system,
+            exclude_station=exclude_station,
+            diagnostics=diagnostics,
+        )
+        if diagnostics is not None:
+            diagnostics.dump_station_records = _count_dump_stations(dump_system)
+            diagnostics.dump_market_records = sum(
+                isinstance(record.get("market"), dict)
+                for record in dump_stations.values()
+            )
+    except SpanshError:
+        if diagnostics is not None:
+            diagnostics.dump_requests_failed += 1
+        raise
     except ValueError as exc:
-        raise SpanshError("Spansh returned an unusable system station listing.") from exc
+        if diagnostics is not None:
+            diagnostics.dump_requests_failed += 1
+        raise SpanshError("Spansh returned an unusable system dump.") from exc
+    else:
+        if diagnostics is not None:
+            diagnostics.dump_requests_succeeded += 1
+    finally:
+        if diagnostics is not None:
+            diagnostics.dump_http_elapsed = perf_counter() - dump_started
 
     observations_by_key: dict[str, list[MarketObservation]] = {
         key: [] for key in requested_by_key
@@ -267,17 +300,8 @@ def _fetch_commodities_with_session(
         for commodity_issues in issues_by_key.values():
             commodity_issues.append(issue)
 
-    for market_id, discovery_record in stations.items():
-        station_name = _station_name(discovery_record)
-        if not _is_market_candidate(discovery_record):
-            continue
-        if diagnostics is not None:
-            diagnostics.market_candidates += 1
-        if exclude_station is not None and exclude_station(station_name):
-            if diagnostics is not None:
-                diagnostics.carriers_excluded += 1
-                diagnostics.excluded_carrier_names.append(station_name)
-            continue
+    for market_id, record in dump_stations.items():
+        station_name = _station_name(record)
 
         numeric_id = _usable_market_id(market_id)
         if numeric_id is None:
@@ -288,25 +312,7 @@ def _fetch_commodities_with_session(
             )
             continue
 
-        station_request_completed = False
         try:
-            station_started = perf_counter()
-            if diagnostics is not None:
-                diagnostics.station_requests_attempted += 1
-            record = _fetch_record(session, "GET", f"/station/{numeric_id}")
-            station_elapsed = perf_counter() - station_started
-            if diagnostics is not None:
-                diagnostics.record_station(station_name, station_elapsed, True)
-            station_request_completed = True
-            detail_system = record.get("system_name")
-            if (
-                not isinstance(detail_system, str)
-                or detail_system.casefold() != requested_system.casefold()
-            ):
-                raise ValueError("Station detail belongs to a different or unknown system.")
-            if record.get("has_market") is False:
-                continue
-
             station = _map_station(record, numeric_id)
             market = record.get("market")
             if not isinstance(market, list):
@@ -324,9 +330,6 @@ def _fetch_commodities_with_session(
             for issue in shared_row_issues:
                 add_shared_issue(issue)
         except (SpanshError, ValueError, TypeError, KeyError) as exc:
-            if diagnostics is not None and not station_request_completed:
-                station_elapsed = perf_counter() - station_started
-                diagnostics.record_station(station_name, station_elapsed, False)
             add_shared_issue(MarketIssue(station_name, str(exc)))
 
     return tuple(
@@ -554,6 +557,120 @@ def _collect_stations(
     return stations, tuple(issues)
 
 
+def _collect_dump_stations(
+    dump_system: dict[str, Any],
+    requested_system: str,
+    *,
+    exclude_station: Callable[[str], bool] | None,
+    diagnostics: MarketDiagnostics | None,
+) -> tuple[dict[str, dict[str, Any]], tuple[MarketIssue, ...]]:
+    """Adapt recursively nested dump stations to the market mapper shape."""
+    name = dump_system.get("name")
+    if not isinstance(name, str) or name.casefold() != requested_system.casefold():
+        raise SpanshError("Spansh dump system did not match the requested system.")
+
+    stations: dict[str, dict[str, Any]] = {}
+    issues: list[MarketIssue] = []
+
+    def visit(node: dict[str, Any]) -> None:
+        station_records = node.get("stations", [])
+        bodies = node.get("bodies", [])
+        if not isinstance(station_records, list) or not isinstance(bodies, list):
+            raise ValueError("Spansh dump station or body listing is not a list.")
+        for raw_station in station_records:
+            if not isinstance(raw_station, dict):
+                issues.append(MarketIssue("<unknown station>", "Invalid dump station record."))
+                continue
+            station_name = _station_name(raw_station)
+            if diagnostics is not None:
+                diagnostics.market_candidates += 1
+            if exclude_station is not None and exclude_station(station_name):
+                if diagnostics is not None:
+                    diagnostics.carriers_excluded += 1
+                    diagnostics.excluded_carrier_names.append(station_name)
+                continue
+            station_id = raw_station.get("id")
+            numeric_id = _usable_market_id(str(station_id)) if station_id is not None else None
+            if numeric_id is None:
+                issues.append(MarketIssue(station_name, "Station has no usable market_id."))
+                continue
+            market = raw_station.get("market")
+            if not isinstance(market, dict):
+                issues.append(MarketIssue(station_name, "Station has no valid market data."))
+                continue
+            commodities = market.get("commodities")
+            if not isinstance(commodities, list):
+                issues.append(MarketIssue(station_name, "Station market has no valid commodity list."))
+                continue
+            pads = raw_station.get("landingPads")
+            if pads is not None and not isinstance(pads, dict):
+                issues.append(MarketIssue(station_name, "Station has invalid landing-pad data."))
+                continue
+            stations[str(numeric_id)] = _adapt_dump_station(
+                raw_station, requested_system, market, pads or {}
+            )
+        for body in bodies:
+            if not isinstance(body, dict):
+                raise ValueError("Spansh dump body listing contains an invalid record.")
+            visit(body)
+
+    visit(dump_system)
+    return stations, tuple(issues)
+
+
+def _adapt_dump_station(
+    raw_station: dict[str, Any],
+    system_name: str,
+    market: dict[str, Any],
+    pads: dict[str, Any],
+) -> dict[str, Any]:
+    """Translate one dump station into the existing station-detail shape."""
+    commodity_rows = market.get("commodities")
+    if not isinstance(commodity_rows, list):
+        commodity_rows = []
+    return {
+        "name": raw_station.get("name"),
+        "system_name": system_name,
+        "market_id": raw_station.get("id"),
+        "is_planetary": None,
+        "has_large_pad": _positive_pad_count(pads.get("large")),
+        "large_pads": pads.get("large"),
+        "medium_pads": pads.get("medium"),
+        "small_pads": pads.get("small"),
+        "market_updated_at": market.get("updateTime"),
+        "updated_at": raw_station.get("updateTime"),
+        "market": [
+            row
+            if not isinstance(row, dict)
+            else {
+                "commodity": row.get("name"),
+                "sell_price": row.get("sellPrice"),
+                "demand": row.get("demand"),
+                "supply": row.get("supply"),
+            }
+            for row in commodity_rows
+        ],
+    }
+
+
+def _positive_pad_count(value: Any) -> bool:
+    """Return whether a dump large-pad count represents capability."""
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _count_dump_stations(node: dict[str, Any]) -> int:
+    """Count station records recursively for aggregate diagnostics."""
+    stations = node.get("stations", [])
+    bodies = node.get("bodies", [])
+    if not isinstance(stations, list) or not isinstance(bodies, list):
+        return 0
+    return len(stations) + sum(
+        _count_dump_stations(body)
+        for body in bodies
+        if isinstance(body, dict)
+    )
+
+
 def _is_market_candidate(record: dict[str, Any]) -> bool:
     services = record.get("services", [])
     return record.get("has_market") is True or (
@@ -586,6 +703,18 @@ def _fetch_record(
     if not isinstance(record, dict):
         raise SpanshError(f"Spansh response for {path} has no usable record.")
     return record
+
+
+def _fetch_dump_system(
+    session: requests.Session,
+    system_id64: str | int,
+) -> dict[str, Any]:
+    """Fetch and validate the aggregate system dump envelope."""
+    payload = _request_json(session, "GET", f"/dump/{system_id64}")
+    system = payload.get("system")
+    if not isinstance(system, dict):
+        raise SpanshError("Spansh dump response has no usable system record.")
+    return system
 
 
 def _request_json(
