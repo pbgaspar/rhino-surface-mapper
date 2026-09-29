@@ -17,6 +17,14 @@ def _commodity_key(name: str) -> str:
     return normalized if normalized else comparison_name.casefold()
 
 
+@dataclass(frozen=True)
+class LandableBody:
+    """An explicitly landable planet with a confirmed canonical planet type."""
+
+    name: str
+    canonical_planet_type: str
+
+
 def _require_tuple(value: object, field_name: str) -> None:
     """Ensure frozen result objects do not retain mutable collections."""
     if not isinstance(value, tuple):

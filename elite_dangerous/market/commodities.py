@@ -1,6 +1,7 @@
 """Surface mining product data and name normalization."""
 
 import json
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from types import MappingProxyType
 import unicodedata
@@ -121,6 +122,39 @@ def normalize_name(value: object | None) -> str:
 
 _CATALOGUE = _load_catalogue(CATALOGUE_PATH)
 SURFACE_COMMODITIES = tuple(record["name"] for record in _CATALOGUE)
+
+
+def commodities_for_planet_types(planet_types: Iterable[str]) -> tuple[str, ...]:
+    """Return catalogue-ordered commodities available on any requested type."""
+    if isinstance(planet_types, (str, bytes)):
+        raise TypeError("planet_types must be an iterable of planet type names")
+    requested = set(planet_types)
+    if any(not isinstance(planet_type, str) for planet_type in requested):
+        raise TypeError("planet type names must be strings")
+    return tuple(
+        record["name"]
+        for record in _CATALOGUE
+        if requested.intersection(record["planet_types"])
+    )
+
+
+def planet_types_for_commodities(
+    commodity_names: Iterable[str],
+) -> Mapping[str, frozenset[str]]:
+    """Return catalogue-derived canonical planet types for requested commodities."""
+    if isinstance(commodity_names, (str, bytes)):
+        raise TypeError("commodity_names must be an iterable of commodity names")
+    requested = tuple(commodity_names)
+    result: dict[str, frozenset[str]] = {}
+    for requested_name in requested:
+        canonical = canonical_commodity_name(requested_name)
+        if canonical is None:
+            continue
+        for record in _CATALOGUE:
+            if record["name"] == canonical:
+                result[canonical] = frozenset(record["planet_types"])
+                break
+    return result
 
 
 def _build_canonical_names() -> MappingProxyType:

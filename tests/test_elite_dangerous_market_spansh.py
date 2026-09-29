@@ -5,9 +5,16 @@ from unittest.mock import patch
 import requests
 
 from elite_dangerous.market import (
+    ResolvedSystem,
     SpanshError,
+    LandableBody,
+    MarketDiagnostics,
+    canonical_planet_types_from_spansh,
     fetch_commodity_market,
     fetch_commodity_markets,
+    fetch_landable_planet_subtypes,
+    fetch_landable_bodies,
+    resolve_system,
 )
 
 BASE_URL = "https://spansh.co.uk/api"
@@ -82,6 +89,7 @@ def setup_session(
     system_record=None,
     pages=None,
     details=None,
+    body_pages=None,
 ):
     pages = pages if pages is not None else [search_page([search_result()], 1)]
     system_record = system_record if system_record is not None else {
@@ -99,10 +107,145 @@ def setup_session(
             value if isinstance(value, Exception) else response(value)
             for value in values
         ]
+    if body_pages is not None:
+        routes[("POST", "/bodies/search")] = body_pages
     return FakeSession(routes)
 
 
 class SpanshMarketTests(unittest.TestCase):
+    def test_resolve_system_returns_reusable_exact_identity(self):
+        session = setup_session(pages=[search_page([search_result("KAPPA")], 1)])
+
+        system = resolve_system("Kappa", session=session)
+
+        self.assertEqual(system, ResolvedSystem("KAPPA", 42))
+
+    def test_confirmed_spansh_subtypes_map_to_canonical_types(self):
+        subtypes = (
+            "High metal content world",
+            "Metal-rich body",
+            "Rocky body",
+            "Rocky Ice world",
+            "Icy body",
+            "Unknown world",
+            "Rocky body",
+        )
+
+        self.assertEqual(
+            canonical_planet_types_from_spansh(subtypes),
+            ("High metal content", "Metal Rich", "Rocky", "Rocky Ice", "Icy"),
+        )
+
+    def test_body_search_keeps_only_explicitly_landable_planets(self):
+        rows = [
+            {
+                "id64": 1,
+                "system_id64": 42,
+                "name": "Rock",
+                "type": "Planet",
+                "subtype": "Rocky body",
+                "is_landable": True,
+            },
+            {
+                "id64": 2,
+                "system_id64": 42,
+                "name": "Duplicate",
+                "type": "Planet",
+                "subtype": "Rocky body",
+                "is_landable": True,
+            },
+            {
+                "id64": 3,
+                "system_id64": 42,
+                "name": "Not landable",
+                "type": "Planet",
+                "subtype": "Icy body",
+                "is_landable": False,
+            },
+            {
+                "id64": 4,
+                "system_id64": 42,
+                "name": "Missing landability",
+                "type": "Planet",
+                "subtype": "Rocky Ice world",
+            },
+            {
+                "id64": 5,
+                "system_id64": 42,
+                "name": "Not a planet",
+                "type": "Star",
+                "subtype": "High metal content world",
+                "is_landable": True,
+            },
+            {
+                "id64": 6,
+                "system_id64": 42,
+                "name": "Unknown",
+                "type": "Planet",
+                "subtype": "Unsupported world",
+                "is_landable": True,
+            },
+        ]
+        session = setup_session(body_pages=[response({"results": rows, "count": 6})])
+
+        subtypes = fetch_landable_planet_subtypes(
+            ResolvedSystem("Kappa", 42),
+            session=session,
+        )
+
+        self.assertEqual(subtypes, ("Rocky body", "Unsupported world"))
+        request = session.calls[0]
+        self.assertEqual(request[:3], ("POST", "/bodies/search", 25))
+        self.assertEqual(
+            request[3]["json"]["filters"],
+            {
+                "system_id64": {"value": "42"},
+                "is_landable": {"value": True},
+                "type": {"value": ["Planet"]},
+            },
+        )
+
+    def test_body_search_empty_result_is_successful(self):
+        session = setup_session(body_pages=[response({"results": [], "count": 0})])
+
+        self.assertEqual(
+            fetch_landable_planet_subtypes(
+                ResolvedSystem("Kappa", 42),
+                session=session,
+            ),
+            (),
+        )
+
+    def test_body_search_retains_eligible_body_identity_and_skips_unknown_types(self):
+        rows = [
+            {"id64": 1, "system_id64": 42, "name": "Kappa 1", "type": "Planet", "subtype": "Rocky body", "is_landable": True},
+            {"id64": 2, "system_id64": 42, "name": "Kappa 4", "type": "Planet", "subtype": "Rocky body", "is_landable": True},
+            {"id64": 3, "system_id64": 42, "name": "Kappa 5", "type": "Planet", "subtype": "Unknown body", "is_landable": True},
+        ]
+        session = setup_session(body_pages=[response({"results": rows, "count": 3})])
+
+        self.assertEqual(
+            fetch_landable_bodies(ResolvedSystem("Kappa", 42), session=session),
+            (
+                LandableBody("Kappa 1", "Rocky"),
+                LandableBody("Kappa 4", "Rocky"),
+            ),
+        )
+
+    def test_resolved_system_avoids_repeating_system_search(self):
+        system = {"name": "Kappa", "stations": [], "bodies": []}
+        session = setup_session(system_record=system)
+
+        fetch_commodity_markets(
+            "Kappa",
+            ("Platinum",),
+            session=session,
+            resolved_system=ResolvedSystem("Kappa", 42),
+        )
+
+        self.assertNotIn("/systems/search", [call[1] for call in session.calls])
+        self.assertIn("/system/42", [call[1] for call in session.calls])
+
     def test_exact_case_insensitive_system_match_and_request_shape(self):
         session = setup_session(pages=[search_page([search_result("KAPPA")], 1)])
         result = fetch_commodity_market("Kappa", "Platinum", session=session)
@@ -821,6 +964,51 @@ class SpanshMarketTests(unittest.TestCase):
             "Platinum",
             session=session,
             exclude_station=lambda name: name == "FC01",
+        )
+
+        self.assertEqual(result.observations, ())
+        self.assertEqual(result.issues, ())
+        self.assertNotIn(("GET", "/station/123"), [call[:2] for call in session.calls])
+
+    def test_diagnostics_records_excluded_carrier_names_in_traversal_order(self):
+        system = {
+            "name": "Kappa",
+            "stations": [
+                station("ABC-123", 123, has_market=True),
+                station("Market", 124, has_market=True),
+                station("FC01", 125, has_market=True),
+                station("XYZ-789", 126, has_market=True),
+            ],
+            "bodies": [],
+        }
+        details = {
+            124: station_detail("Market", market=[{"commodity": "Platinum", "sell_price": 10}]),
+        }
+        session = setup_session(system_record=system, details=details)
+        diagnostics = MarketDiagnostics()
+
+        result = fetch_commodity_market(
+            "Kappa",
+            "Platinum",
+            session=session,
+            exclude_station=lambda name: name in {"ABC-123", "FC01", "XYZ-789"},
+            diagnostics=diagnostics,
+        )
+
+        self.assertEqual(diagnostics.carriers_excluded, 3)
+        self.assertEqual(diagnostics.excluded_carrier_names, ["ABC-123", "FC01", "XYZ-789"])
+        self.assertNotIn(("GET", "/station/123"), [call[:2] for call in session.calls])
+        self.assertNotIn(("GET", "/station/125"), [call[:2] for call in session.calls])
+        self.assertNotIn(("GET", "/station/126"), [call[:2] for call in session.calls])
+        self.assertIn(("GET", "/station/124"), [call[:2] for call in session.calls])
+        self.assertEqual(len(result.observations), 1)
+
+    def test_diagnostics_omitted_preserves_existing_carrier_behavior(self):
+        system = {"name": "Kappa", "stations": [station("ABC-123", 123, has_market=True)], "bodies": []}
+        session = setup_session(system_record=system)
+
+        result = fetch_commodity_market(
+            "Kappa", "Platinum", session=session, exclude_station=lambda name: name == "ABC-123"
         )
 
         self.assertEqual(result.observations, ())

@@ -5,20 +5,38 @@ from .commodities import (
     COMMODITY_ALIASES,
     SURFACE_COMMODITIES,
     canonical_commodity_name,
+    commodities_for_planet_types,
+    planet_types_for_commodities,
     normalize_name,
 )
 from .models import (
     CommodityMarketResult,
     CommodityPriceSummary,
     CommoditySummaryResult,
+    LandableBody,
     LandingPad,
     MarketIssue,
     MarketObservation,
     Station,
 )
-from .policy import filter_market_observations, is_carrier_name
+from .policy import (
+    MARKET_FRESHNESS_MAX_AGE,
+    classify_market_freshness,
+    filter_market_observations,
+    is_carrier_name,
+)
 from .ranking import rank_market_observations
-from .spansh import SpanshError, fetch_commodity_market, fetch_commodity_markets
+from .spansh import (
+    ResolvedSystem,
+    MarketDiagnostics,
+    SpanshError,
+    canonical_planet_types_from_spansh,
+    fetch_commodity_market,
+    fetch_commodity_markets,
+    fetch_landable_planet_subtypes,
+    fetch_landable_bodies,
+    resolve_system,
+)
 from .inara import InaraParseError, parse_inara_summaries
 from .cache import (
     CacheFormatError,
@@ -32,20 +50,31 @@ __all__ = [
     "COMMODITY_ALIASES",
     "SURFACE_COMMODITIES",
     "canonical_commodity_name",
+    "commodities_for_planet_types",
+    "planet_types_for_commodities",
     "normalize_name",
     "CommodityMarketResult",
     "CommodityPriceSummary",
     "CommoditySummaryResult",
+    "LandableBody",
     "LandingPad",
     "MarketIssue",
     "MarketObservation",
     "Station",
     "filter_market_observations",
+    "MARKET_FRESHNESS_MAX_AGE",
+    "classify_market_freshness",
     "is_carrier_name",
     "rank_market_observations",
     "SpanshError",
+    "ResolvedSystem",
+    "MarketDiagnostics",
+    "canonical_planet_types_from_spansh",
     "fetch_commodity_market",
     "fetch_commodity_markets",
+    "fetch_landable_planet_subtypes",
+    "fetch_landable_bodies",
+    "resolve_system",
     "InaraParseError",
     "parse_inara_summaries",
     "CacheFormatError",

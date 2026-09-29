@@ -23,18 +23,25 @@ if str(REPOSITORY_ROOT) not in sys.path:
 
 from elite_dangerous.market import (  # noqa: E402
     CacheFormatError,
+    classify_market_freshness,
     CommoditySummaryResult,
     InaraParseError,
+    MarketDiagnostics,
     MarketIssue,
     MarketObservation,
+    LandableBody,
     SpanshError,
     SURFACE_COMMODITIES,
+    commodities_for_planet_types,
     fetch_commodity_markets,
+    fetch_landable_bodies,
     filter_market_observations,
     is_carrier_name,
     load_summary_cache,
     parse_inara_summaries,
     rank_market_observations,
+    planet_types_for_commodities,
+    resolve_system,
     save_summary_cache,
 )
 
@@ -162,27 +169,79 @@ def query_system_markets(
     name: str,
     *,
     progress=print,
-) -> tuple[str, dict[str, tuple[MarketObservation, ...]], tuple[MarketIssue, ...]]:
+    diagnostics: MarketDiagnostics | None = None,
+    timing: bool = False,
+    non_current_markets: dict[str, dict[str, object]] | None = None,
+) -> tuple[str, dict[str, tuple[MarketObservation, ...]], tuple[MarketIssue, ...], tuple[LandableBody, ...], int]:
     """Fetch all current surface commodities in one Spansh traversal."""
+    started = perf_counter()
+
+    def stage(label, operation):
+        stage_started = perf_counter()
+        if timing:
+            progress(f"[+{stage_started - started:6.2f}s] {label}...")
+        value = operation()
+        if timing:
+            progress(
+                f"[+{perf_counter() - started:6.2f}s] {label} done "
+                f"({perf_counter() - stage_started:.2f}s)"
+            )
+        return value
+
+    system = stage("Resolve system", lambda: resolve_system(name))
+    bodies = stage("Fetch landable bodies", lambda: fetch_landable_bodies(system))
+    preparation_started = perf_counter()
+    planet_types = tuple(body.canonical_planet_type for body in bodies)
+    commodities = commodities_for_planet_types(planet_types)
+    if timing:
+        progress(
+            f"[+{perf_counter() - started:6.2f}s] Prepare applicable commodities done "
+            f"({perf_counter() - preparation_started:.2f}s) — {len(commodities)} commodities"
+        )
     progress(
-        f"Querying {len(SURFACE_COMMODITIES)} commodities in {name} "
+        f"Querying {len(commodities)} commodities in {system.name} "
         "with one Spansh market traversal..."
     )
-    results = fetch_commodity_markets(
-        name,
-        SURFACE_COMMODITIES,
-        exclude_station=is_carrier_name,
+    if not commodities:
+        progress("No supported landable Surface Mining body types were found.")
+        return system.name, {}, (), bodies, 0
+    market_kwargs = {
+        "exclude_station": is_carrier_name,
+        "resolved_system": system,
+    }
+    if diagnostics is not None:
+        market_kwargs["diagnostics"] = diagnostics
+    results = stage(
+        "Fetch local markets",
+        lambda: fetch_commodity_markets(
+            system.name,
+            commodities,
+            **market_kwargs,
+        ),
     )
 
     observations_by_commodity: dict[str, tuple[MarketObservation, ...]] = {}
     issues: list[MarketIssue] = []
     seen_issues: set[MarketIssue] = set()
-    exact_name = name
+    exact_name = system.name
     for result in results:
         if result.observations:
             exact_name = result.observations[0].station.system_name
+        current_observations = []
+        for observation in result.observations:
+            freshness = classify_market_freshness(observation)
+            if freshness == "current":
+                current_observations.append(observation)
+            elif non_current_markets is not None:
+                key = observation.station.market_id or observation.station.name
+                entry = non_current_markets.setdefault(
+                    key,
+                    {"station": observation.station, "freshness": freshness},
+                )
+                entry.setdefault("commodities", set()).add(observation.commodity)
+
         eligible = filter_market_observations(
-            result.observations,
+            current_observations,
             exclude_carriers=True,
             demand_greater_than=MIN_DEMAND,
             require_positive_sell_price=True,
@@ -201,7 +260,7 @@ def query_system_markets(
         f"{len(observations_by_commodity)} commodities; "
         f"{len(issues)} distinct issue(s)."
     )
-    return exact_name, observations_by_commodity, tuple(issues)
+    return exact_name, observations_by_commodity, tuple(issues), bodies, len(commodities)
 
 
 def load_or_refresh_inara(
@@ -304,6 +363,30 @@ def select_top_products(
     return tuple(selected)
 
 
+def parse_product_count(value: str) -> int:
+    """Parse a requested positive product count."""
+    text = value.strip()
+    if not text:
+        return TOP_PRODUCTS
+    if not text.isdecimal():
+        raise ValueError("Enter a positive integer.")
+    count = int(text)
+    if count <= 0:
+        raise ValueError("Enter a positive integer.")
+    return count
+
+
+def prompt_product_count(input_fn=None) -> int:
+    """Prompt until the user supplies a positive product count."""
+    if input_fn is None:
+        input_fn = input
+    while True:
+        try:
+            return parse_product_count(input_fn(f"Number of products [{TOP_PRODUCTS}]: "))
+        except ValueError as exc:
+            print(str(exc))
+
+
 def _cache_label(status: str, stored_at: datetime | None) -> str:
     if stored_at is None:
         return f"INARA ({status})"
@@ -327,13 +410,17 @@ def print_results(
     cache_warning: str | None,
     issues: tuple[MarketIssue, ...],
     elapsed: float,
+    *,
+    applicable_commodity_count: int,
+    bodies: tuple[LandableBody, ...],
+    non_current_markets: dict[str, dict[str, object]] | None = None,
 ) -> None:
     """Present the selected local markets and available global summaries."""
     print()
     print("=" * 112)
     print(
         f"SURFACE MINING — {system_name.upper()} "
-        f"| {len(SURFACE_COMMODITIES)} PRODUCTS "
+        f"| {applicable_commodity_count} PRODUCTS "
         f"| LOCAL DEMAND > {format_number(MIN_DEMAND)} t"
     )
     print("=" * 112)
@@ -353,6 +440,16 @@ def print_results(
         summary = summaries.get(product)
         print()
         print(f"{number}. {product.upper()}")
+        compatible_types = planet_types_for_commodities((product,)).get(product, frozenset())
+        body_names = [
+            body.name[len(system_name) + 1:]
+            if body.name.startswith(system_name + " ")
+            and body.name[len(system_name) + 1:]
+            else body.name
+            for body in bodies
+            if body.canonical_planet_type in compatible_types
+        ]
+        print(f"   Probably on: {', '.join(body_names) if body_names else 'no matching body identified'}")
         if summary is not None and (
             summary.average_sell is not None or summary.maximum_sell is not None
         ):
@@ -400,6 +497,20 @@ def print_results(
         print("Partial local result — station issues:")
         for issue in issues:
             print(f"  {issue.station_name}: {issue.message}")
+    if non_current_markets:
+        too_old = [item for item in non_current_markets.values() if item["freshness"] == "too_old"]
+        age_unknown = [item for item in non_current_markets.values() if item["freshness"] == "age_unknown"]
+        if too_old:
+            print()
+            print("Too old:")
+            for item in too_old:
+                station = item["station"]
+                print(f"  {station.name} — market data older than 365 days")
+        if age_unknown:
+            print()
+            print("Age unknown:")
+            for item in age_unknown:
+                print(f"  {item['station'].name}")
     print()
     print(f"{len(selected)} products shown; {len(issues)} distinct station issue(s).")
     print(f"Elapsed: {elapsed:.2f} s")
@@ -416,15 +527,64 @@ def main() -> int:
         print("Enter a system name.")
         return 1
 
+    product_count = (
+        prompt_product_count()
+        if len(sys.argv) == 1
+        else TOP_PRODUCTS
+    )
+
     started = perf_counter()
+    diagnostics = MarketDiagnostics()
+    non_current_markets: dict[str, dict[str, object]] = {}
     try:
-        exact_name, local_results, issues = query_system_markets(system_name)
+        exact_name, local_results, issues, bodies, applicable_count = query_system_markets(
+            system_name,
+            diagnostics=diagnostics,
+            timing=True,
+            non_current_markets=non_current_markets,
+        )
     except SpanshError as exc:
         print(f"Could not query the system: {exc}")
         return 1
 
+    inara_started = perf_counter()
+    print(f"[+{inara_started - started:6.2f}s] Load/refresh INARA...")
     summary_result, cache_status, cache_time, cache_warning = load_or_refresh_inara()
-    selected = select_top_products(local_results)
+    print(
+        f"[+{perf_counter() - started:6.2f}s] Load/refresh INARA done "
+        f"({perf_counter() - inara_started:.2f}s) — {cache_status}"
+    )
+    selection_started = perf_counter()
+    selected = select_top_products(local_results, limit=product_count)
+    print(
+        f"[+{perf_counter() - started:6.2f}s] Select Top-N done "
+        f"({perf_counter() - selection_started:.2f}s)"
+    )
+    print(
+        "             market diagnostics: "
+        f"candidates: {diagnostics.market_candidates} | "
+        f"carriers skipped: {diagnostics.carriers_excluded} | "
+        f"invalid market id: {diagnostics.invalid_market_ids}"
+    )
+    if diagnostics.excluded_carrier_names:
+        for station_name in diagnostics.excluded_carrier_names:
+            print(f"               {station_name}")
+    print(
+        "             station requests: "
+        f"{diagnostics.station_requests_attempted} | "
+        f"successes: {diagnostics.station_requests_succeeded} | "
+        f"failures: {diagnostics.station_requests_failed}"
+    )
+    print(
+        "             station HTTP: "
+        f"{diagnostics.station_http_elapsed:.2f}s | "
+        f"system detail: {diagnostics.system_detail_elapsed:.2f}s"
+    )
+    print("             slowest:")
+    for station_name, elapsed in diagnostics.slowest_station_requests:
+        print(f"               {station_name} — {elapsed:.2f}s")
+    render_started = perf_counter()
+    print(f"[+{render_started - started:6.2f}s] Render results...")
     print_results(
         exact_name,
         selected,
@@ -434,6 +594,13 @@ def main() -> int:
         cache_warning,
         issues,
         perf_counter() - started,
+        applicable_commodity_count=applicable_count,
+        bodies=bodies,
+        non_current_markets=non_current_markets,
+    )
+    print(
+        f"[+{perf_counter() - started:6.2f}s] Render results done "
+        f"({perf_counter() - render_started:.2f}s)"
     )
     return 2 if issues else 0
 

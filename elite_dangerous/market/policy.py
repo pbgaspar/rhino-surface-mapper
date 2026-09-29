@@ -2,10 +2,31 @@
 
 import re
 from collections.abc import Iterable
+from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from .models import MarketObservation
 
 _CARRIER_NAME_PATTERN = re.compile(r"[A-Za-z0-9]{3}-[A-Za-z0-9]{3}")
+MARKET_FRESHNESS_MAX_AGE = timedelta(days=365)
+MarketFreshness = Literal["current", "too_old", "age_unknown"]
+
+
+def classify_market_freshness(
+    observation: MarketObservation,
+    *,
+    now: datetime | None = None,
+    max_age: timedelta = MARKET_FRESHNESS_MAX_AGE,
+) -> MarketFreshness:
+    """Classify market freshness using only ``market_updated_at``."""
+    updated_at = observation.market_updated_at
+    if updated_at is None:
+        return "age_unknown"
+    current_time = datetime.now(timezone.utc) if now is None else now
+    if current_time.tzinfo is None or current_time.utcoffset() is None:
+        raise ValueError("now must be timezone-aware")
+    age = max(current_time.astimezone(timezone.utc) - updated_at.astimezone(timezone.utc), timedelta(0))
+    return "too_old" if age > max_age else "current"
 
 
 def is_carrier_name(name: str) -> bool:

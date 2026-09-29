@@ -1,8 +1,10 @@
 import unittest
+from datetime import datetime, timedelta, timezone
 
 from elite_dangerous.market import (
     MarketObservation,
     Station,
+    classify_market_freshness,
     filter_market_observations,
     is_carrier_name,
 )
@@ -13,6 +15,8 @@ def observation(
     *,
     demand=10,
     sell_price=100,
+    market_updated_at=None,
+    station_updated_at=None,
 ):
     return MarketObservation(
         station=Station(station_name, "1", "System", False, "L"),
@@ -20,12 +24,24 @@ def observation(
         sell_price=sell_price,
         demand=demand,
         supply=None,
-        market_updated_at=None,
-        station_updated_at=None,
+        market_updated_at=market_updated_at,
+        station_updated_at=station_updated_at,
     )
 
 
 class MarketPolicyTests(unittest.TestCase):
+    def test_market_freshness_boundary_and_old_age(self):
+        now = datetime(2026, 9, 16, tzinfo=timezone.utc)
+        current = observation(market_updated_at=now - timedelta(days=365))
+        old = observation(market_updated_at=now - timedelta(days=366))
+        self.assertEqual(classify_market_freshness(current, now=now), "current")
+        self.assertEqual(classify_market_freshness(old, now=now), "too_old")
+
+    def test_missing_market_timestamp_is_age_unknown(self):
+        now = datetime(2026, 9, 16, tzinfo=timezone.utc)
+        value = observation(station_updated_at=now)
+        self.assertEqual(classify_market_freshness(value, now=now), "age_unknown")
+
     def test_carrier_name_shapes_strip_outer_whitespace(self):
         for name in (" FC01 ", " ABC-123 ", "Ab9-xY0"):
             with self.subTest(name=name):

@@ -10,7 +10,9 @@ from elite_dangerous.market.commodities import (
     SURFACE_COMMODITIES,
     _load_catalogue,
     canonical_commodity_name,
+    commodities_for_planet_types,
     normalize_name,
+    planet_types_for_commodities,
 )
 
 
@@ -28,6 +30,36 @@ class CommodityTests(unittest.TestCase):
     def test_current_adopted_catalogue_has_37_products(self):
         self.assertEqual(len(SURFACE_COMMODITIES), 37)
         self.assertEqual(len(set(SURFACE_COMMODITIES)), len(SURFACE_COMMODITIES))
+
+    def test_commodities_for_single_planet_type_follow_catalogue_order(self):
+        expected = tuple(
+            record["name"]
+            for record in self.payload
+            if "Rocky" in record["planet_types"]
+        )
+
+        self.assertEqual(commodities_for_planet_types({"Rocky"}), expected)
+        self.assertEqual(len(expected), 32)
+
+    def test_commodity_union_is_unique_and_empty_types_return_empty(self):
+        selected = commodities_for_planet_types(
+            {"High metal content", "Rocky Ice", "Rocky", "Icy"}
+        )
+
+        self.assertEqual(selected, SURFACE_COMMODITIES)
+        self.assertEqual(len(selected), len(set(selected)))
+        self.assertEqual(commodities_for_planet_types(set()), ())
+
+    def test_commodity_planet_types_are_derived_from_catalogue(self):
+        expected = {
+            record["name"]: frozenset(record["planet_types"])
+            for record in self.payload
+            if record["name"] in {"Platinum", "Methanol Crystals"}
+        }
+        self.assertEqual(
+            dict(planet_types_for_commodities(("Platinum", "Methanol Crystals"))),
+            expected,
+        )
 
     def test_json_catalogue_loads_and_derives_public_tuple(self):
         catalogue = _load_catalogue(CATALOGUE_PATH)

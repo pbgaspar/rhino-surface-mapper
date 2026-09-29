@@ -1,7 +1,9 @@
 """Spansh acquisition and mapping for system commodity markets."""
 
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from time import perf_counter
 from typing import Any
 
 import requests
@@ -9,6 +11,7 @@ import requests
 from .commodities import canonical_commodity_name
 from .models import (
     CommodityMarketResult,
+    LandableBody,
     LandingPad,
     MarketIssue,
     MarketObservation,
@@ -19,10 +22,130 @@ from .models import (
 _BASE_URL = "https://spansh.co.uk/api"
 _REQUEST_TIMEOUT = 25
 _SYSTEM_PAGE_SIZE = 100
+_BODY_PAGE_SIZE = 100
+_CANONICAL_PLANET_TYPES_BY_SUBTYPE = {
+    "High metal content world": "High metal content",
+    "Metal-rich body": "Metal Rich",
+    "Rocky body": "Rocky",
+    "Rocky Ice world": "Rocky Ice",
+    "Icy body": "Icy",
+}
 
 
 class SpanshError(RuntimeError):
     """A fatal Spansh failure prevented a trustworthy system-level result."""
+
+
+@dataclass(frozen=True)
+class ResolvedSystem:
+    """Exact Spansh system identity reusable across related acquisitions."""
+
+    name: str
+    id64: str | int
+
+
+@dataclass
+class MarketDiagnostics:
+    """Optional acquisition counters and timings for live diagnostics."""
+
+    market_candidates: int = 0
+    carriers_excluded: int = 0
+    excluded_carrier_names: list[str] | None = None
+    invalid_market_ids: int = 0
+    station_requests_attempted: int = 0
+    station_requests_succeeded: int = 0
+    station_requests_failed: int = 0
+    station_http_elapsed: float = 0.0
+    system_detail_elapsed: float = 0.0
+    slowest_station_requests: list[tuple[str, float]] | None = None
+
+    def __post_init__(self) -> None:
+        if self.excluded_carrier_names is None:
+            self.excluded_carrier_names = []
+        if self.slowest_station_requests is None:
+            self.slowest_station_requests = []
+
+    def record_station(self, name: str, elapsed: float, succeeded: bool) -> None:
+        self.station_http_elapsed += elapsed
+        if succeeded:
+            self.station_requests_succeeded += 1
+        else:
+            self.station_requests_failed += 1
+        self.slowest_station_requests.append((name, elapsed))
+        self.slowest_station_requests.sort(key=lambda item: item[1], reverse=True)
+        del self.slowest_station_requests[5:]
+
+
+def resolve_system(
+    system_name: str,
+    *,
+    session: requests.Session | None = None,
+) -> ResolvedSystem:
+    """Resolve an exact system name to its reusable Spansh identity."""
+    if session is not None:
+        return _resolve_system_with_session(session, system_name)
+
+    owned_session = requests.Session()
+    try:
+        return _resolve_system_with_session(owned_session, system_name)
+    finally:
+        owned_session.close()
+
+
+def fetch_landable_planet_subtypes(
+    system: ResolvedSystem,
+    *,
+    session: requests.Session | None = None,
+) -> tuple[str, ...]:
+    """Return unique subtypes from explicitly landable planets in a system."""
+    if not isinstance(system, ResolvedSystem):
+        raise TypeError("system must be a ResolvedSystem")
+    if session is not None:
+        return _fetch_landable_planet_subtypes_with_session(session, system)
+
+    owned_session = requests.Session()
+    try:
+        return _fetch_landable_planet_subtypes_with_session(owned_session, system)
+    finally:
+        owned_session.close()
+
+
+def fetch_landable_bodies(
+    system: ResolvedSystem,
+    *,
+    session: requests.Session | None = None,
+) -> tuple[LandableBody, ...]:
+    """Return eligible landable planets with confirmed canonical types."""
+    if not isinstance(system, ResolvedSystem):
+        raise TypeError("system must be a ResolvedSystem")
+    if session is not None:
+        return _fetch_landable_bodies_with_session(session, system)
+
+    owned_session = requests.Session()
+    try:
+        return _fetch_landable_bodies_with_session(owned_session, system)
+    finally:
+        owned_session.close()
+
+
+def canonical_planet_types_from_spansh(
+    subtypes: Iterable[str],
+) -> tuple[str, ...]:
+    """Map confirmed Spansh subtypes to unique canonical RSM planet types."""
+    if isinstance(subtypes, (str, bytes)):
+        raise TypeError("subtypes must be an iterable of subtype names")
+    mapped = set()
+    for subtype in subtypes:
+        if not isinstance(subtype, str):
+            raise TypeError("subtype names must be strings")
+        canonical = _CANONICAL_PLANET_TYPES_BY_SUBTYPE.get(subtype)
+        if canonical is not None:
+            mapped.add(canonical)
+    return tuple(
+        canonical
+        for canonical in _CANONICAL_PLANET_TYPES_BY_SUBTYPE.values()
+        if canonical in mapped
+    )
 
 
 def fetch_commodity_market(
@@ -31,6 +154,8 @@ def fetch_commodity_market(
     *,
     session: requests.Session | None = None,
     exclude_station: Callable[[str], bool] | None = None,
+    resolved_system: ResolvedSystem | None = None,
+    diagnostics: MarketDiagnostics | None = None,
 ) -> CommodityMarketResult:
     """Fetch one commodity's observations across a Spansh system."""
     return fetch_commodity_markets(
@@ -38,6 +163,8 @@ def fetch_commodity_market(
         (commodity_name,),
         session=session,
         exclude_station=exclude_station,
+        resolved_system=resolved_system,
+        diagnostics=diagnostics,
     )[0]
 
 
@@ -47,6 +174,8 @@ def fetch_commodity_markets(
     *,
     session: requests.Session | None = None,
     exclude_station: Callable[[str], bool] | None = None,
+    resolved_system: ResolvedSystem | None = None,
+    diagnostics: MarketDiagnostics | None = None,
 ) -> tuple[CommodityMarketResult, ...]:
     """Fetch several commodity results in one Spansh system traversal.
 
@@ -78,6 +207,8 @@ def fetch_commodity_markets(
             system_name,
             requested_by_key,
             exclude_station=exclude_station,
+            resolved_system=resolved_system,
+            diagnostics=diagnostics,
         )
 
     owned_session = requests.Session()
@@ -87,6 +218,8 @@ def fetch_commodity_markets(
             system_name,
             requested_by_key,
             exclude_station=exclude_station,
+            resolved_system=resolved_system,
+            diagnostics=diagnostics,
         )
     finally:
         owned_session.close()
@@ -98,12 +231,19 @@ def _fetch_commodities_with_session(
     requested_by_key: dict[str, str],
     *,
     exclude_station: Callable[[str], bool] | None,
+    resolved_system: ResolvedSystem | None,
+    diagnostics: MarketDiagnostics | None,
 ) -> tuple[CommodityMarketResult, ...]:
-    system_id = _find_system_id(session, requested_system)
-    if system_id is None:
-        raise SpanshError(f"System {requested_system!r} was not found by exact name.")
+    system = resolved_system or _resolve_system_with_session(session, requested_system)
+    if system.name.casefold() != requested_system.casefold():
+        raise ValueError("resolved_system does not match the requested system")
 
-    system_record = _fetch_record(session, "GET", f"/system/{system_id}")
+    system_started = perf_counter()
+    try:
+        system_record = _fetch_record(session, "GET", f"/system/{system.id64}")
+    finally:
+        if diagnostics is not None:
+            diagnostics.system_detail_elapsed = perf_counter() - system_started
     actual_system = system_record.get("name")
     if (
         not isinstance(actual_system, str)
@@ -131,18 +271,33 @@ def _fetch_commodities_with_session(
         station_name = _station_name(discovery_record)
         if not _is_market_candidate(discovery_record):
             continue
+        if diagnostics is not None:
+            diagnostics.market_candidates += 1
         if exclude_station is not None and exclude_station(station_name):
+            if diagnostics is not None:
+                diagnostics.carriers_excluded += 1
+                diagnostics.excluded_carrier_names.append(station_name)
             continue
 
         numeric_id = _usable_market_id(market_id)
         if numeric_id is None:
+            if diagnostics is not None:
+                diagnostics.invalid_market_ids += 1
             add_shared_issue(
                 MarketIssue(station_name, "Station has no usable market_id.")
             )
             continue
 
+        station_request_completed = False
         try:
+            station_started = perf_counter()
+            if diagnostics is not None:
+                diagnostics.station_requests_attempted += 1
             record = _fetch_record(session, "GET", f"/station/{numeric_id}")
+            station_elapsed = perf_counter() - station_started
+            if diagnostics is not None:
+                diagnostics.record_station(station_name, station_elapsed, True)
+            station_request_completed = True
             detail_system = record.get("system_name")
             if (
                 not isinstance(detail_system, str)
@@ -169,6 +324,9 @@ def _fetch_commodities_with_session(
             for issue in shared_row_issues:
                 add_shared_issue(issue)
         except (SpanshError, ValueError, TypeError, KeyError) as exc:
+            if diagnostics is not None and not station_request_completed:
+                station_elapsed = perf_counter() - station_started
+                diagnostics.record_station(station_name, station_elapsed, False)
             add_shared_issue(MarketIssue(station_name, str(exc)))
 
     return tuple(
@@ -181,7 +339,121 @@ def _fetch_commodities_with_session(
     )
 
 
-def _find_system_id(session: requests.Session, requested_name: str) -> str | int | None:
+def _resolve_system_with_session(
+    session: requests.Session,
+    requested_name: str,
+) -> ResolvedSystem:
+    system = _find_system(session, requested_name)
+    if system is None:
+        raise SpanshError(f"System {requested_name!r} was not found by exact name.")
+    return system
+
+
+def _fetch_landable_planet_subtypes_with_session(
+    session: requests.Session,
+    system: ResolvedSystem,
+) -> tuple[str, ...]:
+    seen: set[str] = set()
+    subtypes = []
+    for item in _fetch_landable_body_rows_with_session(session, system):
+        subtype = item.get("subtype")
+        if isinstance(subtype, str) and subtype not in seen:
+            seen.add(subtype)
+            subtypes.append(subtype)
+    return tuple(subtypes)
+
+
+def _fetch_landable_body_rows_with_session(
+    session: requests.Session,
+    system: ResolvedSystem,
+) -> tuple[dict[str, Any], ...]:
+    page = 0
+    seen_ids: set[str] = set()
+    rows: list[dict[str, Any]] = []
+
+    while True:
+        payload = _request_json(
+            session,
+            "POST",
+            "/bodies/search",
+            json={
+                "filters": {
+                    "system_id64": {"value": str(system.id64)},
+                    "is_landable": {"value": True},
+                    "type": {"value": ["Planet"]},
+                },
+                "sort": [],
+                "size": _BODY_PAGE_SIZE,
+                "page": page,
+            },
+        )
+        results = payload.get("results")
+        if not isinstance(results, list):
+            raise SpanshError("Spansh body search response has no results list.")
+        count = payload.get("count")
+        if count is not None and (
+            isinstance(count, bool) or not isinstance(count, int) or count < 0
+        ):
+            raise SpanshError("Spansh body search response has an invalid result count.")
+        if count is not None and count < len(results):
+            raise SpanshError("Spansh body search result count is inconsistent.")
+
+        page_ids = set()
+        for item in results:
+            if not isinstance(item, dict):
+                raise SpanshError("Spansh body search contains an invalid result.")
+            identifier = item.get("id64")
+            usable_identifier = (
+                isinstance(identifier, int)
+                and not isinstance(identifier, bool)
+                and identifier >= 0
+            ) or (isinstance(identifier, str) and identifier.isdecimal())
+            if not usable_identifier:
+                raise SpanshError("Spansh body search result has no usable id64.")
+            page_ids.add(str(identifier))
+            if str(item.get("system_id64")) != str(system.id64):
+                raise SpanshError("Spansh body search returned a body from another system.")
+            if item.get("is_landable") is not True or item.get("type") != "Planet":
+                continue
+            subtype = item.get("subtype")
+            name = item.get("name")
+            if isinstance(subtype, str) and isinstance(name, str) and name:
+                rows.append(item)
+
+        if not results:
+            if count is not None and len(seen_ids) < count:
+                raise SpanshError(
+                    "Spansh body search ended before its reported result count."
+                )
+            return tuple(rows)
+        if page_ids.issubset(seen_ids):
+            raise SpanshError("Spansh repeated a body search page before completion.")
+        seen_ids.update(page_ids)
+        if count is not None and len(seen_ids) >= count:
+            return tuple(rows)
+        if count is None and len(results) < _BODY_PAGE_SIZE:
+            return tuple(rows)
+        page += 1
+
+
+def _fetch_landable_bodies_with_session(
+    session: requests.Session,
+    system: ResolvedSystem,
+) -> tuple[LandableBody, ...]:
+    rows = _fetch_landable_body_rows_with_session(session, system)
+    bodies = []
+    for item in rows:
+        subtype = item.get("subtype")
+        canonical = _CANONICAL_PLANET_TYPES_BY_SUBTYPE.get(subtype)
+        if canonical is not None:
+            bodies.append(LandableBody(item["name"], canonical))
+    return tuple(bodies)
+
+
+def _find_system(
+    session: requests.Session,
+    requested_name: str,
+) -> ResolvedSystem | None:
     page = 0
     seen_ids: set[str] = set()
 
@@ -209,7 +481,7 @@ def _find_system_id(session: requests.Session, requested_name: str) -> str | int
             raise SpanshError("Spansh system search result count is inconsistent.")
 
         page_ids = set()
-        exact_match: str | int | None = None
+        exact_match: ResolvedSystem | None = None
         for item in results:
             if not isinstance(item, dict):
                 raise SpanshError("Spansh system search contains an invalid result.")
@@ -224,7 +496,7 @@ def _find_system_id(session: requests.Session, requested_name: str) -> str | int
                 raise SpanshError("Spansh system search result has no usable name or id64.")
             page_ids.add(str(identifier))
             if name.casefold() == requested_name.casefold():
-                exact_match = identifier
+                exact_match = ResolvedSystem(name, identifier)
                 break
 
         if exact_match is not None:

@@ -15,8 +15,10 @@ from elite_dangerous.market import (
     CommodityPriceSummary,
     CommoditySummaryResult,
     LandingPad,
+    LandableBody,
     MarketIssue,
     MarketObservation,
+    ResolvedSystem,
     Station,
     SummaryCache,
     SURFACE_COMMODITIES,
@@ -104,16 +106,29 @@ class SurfaceMiningConsumerTests(unittest.TestCase):
         )
         progress = []
 
-        with patch.object(CONSUMER, "fetch_commodity_markets", return_value=batch) as fetch:
-            exact_name, grouped, issues = CONSUMER.query_system_markets(
+        rocky = CONSUMER.commodities_for_planet_types({"Rocky"})
+        resolved = ResolvedSystem("Kappa", 42)
+        with (
+            patch.object(CONSUMER, "resolve_system", return_value=resolved) as resolve,
+            patch.object(
+                CONSUMER,
+                "fetch_landable_bodies",
+                return_value=(LandableBody("Kappa 1", "Rocky"),),
+            ) as body_fetch,
+            patch.object(CONSUMER, "fetch_commodity_markets", return_value=batch) as fetch,
+        ):
+            exact_name, grouped, issues, bodies, applicable_count = CONSUMER.query_system_markets(
                 "kappa",
                 progress=progress.append,
             )
 
+        resolve.assert_called_once_with("kappa")
+        body_fetch.assert_called_once_with(resolved)
         fetch.assert_called_once_with(
-            "kappa",
-            SURFACE_COMMODITIES,
+            "Kappa",
+            rocky,
             exclude_station=CONSUMER.is_carrier_name,
+            resolved_system=resolved,
         )
         self.assertIs(CONSUMER.SURFACE_COMMODITIES, SURFACE_COMMODITIES)
         self.assertEqual(exact_name, "Kappa")
@@ -122,7 +137,30 @@ class SurfaceMiningConsumerTests(unittest.TestCase):
             ("Market Five", "Market One"),
         )
         self.assertEqual(issues, (issue,))
+        self.assertEqual(bodies, (LandableBody("Kappa 1", "Rocky"),))
+        self.assertEqual(applicable_count, len(rocky))
         self.assertEqual(len(progress), 2)
+
+    def test_no_supported_landable_type_skips_market_lookup(self):
+        resolved = ResolvedSystem("Kappa", 42)
+        progress = []
+        with (
+            patch.object(CONSUMER, "resolve_system", return_value=resolved),
+            patch.object(
+                CONSUMER,
+                "fetch_landable_bodies",
+                return_value=(),
+            ),
+            patch.object(CONSUMER, "fetch_commodity_markets") as fetch,
+        ):
+            result = CONSUMER.query_system_markets(
+                "Kappa",
+                progress=progress.append,
+            )
+
+        self.assertEqual(result, ("Kappa", {}, (), (), 0))
+        fetch.assert_not_called()
+        self.assertIn("No supported landable", progress[-1])
 
     def test_product_order_uses_best_observation_and_stable_ties(self):
         results = {
@@ -140,6 +178,82 @@ class SurfaceMiningConsumerTests(unittest.TestCase):
             ("Water", "Platinum", "Gold"),
         )
         self.assertEqual(selected[1][1], results["Platinum"])
+
+    def test_product_count_parser_defaults_and_accepts_positive_integer(self):
+        self.assertEqual(CONSUMER.parse_product_count(""), 3)
+        self.assertEqual(CONSUMER.parse_product_count(" 5 "), 5)
+
+    def test_product_count_parser_rejects_non_positive_and_non_integer_values(self):
+        for value in ("0", "-1", "1.5", "abc"):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    CONSUMER.parse_product_count(value)
+
+    def test_product_count_prompt_retries_invalid_input(self):
+        messages = []
+        values = iter(("0", "-2", "five", ""))
+        with patch("builtins.print", side_effect=messages.append):
+            result = CONSUMER.prompt_product_count(lambda _prompt: next(values))
+
+        self.assertEqual(result, 3)
+        self.assertEqual(messages, ["Enter a positive integer."] * 3)
+
+    def test_product_selection_respects_requested_count_and_caps_at_available(self):
+        results = {
+            "Platinum": (observation("Platinum", "P", price=1000, demand=500),),
+            "Gold": (observation("Gold", "G", price=900, demand=500),),
+        }
+
+        self.assertEqual(
+            tuple(product for product, _ in CONSUMER.select_top_products(results, limit=1)),
+            ("Platinum",),
+        )
+        self.assertEqual(
+            tuple(product for product, _ in CONSUMER.select_top_products(results, limit=5)),
+            ("Platinum", "Gold"),
+        )
+
+    def test_print_results_shows_cautious_compatible_body_names_and_count(self):
+        with patch.object(CONSUMER, "_cache_label", return_value="INARA (cached)"), patch("builtins.print") as output:
+            CONSUMER.print_results(
+                "Kappa",
+                (("Platinum", (observation("Platinum", "Market", price=500, demand=101),)),),
+                summary_result(commodities=("Platinum",)),
+                "fresh cache",
+                UTC_NOW,
+                None,
+                (),
+                0.1,
+                applicable_commodity_count=2,
+                bodies=(
+                    LandableBody("Kappa 1", "Rocky"),
+                    LandableBody("Kappa 4 a", "Rocky"),
+                    LandableBody("Other 1", "Rocky"),
+                    LandableBody("Kappa Star", "Icy"),
+                ),
+            )
+        rendered = "\n".join(str(call.args[0]) for call in output.call_args_list if call.args)
+        self.assertIn("| 2 PRODUCTS |", rendered)
+        self.assertIn("Probably on: 1, 4 a, Other 1", rendered)
+        self.assertIn("1 products shown; 0 distinct station issue(s).", rendered)
+
+    def test_query_keeps_individual_bodies_for_multiple_types(self):
+        resolved = ResolvedSystem("Kappa", 42)
+        with (
+            patch.object(CONSUMER, "resolve_system", return_value=resolved),
+            patch.object(
+                CONSUMER,
+                "fetch_landable_bodies",
+                return_value=(LandableBody("Kappa 1", "Rocky"), LandableBody("Kappa 4", "Icy")),
+            ),
+            patch.object(CONSUMER, "fetch_commodity_markets", return_value=()),
+        ):
+            name, results, issues, bodies, count = CONSUMER.query_system_markets("Kappa", progress=lambda _: None)
+        self.assertEqual(name, "Kappa")
+        self.assertEqual(results, {})
+        self.assertEqual(issues, ())
+        self.assertEqual(bodies, (LandableBody("Kappa 1", "Rocky"), LandableBody("Kappa 4", "Icy")))
+        self.assertEqual(count, len(CONSUMER.commodities_for_planet_types({"Rocky", "Icy"})))
 
     def test_current_consumer_cache_path_is_separate_from_legacy_cache(self):
         legacy_path = SCRIPT_PATH.parent / "inara_commodities_cache.json"
@@ -346,7 +460,7 @@ class SurfaceMiningConsumerTests(unittest.TestCase):
             patch.object(
                 CONSUMER,
                 "query_system_markets",
-                return_value=("Kappa", local_results, ()),
+                return_value=("Kappa", local_results, (), (), 1),
             ),
             patch.object(
                 CONSUMER,
