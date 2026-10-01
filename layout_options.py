@@ -118,6 +118,11 @@ class LayoutOptions:
             button.show()
             operations.addWidget(button)
             self.fixed_buttons.append((button, 90))
+        market_button = getattr(self, 'market_research_button', None)
+        if market_button is not None:
+            market_button.show()
+            operations.addWidget(market_button)
+            self.fixed_buttons.append((market_button, 125))
         self.options_button = QPushButton(translate('LayoutOptions', 'Options'))
         self.options_button.setCheckable(True)
         operations.addWidget(self.options_button)

@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtWidgets import QApplication, QPushButton, QSpinBox
 from PySide6.QtCore import Qt
@@ -11,6 +12,7 @@ from layout_options import (OP_MAPS, OP_MARK, SECTION_LAYOUT, THEME_DARK,
                             THEME_LABELS, THEME_LIGHT, THEME_SYSTEM,
                             _theme_is_dark)
 from rhino_surface_mapper_qt import MapperWindow
+from surface_mining_coordinator import SurfaceMiningCoordinator
 
 
 class LayoutTests(unittest.TestCase):
@@ -20,8 +22,10 @@ class LayoutTests(unittest.TestCase):
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        self.status_path = Path(self.temp.name)/'Status.json'
         self.window = MapperWindow(
-            Path(self.temp.name)/'Status.json', game_running_check=lambda: True)
+            self.status_path, game_running_check=lambda: True)
+        self.window.surface_mining_coordinator.prefetch_snapshot = Mock()
         self.window.options_path = Path(self.temp.name)/'options.json'
         for timer in (self.window.timer,self.window.radar_timer,self.window.assist_timer):
             timer.stop()
@@ -56,6 +60,139 @@ class LayoutTests(unittest.TestCase):
                               if button.text() == 'Options']), 1)
         self.assertEqual(len([button for button in w.findChildren(QPushButton)
                               if button.text() == 'Choose Status.json']), 1)
+
+    def test_market_research_button_survives_operations_layout_rebuild(self):
+        button = self.window.market_research_button
+        self.assertTrue(button.isVisible())
+        self.assertEqual(button.text(), 'Market Research')
+        self.assertIs(button.parentWidget(), self.window.centralWidget())
+
+    def test_market_research_uses_retained_coordinator_and_main_shutdown(self):
+        coordinator = self.window.surface_mining_coordinator
+        self.assertIsInstance(coordinator, SurfaceMiningCoordinator)
+
+        with patch("market_research_window.MarketResearchWindow.initialize"):
+            self.window.show_market_research()
+            first_window = self.window.market_research
+            self.window.show_market_research()
+
+        self.assertIs(self.window.market_research, first_window)
+        self.assertIs(first_window.coordinator, coordinator)
+
+        with patch.object(coordinator, "shutdown") as shutdown:
+            first_window.close()
+            self.app.processEvents()
+            shutdown.assert_not_called()
+            self.window.close()
+            shutdown.assert_called_once_with()
+
+    def test_market_research_opening_without_known_system_does_not_search(self):
+        coordinator = self.window.surface_mining_coordinator
+        coordinator.request_snapshot = Mock()
+        with patch("market_research_window.MarketResearchWindow.update_inara"):
+            self.window.show_market_research()
+
+        research = self.window.market_research
+        self.assertEqual(research.system.text(), "")
+        coordinator.request_snapshot.assert_not_called()
+        self.assertEqual(
+            research.inara_cache_path,
+            self.window.options_path.parent / "inara_summary_cache_v1.json",
+        )
+
+    def test_market_research_opening_with_known_system_starts_one_normal_search(self):
+        self.window._observe_system("Kappa")
+        coordinator = self.window.surface_mining_coordinator
+        coordinator.request_snapshot = Mock(return_value=71)
+        with patch("market_research_window.MarketResearchWindow.update_inara"):
+            self.window.show_market_research()
+
+        research = self.window.market_research
+        self.assertEqual(research.system.text(), "Kappa")
+        coordinator.request_snapshot.assert_called_once_with("Kappa", force=False)
+
+    def test_offline_transition_preserves_session_last_known_system(self):
+        self.window._observe_system("Kappa")
+        self.window.live_status = {"StarSystem": "Kappa"}
+        self.window.status_valid = True
+
+        self.window.set_offline()
+
+        self.assertEqual(self.window.current_system(), "Kappa")
+        self.assertEqual(self.window.live_status, {})
+
+    def test_journal_fallback_updates_session_last_known_system(self):
+        from elite_dangerous.journal import JournalIdentity
+
+        self.window.journal_identity.current_identity = Mock(
+            return_value=JournalIdentity(system="Lave"))
+        self.window.game_is_running = Mock(return_value=True)
+        self.window.status_valid = True
+        self.window.live_status = {"BodyName": "Different body", "Flags": 0}
+        self.window.state.body = "Current body"
+        self.window.refresh = Mock()
+        self.window.evaluate_status_update = Mock()
+        with patch(
+            "rhino_surface_mapper_qt.read_status_if_changed",
+            return_value=None,
+        ):
+            self.window.poll()
+
+        self.assertEqual(self.window.current_system(), "Lave")
+
+    def test_commander_movement_does_not_change_open_research_context_or_search(self):
+        self.window._observe_system("Kappa")
+        with patch("market_research_window.MarketResearchWindow.initialize"):
+            self.window.show_market_research()
+        research = self.window.market_research
+        research.system.setText("Sol")
+        coordinator = self.window.surface_mining_coordinator
+        coordinator.request_snapshot = Mock()
+
+        self.window._observe_system("Lave")
+
+        self.assertEqual(self.window.current_system(), "Lave")
+        self.assertEqual(research.system.text(), "Sol")
+        coordinator.request_snapshot.assert_not_called()
+
+    def test_retained_market_research_reopening_preserves_user_state(self):
+        with patch("market_research_window.MarketResearchWindow.initialize") as initialize:
+            self.window.show_market_research()
+            research = self.window.market_research
+            research.system.setText("Sol")
+            research.top_products.setValue(5)
+            research.status.setText("Ready — Sol")
+            research.results.setPlainText("Existing results")
+            self.window.show_market_research()
+
+        self.assertIs(self.window.market_research, research)
+        initialize.assert_called_once_with()
+        self.assertEqual(research.system.text(), "Sol")
+        self.assertEqual(research.top_products.value(), 5)
+        self.assertEqual(research.status.text(), "Ready — Sol")
+        self.assertEqual(research.results.toPlainText(), "Existing results")
+
+    def test_session_last_known_system_ignores_empty_updates_and_replaces_valid_value(self):
+        self.assertIsNone(self.window.current_system())
+        self.window._observe_system("  Kappa  ")
+        self.assertEqual(self.window.current_system(), "Kappa")
+        self.window._observe_system(None)
+        self.window._observe_system("  ")
+        self.assertEqual(self.window.current_system(), "Kappa")
+        self.window._observe_system("Lave")
+        self.assertEqual(self.window.current_system(), "Lave")
+
+    def test_new_system_observation_prefetches_once_and_changes_prefetch_target(self):
+        prefetch = self.window.surface_mining_coordinator.prefetch_snapshot
+
+        self.window._observe_system("  Kappa  ")
+        self.window._observe_system("Kappa")
+        self.window._observe_system("Lave")
+
+        self.assertEqual(
+            [call.args[0] for call in prefetch.call_args_list],
+            ["Kappa", "Lave"],
+        )
 
     def test_preferences_preserve_existing_keys(self):
         w = self.window

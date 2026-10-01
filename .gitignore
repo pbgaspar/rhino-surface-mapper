@@ -19,3 +19,7 @@ options.json
 
 backups/
 archive/
+
+# Runtime-generated INARA cache state.
+/inara_summary_cache_v1.json
+/tests/inara_summary_cache_v1.json

@@ -61,6 +61,7 @@ class MarketIssue:
 
     station_name: str
     message: str
+    category: str = "other"
 
 
 @dataclass(frozen=True)

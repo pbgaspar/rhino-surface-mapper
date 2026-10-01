@@ -3,7 +3,7 @@
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from time import perf_counter
+from time import monotonic, perf_counter
 from typing import Any
 
 import requests
@@ -21,6 +21,7 @@ from .models import (
 
 _BASE_URL = "https://spansh.co.uk/api"
 _REQUEST_TIMEOUT = 25
+ACQUISITION_TIMEOUT = 30.0
 _SYSTEM_PAGE_SIZE = 100
 _BODY_PAGE_SIZE = 100
 _CANONICAL_PLANET_TYPES_BY_SUBTYPE = {
@@ -34,6 +35,50 @@ _CANONICAL_PLANET_TYPES_BY_SUBTYPE = {
 
 class SpanshError(RuntimeError):
     """A fatal Spansh failure prevented a trustworthy system-level result."""
+
+
+class AcquisitionCancelled(SpanshError):
+    """A cooperative acquisition cancellation was requested."""
+
+
+class AcquisitionDeadlineExceeded(SpanshError):
+    """The complete acquisition operation exceeded its deadline."""
+
+
+@dataclass
+class AcquisitionContext:
+    """Monotonic deadline and cooperative cancellation state for one operation."""
+
+    deadline: float | None = None
+    cancelled: bool = False
+    clock: Callable[[], float] = monotonic
+
+    @classmethod
+    def with_timeout(cls, timeout: float = ACQUISITION_TIMEOUT, *, clock=monotonic):
+        return cls(clock() + timeout, clock=clock)
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+    def check(self) -> None:
+        if self.cancelled:
+            raise AcquisitionCancelled("Surface Mining acquisition was cancelled.")
+        if self.deadline is not None and self.clock() >= self.deadline:
+            raise AcquisitionDeadlineExceeded("Surface Mining acquisition deadline exceeded.")
+
+    def remaining(self) -> float | None:
+        if self.cancelled:
+            raise AcquisitionCancelled("Surface Mining acquisition was cancelled.")
+        if self.deadline is None:
+            return None
+        remaining = self.deadline - self.clock()
+        if remaining <= 0:
+            raise AcquisitionDeadlineExceeded("Surface Mining acquisition deadline exceeded.")
+        return remaining
+
+
+class SpanshSystemNotFoundError(SpanshError):
+    """The exact requested system was not returned by Spansh."""
 
 
 @dataclass(frozen=True)
@@ -86,14 +131,15 @@ def resolve_system(
     system_name: str,
     *,
     session: requests.Session | None = None,
+    context: AcquisitionContext | None = None,
 ) -> ResolvedSystem:
     """Resolve an exact system name to its reusable Spansh identity."""
     if session is not None:
-        return _resolve_system_with_session(session, system_name)
+        return _resolve_system_with_session(session, system_name, context=context)
 
     owned_session = requests.Session()
     try:
-        return _resolve_system_with_session(owned_session, system_name)
+        return _resolve_system_with_session(owned_session, system_name, context=context)
     finally:
         owned_session.close()
 
@@ -102,16 +148,17 @@ def fetch_landable_planet_subtypes(
     system: ResolvedSystem,
     *,
     session: requests.Session | None = None,
+    context: AcquisitionContext | None = None,
 ) -> tuple[str, ...]:
     """Return unique subtypes from explicitly landable planets in a system."""
     if not isinstance(system, ResolvedSystem):
         raise TypeError("system must be a ResolvedSystem")
     if session is not None:
-        return _fetch_landable_planet_subtypes_with_session(session, system)
+        return _fetch_landable_planet_subtypes_with_session(session, system, context=context)
 
     owned_session = requests.Session()
     try:
-        return _fetch_landable_planet_subtypes_with_session(owned_session, system)
+        return _fetch_landable_planet_subtypes_with_session(owned_session, system, context=context)
     finally:
         owned_session.close()
 
@@ -120,16 +167,17 @@ def fetch_landable_bodies(
     system: ResolvedSystem,
     *,
     session: requests.Session | None = None,
+    context: AcquisitionContext | None = None,
 ) -> tuple[LandableBody, ...]:
     """Return eligible landable planets with confirmed canonical types."""
     if not isinstance(system, ResolvedSystem):
         raise TypeError("system must be a ResolvedSystem")
     if session is not None:
-        return _fetch_landable_bodies_with_session(session, system)
+        return _fetch_landable_bodies_with_session(session, system, context=context)
 
     owned_session = requests.Session()
     try:
-        return _fetch_landable_bodies_with_session(owned_session, system)
+        return _fetch_landable_bodies_with_session(owned_session, system, context=context)
     finally:
         owned_session.close()
 
@@ -162,6 +210,7 @@ def fetch_commodity_market(
     exclude_station: Callable[[str], bool] | None = None,
     resolved_system: ResolvedSystem | None = None,
     diagnostics: MarketDiagnostics | None = None,
+    context: AcquisitionContext | None = None,
 ) -> CommodityMarketResult:
     """Fetch one commodity's observations across a Spansh system."""
     return fetch_commodity_markets(
@@ -171,6 +220,7 @@ def fetch_commodity_market(
         exclude_station=exclude_station,
         resolved_system=resolved_system,
         diagnostics=diagnostics,
+        context=context,
     )[0]
 
 
@@ -182,6 +232,7 @@ def fetch_commodity_markets(
     exclude_station: Callable[[str], bool] | None = None,
     resolved_system: ResolvedSystem | None = None,
     diagnostics: MarketDiagnostics | None = None,
+    context: AcquisitionContext | None = None,
 ) -> tuple[CommodityMarketResult, ...]:
     """Fetch several commodity results in one Spansh system traversal.
 
@@ -215,6 +266,7 @@ def fetch_commodity_markets(
             exclude_station=exclude_station,
             resolved_system=resolved_system,
             diagnostics=diagnostics,
+            context=context,
         )
 
     owned_session = requests.Session()
@@ -226,6 +278,7 @@ def fetch_commodity_markets(
             exclude_station=exclude_station,
             resolved_system=resolved_system,
             diagnostics=diagnostics,
+            context=context,
         )
     finally:
         owned_session.close()
@@ -239,14 +292,21 @@ def _fetch_commodities_with_session(
     exclude_station: Callable[[str], bool] | None,
     resolved_system: ResolvedSystem | None,
     diagnostics: MarketDiagnostics | None,
+    context: AcquisitionContext | None,
 ) -> tuple[CommodityMarketResult, ...]:
-    system = resolved_system or _resolve_system_with_session(session, requested_system)
+    if context is not None:
+        context.check()
+    system = resolved_system or _resolve_system_with_session(
+        session, requested_system, context=context
+    )
     if system.name.casefold() != requested_system.casefold():
         raise ValueError("resolved_system does not match the requested system")
 
     system_started = perf_counter()
     try:
-        system_record = _fetch_record(session, "GET", f"/system/{system.id64}")
+        system_record = _fetch_record(
+            session, "GET", f"/system/{system.id64}", context=context
+        )
     finally:
         if diagnostics is not None:
             diagnostics.system_detail_elapsed = perf_counter() - system_started
@@ -261,7 +321,7 @@ def _fetch_commodities_with_session(
     if diagnostics is not None:
         diagnostics.dump_requests_attempted += 1
     try:
-        dump_system = _fetch_dump_system(session, system.id64)
+        dump_system = _fetch_dump_system(session, system.id64, context=context)
         dump_stations, discovery_issues = _collect_dump_stations(
             dump_system,
             requested_system,
@@ -345,20 +405,26 @@ def _fetch_commodities_with_session(
 def _resolve_system_with_session(
     session: requests.Session,
     requested_name: str,
+    *,
+    context: AcquisitionContext | None = None,
 ) -> ResolvedSystem:
-    system = _find_system(session, requested_name)
+    system = _find_system(session, requested_name, context=context)
     if system is None:
-        raise SpanshError(f"System {requested_name!r} was not found by exact name.")
+        raise SpanshSystemNotFoundError(
+            f"System {requested_name!r} was not found by exact name."
+        )
     return system
 
 
 def _fetch_landable_planet_subtypes_with_session(
     session: requests.Session,
     system: ResolvedSystem,
+    *,
+    context: AcquisitionContext | None = None,
 ) -> tuple[str, ...]:
     seen: set[str] = set()
     subtypes = []
-    for item in _fetch_landable_body_rows_with_session(session, system):
+    for item in _fetch_landable_body_rows_with_session(session, system, context=context):
         subtype = item.get("subtype")
         if isinstance(subtype, str) and subtype not in seen:
             seen.add(subtype)
@@ -369,12 +435,16 @@ def _fetch_landable_planet_subtypes_with_session(
 def _fetch_landable_body_rows_with_session(
     session: requests.Session,
     system: ResolvedSystem,
+    *,
+    context: AcquisitionContext | None = None,
 ) -> tuple[dict[str, Any], ...]:
     page = 0
     seen_ids: set[str] = set()
     rows: list[dict[str, Any]] = []
 
     while True:
+        if context is not None:
+            context.check()
         payload = _request_json(
             session,
             "POST",
@@ -389,6 +459,7 @@ def _fetch_landable_body_rows_with_session(
                 "size": _BODY_PAGE_SIZE,
                 "page": page,
             },
+            context=context,
         )
         results = payload.get("results")
         if not isinstance(results, list):
@@ -442,8 +513,10 @@ def _fetch_landable_body_rows_with_session(
 def _fetch_landable_bodies_with_session(
     session: requests.Session,
     system: ResolvedSystem,
+    *,
+    context: AcquisitionContext | None = None,
 ) -> tuple[LandableBody, ...]:
-    rows = _fetch_landable_body_rows_with_session(session, system)
+    rows = _fetch_landable_body_rows_with_session(session, system, context=context)
     bodies = []
     for item in rows:
         subtype = item.get("subtype")
@@ -456,11 +529,15 @@ def _fetch_landable_bodies_with_session(
 def _find_system(
     session: requests.Session,
     requested_name: str,
+    *,
+    context: AcquisitionContext | None = None,
 ) -> ResolvedSystem | None:
     page = 0
     seen_ids: set[str] = set()
 
     while True:
+        if context is not None:
+            context.check()
         payload = _request_json(
             session,
             "POST",
@@ -470,6 +547,7 @@ def _find_system(
                 "size": _SYSTEM_PAGE_SIZE,
                 "page": page,
             },
+            context=context,
         )
         results = payload.get("results")
         if not isinstance(results, list):
@@ -697,8 +775,10 @@ def _fetch_record(
     session: requests.Session,
     method: str,
     path: str,
+    *,
+    context: AcquisitionContext | None = None,
 ) -> dict[str, Any]:
-    payload = _request_json(session, method, path)
+    payload = _request_json(session, method, path, context=context)
     record = payload.get("record")
     if not isinstance(record, dict):
         raise SpanshError(f"Spansh response for {path} has no usable record.")
@@ -708,9 +788,11 @@ def _fetch_record(
 def _fetch_dump_system(
     session: requests.Session,
     system_id64: str | int,
+    *,
+    context: AcquisitionContext | None = None,
 ) -> dict[str, Any]:
     """Fetch and validate the aggregate system dump envelope."""
-    payload = _request_json(session, "GET", f"/dump/{system_id64}")
+    payload = _request_json(session, "GET", f"/dump/{system_id64}", context=context)
     system = payload.get("system")
     if not isinstance(system, dict):
         raise SpanshError("Spansh dump response has no usable system record.")
@@ -721,13 +803,20 @@ def _request_json(
     session: requests.Session,
     method: str,
     path: str,
+    context: AcquisitionContext | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
+    timeout = _REQUEST_TIMEOUT
+    if context is not None:
+        remaining = context.remaining()
+        if remaining <= 0:
+            context.check()
+        timeout = min(timeout, remaining)
     try:
         response = session.request(
             method,
             _BASE_URL + path,
-            timeout=_REQUEST_TIMEOUT,
+            timeout=timeout,
             **kwargs,
         )
         response.raise_for_status()

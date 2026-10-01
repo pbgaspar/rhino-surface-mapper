@@ -27,9 +27,14 @@ from .policy import (
 )
 from .ranking import rank_market_observations
 from .spansh import (
+    ACQUISITION_TIMEOUT,
+    AcquisitionCancelled,
+    AcquisitionContext,
+    AcquisitionDeadlineExceeded,
     ResolvedSystem,
     MarketDiagnostics,
     SpanshError,
+    SpanshSystemNotFoundError,
     canonical_planet_types_from_spansh,
     fetch_commodity_market,
     fetch_commodity_markets,
@@ -67,6 +72,11 @@ __all__ = [
     "is_carrier_name",
     "rank_market_observations",
     "SpanshError",
+    "AcquisitionCancelled",
+    "AcquisitionDeadlineExceeded",
+    "AcquisitionContext",
+    "ACQUISITION_TIMEOUT",
+    "SpanshSystemNotFoundError",
     "ResolvedSystem",
     "MarketDiagnostics",
     "canonical_planet_types_from_spansh",

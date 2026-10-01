@@ -24,6 +24,8 @@ from steering_ui import SteeringUI
 from layout_options import (LayoutOptions, OP_EXIT, OP_MARK, OP_MARK_DEPOSIT,
                             OP_MARK_RIG)
 from map_library import MapLibraryWindow
+from market_research_window import MarketResearchWindow
+from surface_mining_coordinator import SurfaceMiningCoordinator
 from deposit_marker import draw_deposit, deposit_bounds
 from numeric_fields import MetresSpinBox, DegreesSpinBox
 from i18n import install_translator, translate
@@ -614,6 +616,9 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.overlay = OverlayWindow()
         self.overlay_mode_active = False
         self.overlay_navigation_active = False
+        self.market_research = None
+        self._last_known_system = None
+        self.surface_mining_coordinator = SurfaceMiningCoordinator(parent=self)
         self.view = MapView(self.state)
         container = QWidget()
         layout = QVBoxLayout(container)
@@ -629,6 +634,9 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
             button.clicked.connect(callback)
             operations.addWidget(button)
             self.op_buttons[button_id] = button
+        market_button = QPushButton('Market Research')
+        market_button.clicked.connect(self.show_market_research)
+        self.market_research_button = market_button
         layout.addLayout(controls)
         for label, field, minimum in [('Cobertura:','coverage_width_m',100),('Scanner:','scanner_range_m',500)]:
             spin = MetresSpinBox()
@@ -754,6 +762,41 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.map_library.show()
         self.map_library.raise_()
         self.map_library.activateWindow()
+
+    def show_market_research(self):
+        """Open or foreground the session-owned Surface Mining window."""
+        if self.market_research is None:
+            self.market_research = MarketResearchWindow(
+                self, coordinator=self.surface_mining_coordinator,
+                current_system_provider=self.current_system,
+                cache_path=self.options_path.parent / 'inara_summary_cache_v1.json',
+            )
+            self.market_research.destroyed.connect(
+                lambda: setattr(self, 'market_research', None))
+            self.market_research.initialize()
+        self.market_research.show()
+        self.market_research.raise_()
+        self.market_research.activateWindow()
+
+    def current_system(self):
+        """Return the session's latest valid commander system, if known."""
+        return self._last_known_system
+
+    def apply_theme(self, theme):
+        """Apply the shared theme and refresh retained Market Research state."""
+        super().apply_theme(theme)
+        if self.market_research is not None:
+            self.market_research.update_current_system_indicator()
+
+    def _observe_system(self, value):
+        if isinstance(value, str) and value.strip():
+            observed = value.strip()
+            if observed.casefold() == (self._last_known_system or '').casefold():
+                return
+            self._last_known_system = observed
+            self.surface_mining_coordinator.prefetch_snapshot(observed)
+            if self.market_research is not None:
+                self.market_research.update_current_system_indicator()
 
     def choose_status(self):
         """Abre o seletor de Status.json e lê imediatamente o ficheiro escolhido.
@@ -1223,6 +1266,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                 incoming_body = data.get('BodyName', '')
                 if not incoming_system and incoming_body == self.state.body:
                     incoming_system = self.state.system
+                self._observe_system(incoming_system)
                 incoming_lat = data.get('Latitude')
                 incoming_lon = data.get('Longitude')
                 correspondence = None
@@ -1295,6 +1339,10 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         map_library = getattr(self, 'map_library', None)
         if map_library is not None:
             map_library.close()
+        market_research = getattr(self, 'market_research', None)
+        if market_research is not None:
+            market_research.close()
+        self.surface_mining_coordinator.shutdown()
         self.steering_input.close()
         self.overlay.close()
         super().closeEvent(event)

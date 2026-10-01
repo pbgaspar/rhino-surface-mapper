@@ -5,6 +5,9 @@ from unittest.mock import patch
 import requests
 
 from elite_dangerous.market import (
+    AcquisitionCancelled,
+    AcquisitionContext,
+    AcquisitionDeadlineExceeded,
     ResolvedSystem,
     SpanshError,
     LandableBody,
@@ -16,6 +19,7 @@ from elite_dangerous.market import (
     fetch_landable_bodies,
     resolve_system,
 )
+from elite_dangerous.market.spansh import _request_json
 
 BASE_URL = "https://spansh.co.uk/api"
 
@@ -51,6 +55,17 @@ class FakeSession:
     def close(self):
         self.closed = True
         self.close_count += 1
+
+
+class CancelAfterFirstRequestSession(FakeSession):
+    def __init__(self, routes, context):
+        super().__init__(routes)
+        self.context = context
+
+    def request(self, method, url, *, timeout, **kwargs):
+        result = super().request(method, url, timeout=timeout, **kwargs)
+        self.context.cancel()
+        return result
 
 
 def response(payload):
@@ -181,6 +196,75 @@ def _dump_system_from_discovery(system_record, detail_by_id):
 
 
 class SpanshMarketTests(unittest.TestCase):
+    def test_context_limits_each_request_timeout(self):
+        session = FakeSession({("GET", "/system/42"): [FakeResponse({"record": {}})]})
+        context = AcquisitionContext(deadline=96.0, clock=lambda: 90.0)
+
+        _request_json(session, "GET", "/system/42", context=context)
+
+        self.assertEqual(session.calls[0][2], 6.0)
+
+    def test_remaining_uses_one_clock_read_for_deadline_decision(self):
+        readings = iter((90.0, 96.0))
+        context = AcquisitionContext(deadline=100.0, clock=lambda: next(readings))
+
+        self.assertEqual(context.remaining(), 10.0)
+
+    def test_context_prevents_request_after_deadline_or_cancellation(self):
+        expired = FakeSession({})
+        with self.assertRaises(AcquisitionDeadlineExceeded):
+            _request_json(expired, "GET", "/system/42",
+                          context=AcquisitionContext(deadline=10.0, clock=lambda: 10.0))
+        self.assertEqual(expired.calls, [])
+
+        cancelled = FakeSession({})
+        context = AcquisitionContext(deadline=100.0, clock=lambda: 0.0)
+        context.cancel()
+        with self.assertRaises(AcquisitionCancelled):
+            _request_json(cancelled, "GET", "/system/42", context=context)
+        self.assertEqual(cancelled.calls, [])
+
+    def test_system_pagination_stops_before_second_request_after_cancellation(self):
+        context = AcquisitionContext(deadline=100.0, clock=lambda: 0.0)
+        session = CancelAfterFirstRequestSession({
+            ("POST", "/systems/search"): [
+                search_page([search_result("Sol", 43)], 2),
+                search_page([search_result()], 2),
+            ],
+        }, context)
+
+        with self.assertRaises(AcquisitionCancelled):
+            resolve_system("Kappa", session=session, context=context)
+        self.assertEqual(len(session.calls), 1)
+
+    def test_body_pagination_stops_before_second_request_after_cancellation(self):
+        context = AcquisitionContext(deadline=100.0, clock=lambda: 0.0)
+        session = CancelAfterFirstRequestSession({
+            ("POST", "/bodies/search"): [
+                response({"results": [{
+                    "id64": 1, "system_id64": 42, "is_landable": True,
+                    "type": "Planet", "subtype": "Rocky body", "name": "Kappa 2",
+                }], "count": 2}),
+            ],
+        }, context)
+
+        with self.assertRaises(AcquisitionCancelled):
+            fetch_landable_bodies(ResolvedSystem("Kappa", 42), session=session, context=context)
+        self.assertEqual(len(session.calls), 1)
+
+    def test_deadline_between_pages_prevents_the_next_request(self):
+        readings = iter((0.0, 0.0, 10.0))
+        context = AcquisitionContext(deadline=10.0, clock=lambda: next(readings))
+        session = FakeSession({
+            ("POST", "/systems/search"): [
+                search_page([search_result("Sol", 43)], 2),
+                search_page([search_result()], 2),
+            ],
+        })
+
+        with self.assertRaises(AcquisitionDeadlineExceeded):
+            resolve_system("Kappa", session=session, context=context)
+        self.assertEqual(len(session.calls), 1)
     def test_dump_market_mapping_avoids_station_requests(self):
         session = setup_session(
             system_record={"name": "Kappa", "stations": [], "bodies": []}
