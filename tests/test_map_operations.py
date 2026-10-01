@@ -55,6 +55,73 @@ class MapOperationsTests(unittest.TestCase):
         dialog.reject()
         self.assertEqual(dialog.result(), QDialog.DialogCode.Rejected)
 
+    def test_dialog_autocomplete_enforces_canonical_names_and_preserves_legacy_values(self):
+        from elite_dangerous.market.commodities import SURFACE_COMMODITIES
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QDialogButtonBox
+        from PySide6.QtWidgets import QMessageBox
+        from qt_map_operations import DepositDialog, MarkDialog
+
+        dialogs = (DepositDialog(self.window), MarkDialog(self.window))
+        for dialog in dialogs:
+            self.addCleanup(dialog.close)
+            completer = dialog.name.completer()
+            names = completer.model().stringList()
+            self.assertEqual(names, sorted(SURFACE_COMMODITIES, key=str.casefold))
+            self.assertEqual(len(names), 37)
+            self.assertEqual(completer.caseSensitivity(), Qt.CaseSensitivity.CaseInsensitive)
+            self.assertEqual(completer.filterMode(), Qt.MatchFlag.MatchStartsWith)
+            completer.setCompletionPrefix('s')
+            starts_with_s = [
+                completer.completionModel().data(completer.completionModel().index(index, 0))
+                for index in range(completer.completionModel().rowCount())
+            ]
+            self.assertTrue(starts_with_s)
+            self.assertTrue(all(name.casefold().startswith('s') for name in starts_with_s))
+            self.assertNotIn('Platinum', starts_with_s)
+            completer.setCompletionPrefix('')
+            self.assertEqual(completer.completionModel().rowCount(), 37)
+
+        for dialog in dialogs:
+            dialog.name.clear()
+            dialog.name.setFocus()
+            QTest.keyClick(dialog.name, Qt.Key.Key_Down)
+            completer = dialog.name.completer()
+            self.assertEqual(completer.completionPrefix(), '')
+            self.assertTrue(completer.popup().isVisible())
+            self.assertEqual(completer.completionModel().rowCount(), 37)
+            self.assertEqual(
+                [completer.completionModel().data(completer.completionModel().index(i, 0))
+                 for i in range(completer.completionModel().rowCount())],
+                sorted(SURFACE_COMMODITIES, key=str.casefold),
+            )
+
+        marker = MarkDialog(self.window)
+        self.addCleanup(marker.close)
+        marker.name.setText('plat')
+        self.assertFalse(marker.findChild(QDialogButtonBox).button(
+            QDialogButtonBox.StandardButton.Ok).isEnabled())
+        marker.name.completer().setCompletionPrefix('plat')
+        marker.name.completer().activated.emit('Platinum')
+        self.assertEqual(marker.name.text(), 'Platinum')
+        self.assertTrue(marker.findChild(QDialogButtonBox).button(
+            QDialogButtonBox.StandardButton.Ok).isEnabled())
+        marker.name.setText('Arbitrary marker')
+        self.assertFalse(marker.findChild(QDialogButtonBox).button(
+            QDialogButtonBox.StandardButton.Ok).isEnabled())
+
+        deposit = DepositDialog(self.window, {'name': 'Custom deposit'})
+        self.addCleanup(deposit.close)
+        self.assertEqual(deposit.name.text(), 'Custom deposit')
+        ok_button = deposit.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Ok)
+        self.assertTrue(ok_button.isEnabled())
+        deposit.name.setText('Changed custom value')
+        self.assertFalse(ok_button.isEnabled())
+        deposit.name.setText('Gold')
+        self.assertTrue(ok_button.isEnabled())
+        self.assertEqual(deposit.values()['name'], 'Gold')
+
     def test_deposit_dialog_keeps_portuguese_size_values_separate_from_labels(self):
         from qt_map_operations import DepositDialog
 
@@ -745,13 +812,13 @@ class MapOperationsTests(unittest.TestCase):
             original = dict(item)
             def rename(existing):
                 dialog = MarkDialog(w, existing)
-                dialog.name.setText('B')
+                dialog.name.setText('Platinum')
                 result = dialog.values()
                 dialog.close()
                 return result
             with patch.object(w, 'edit_mark_values', side_effect=rename):
                 w.alter_mark(item)
-            self.assertEqual(item, dict(original, name='B'))
+            self.assertEqual(item, dict(original, name='Platinum'))
             def move(existing):
                 dialog = MarkDialog(w, existing)
                 dialog.distance.setValue(500)

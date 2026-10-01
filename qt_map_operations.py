@@ -4,11 +4,11 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from PySide6.QtCore import QFile, QPointF, Qt
+from PySide6.QtCore import QEvent, QFile, QObject, QPointF, Qt
 from PySide6.QtUiTools import QUiLoader
-from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
-    QComboBox, QSpinBox, QFileDialog, QMessageBox, QMenu, QApplication, QDoubleSpinBox,
-    QInputDialog)
+from PySide6.QtWidgets import (QCompleter, QDialog, QDialogButtonBox, QFormLayout,
+    QLineEdit, QComboBox, QSpinBox, QFileDialog, QMessageBox, QMenu, QApplication,
+    QDoubleSpinBox, QInputDialog)
 from app_paths import maps_directory
 from mapper_core import MapperState
 from map_pml import (PML_MATCH_DISTANCE_M, infer_legacy_pml, matching_candidates,
@@ -18,6 +18,7 @@ from map_pml import (PML_MATCH_DISTANCE_M, infer_legacy_pml, matching_candidates
                      corresponds_to_map)
 from numeric_fields import MetresSpinBox, DegreesSpinBox, compact
 from i18n import translate
+from elite_dangerous.market.commodities import SURFACE_COMMODITIES
 
 
 class _DepositDialogLoader(QUiLoader):
@@ -36,6 +37,48 @@ class _DepositDialogLoader(QUiLoader):
 # Margem usada para reconhecer automaticamente um PML e decidir se Novo está
 # a começar a exploração de outra zona.
 PML_MATCH_DISTANCE_M = 13_000
+
+
+class _EmptyCommodityCompleterFilter(QObject):
+    """Open every commodity suggestion when Down is pressed on an empty field."""
+
+    def __init__(self, line_edit, completer):
+        super().__init__(line_edit)
+        self.line_edit = line_edit
+        self.completer = completer
+
+    def eventFilter(self, watched, event):
+        if (watched is self.line_edit
+                and event.type() == QEvent.Type.KeyPress
+                and event.key() == Qt.Key.Key_Down
+                and not self.line_edit.text()):
+            self.completer.setCompletionPrefix("")
+            self.completer.complete()
+            return True
+        return super().eventFilter(watched, event)
+
+
+def configure_commodity_autocomplete(line_edit, accept_button, original_name=None):
+    """Configure sorted canonical suggestions and validate the selected name."""
+    suggestions = sorted(SURFACE_COMMODITIES, key=str.casefold)
+    completer = QCompleter(suggestions, line_edit)
+    completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+    completer.setFilterMode(Qt.MatchFlag.MatchStartsWith)
+    completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+    line_edit.setCompleter(completer)
+    completer.activated[str].connect(line_edit.setText)
+    line_edit.installEventFilter(_EmptyCommodityCompleterFilter(line_edit, completer))
+    line_edit.textChanged.connect(
+        lambda text: accept_button.setEnabled(
+            text in SURFACE_COMMODITIES or text == original_name
+        )
+    )
+    accept_button.setEnabled(
+        line_edit.text() in SURFACE_COMMODITIES
+        or line_edit.text() == original_name
+    )
+    return completer
+
 
 def safe_filename_component(value):
     """Conserva o nome legível, substituindo só caracteres proibidos no Windows."""
@@ -84,6 +127,10 @@ class DepositDialog(QDialog):
         self.rigs.setRange(1,6)
         self.rigs.setValue(int(data.get('rigs',1)))
         compact(self.rigs)
+        configure_commodity_autocomplete(
+            self.name, buttons.button(QDialogButtonBox.StandardButton.Ok),
+            data.get('name'),
+        )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
@@ -112,11 +159,6 @@ class MarkDialog(QDialog):
         form.addRow(translate('MarkDialog', 'Bearing from north:'), self.azimuth)
         form.addRow(translate('MarkDialog', 'Distance from Rhino:'), self.distance)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(False)
-        self.name.textChanged.connect(lambda text: buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(bool(text.strip())))
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
         if existing:
             self.name.setText(existing['name'])
             self.azimuth.setValue(round(existing['azimuth']) % 360)
@@ -124,6 +166,13 @@ class MarkDialog(QDialog):
         # O formato inteiro é apenas apresentação. Conservar os valores antigos
         # se o utilizador não alterar o respetivo campo evita deslocar marcas.
         self.original_values = dict(existing) if existing else None
+        configure_commodity_autocomplete(
+            self.name, buttons.button(QDialogButtonBox.StandardButton.Ok),
+            existing.get('name') if existing else None,
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
         self.initial_azimuth = self.azimuth.value()
         self.initial_distance = self.distance.value()
         if existing and existing['distance'] > self.distance.maximum():
