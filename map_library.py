@@ -20,6 +20,21 @@ from mapper_core import MapperState
 from i18n import translate
 
 
+def _version_sort_key(path, state):
+    """Return the canonical save-time key used to order map versions.
+
+    Migrated maps retain their historical ``last_saved_at`` in JSON, while
+    atomic migration writes can change the filesystem mtime. Legacy files
+    without that field still use mtime until their metadata is populated.
+    """
+    if state.last_saved_at:
+        try:
+            return datetime.fromisoformat(state.last_saved_at.replace('Z', '+00:00')).timestamp()
+        except ValueError:
+            pass
+    return path.stat().st_mtime
+
+
 class _MapLibraryLoader(QUiLoader):
     """Load the Designer root directly into the existing dialog wrapper."""
 
@@ -477,7 +492,7 @@ class MapLibraryWindow(QDialog):
             planet.setData(0, Qt.ItemDataRole.UserRole, None)
             self.tree.addTopLevelItem(planet)
             planet.setFirstColumnSpanned(True)
-            for path, state in sorted(paths, key=lambda item: item[0].stat().st_mtime, reverse=True):
+            for path, state in sorted(paths, key=lambda item: _version_sort_key(*item), reverse=True):
                 if not self.map_matches_filters(state):
                     continue
                 child = QTreeWidgetItem([path.name])

@@ -126,6 +126,30 @@ class MapLibraryFilterTests(unittest.TestCase):
         self.assertIsNotNone(library.findChild(type(library.protected_filter_check), 'protectedFilterCheck'))
         self.assertIsNotNone(library.findChild(QHBoxLayout, 'mapFilterLayout'))
 
+    def test_version_order_uses_json_save_date_after_migration_changes_mtime(self):
+        system = self.root / 'Kappa'
+        older = system / 'Kappa 9 [9].json'
+        newer = system / 'Kappa 9 [9] v2.json'
+        state = MapperState()
+        state.process_status(dict(Flags=SRV_FLAG, Latitude=38, Longitude=-9,
+                                  Heading=0, StarSystem='Kappa', BodyName='Kappa 9'))
+        state.pml_id = '9'
+        state.last_saved_at = '2024-01-01T12:00:00Z'
+        state.save(older, update_saved_at=False)
+        state.last_saved_at = '2024-01-02T12:00:00Z'
+        state.save(newer, update_saved_at=False)
+        os.utime(older, (2_000_000_000, 2_000_000_000))
+        os.utime(newer, (1_000_000_000, 1_000_000_000))
+
+        library = self.make_library()
+        group = next(library.tree.topLevelItem(i) for i in range(library.tree.topLevelItemCount())
+                     if library.tree.topLevelItem(i).text(0) == '9')
+        self.assertEqual([group.child(i).text(0) for i in range(group.childCount())],
+                         [newer.name, older.name])
+
+        library.select_map(group.child(0), 0)
+        self.assertIn('2024-01-02T12:00:00Z', library.info.toHtml())
+
 
 if __name__ == '__main__':
     unittest.main()
