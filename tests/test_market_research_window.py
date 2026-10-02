@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 
 from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QTextFormat
-from PySide6.QtWidgets import QSizePolicy, QStyleOptionViewItem, QTreeWidgetItem
+from PySide6.QtWidgets import QSplitter, QSizePolicy, QStyleOptionViewItem, QTreeWidgetItem
 from market_research_window import _IssueItemDelegate
 from elite_dangerous.market import MarketIssue
 from market_research_window import _Worker, MarketResearchWindow
@@ -67,6 +67,15 @@ class MarketResearchWindowTests(unittest.TestCase):
             if predicate():
                 return
         self.fail(message)
+
+    def _assert_ready_status(self, window, system_name):
+        status = window.status.text()
+        self.assertIn("Ready —", status)
+        self.assertIn(system_name.upper(), status)
+        self.assertNotIn(system_name, status)
+        self.assertIn("font-weight: 700", status)
+        self.assertIn("font-size:", status)
+        self.assertNotIn("font-weight", status.split("<span", 1)[0])
 
     def test_uses_injected_coordinator_and_does_not_shutdown_it_on_close(self):
         coordinator = SurfaceMiningCoordinator()
@@ -213,8 +222,7 @@ class MarketResearchWindowTests(unittest.TestCase):
             self.assertIn("INARA Avg/Max:", window.results.toPlainText())
             self.assertTrue(window._indicator_timer.isActive())
             self._wait_for_completion(window)
-            self.assertTrue(window.status.text().startswith("Ready"))
-            self.assertTrue(window.status.text().endswith("Sol"))
+            self._assert_ready_status(window, "Sol")
         finally:
             window.close()
 
@@ -318,7 +326,7 @@ class MarketResearchWindowTests(unittest.TestCase):
             self.assertIsNotNone(window._spansh_generation)
             self._wait_for_completion(window)
             self.assertIs(window.snapshot, snapshot)
-            self.assertEqual(window.status.text(), "Ready — Kappa")
+            self._assert_ready_status(window, "Kappa")
             self.assertTrue(window.system.isEnabled())
             self.assertFalse(window._indicator_timer.isActive())
             self.assertIsNone(window._spansh_generation)
@@ -365,7 +373,7 @@ class MarketResearchWindowTests(unittest.TestCase):
             self._wait_for_completion(window)
             self.assertEqual(operation.call_count, 2)
             self.assertIs(window.snapshot, snapshots[1])
-            self.assertEqual(window.status.text(), "Ready — Lave")
+            self._assert_ready_status(window, "Lave")
         finally:
             window.close()
 
@@ -508,6 +516,24 @@ class MarketResearchWindowTests(unittest.TestCase):
         finally:
             window.close()
 
+    def test_results_and_issues_use_horizontal_splitter_with_two_to_one_initial_ratio(self):
+        window = MarketResearchWindow(current_system="Kappa")
+        try:
+            self.assertEqual(window.size().width(), 1150)
+            self.assertEqual(window.size().height(), 800)
+            self.assertIsInstance(window.results_splitter, QSplitter)
+            self.assertEqual(window.results_splitter.orientation(), Qt.Orientation.Horizontal)
+            self.assertEqual(window.results_splitter.count(), 2)
+            window.results_splitter.resize(900, 400)
+            window.results_splitter.setSizes([600, 300])
+            left, right = window.results_splitter.sizes()
+            self.assertGreater(left, right)
+            self.assertAlmostEqual(left / right, 2, delta=0.1)
+            self.assertIs(window.results.parentWidget(), window.results_splitter.widget(0))
+            self.assertIs(window.issue_tree.parentWidget(), window.results_splitter.widget(1))
+        finally:
+            window.close()
+
     def test_update_inara_button_click_starts_manual_update_path(self):
         window = MarketResearchWindow(current_system="Kappa")
         try:
@@ -542,6 +568,31 @@ class MarketResearchWindowTests(unittest.TestCase):
             self.assertFalse(prefix.charFormat().hasProperty(QTextFormat.Property.ForegroundBrush))
         finally:
             window.close()
+
+    def test_translated_inara_prefix_does_not_change_base_result_colour(self):
+        translations = {"INARA Avg/Max:": "Média/Máximo INARA:"}
+        with patch(
+            "market_research_window.translate",
+            side_effect=lambda _context, source: translations.get(source, source),
+        ):
+            window = MarketResearchWindow(current_system="Kappa")
+            try:
+                window._inara_fresh = True
+                window.inara_state = "updated 3h ago"
+                window.analysis = SimpleNamespace(
+                    products=(), issues=(), system_name="Kappa",
+                    eligible_market_count=0, minimum_demand=100,
+                )
+                window._render()
+                document = window.results.document()
+                prefix = document.find("Média/Máximo INARA:")
+                freshness = document.find("updated 3h ago")
+                heading = document.find("SURFACE MINING")
+                self.assertFalse(prefix.charFormat().hasProperty(QTextFormat.Property.ForegroundBrush))
+                self.assertEqual(freshness.charFormat().foreground().color().name(), "#2e7d32")
+                self.assertFalse(heading.charFormat().hasProperty(QTextFormat.Property.ForegroundBrush))
+            finally:
+                window.close()
 
     def test_stale_inara_fallback_is_old_and_shows_update(self):
         window = MarketResearchWindow(current_system="Kappa")
@@ -637,10 +688,43 @@ class MarketResearchWindowTests(unittest.TestCase):
             )
             window._render()
             rendered = window.results.toPlainText()
-            self.assertIn("SURFACE MINING — KAPPA | 1 MARKETS | 37 PRODUCTS | LOCAL DEMAND > 100 t", rendered)
+            self.assertIn("SURFACE MINING | 1 MARKETS | 37 PRODUCTS | LOCAL DEMAND > 100 t", rendered)
+            self.assertNotIn("KAPPA", rendered.splitlines()[0])
             self.assertIn("Darboux Station", rendered)
             self.assertIn("Age 2h", rendered)
             self.assertNotIn(updated_at.isoformat(), rendered)
+        finally:
+            window.close()
+
+    def test_product_result_typography_is_limited_to_left_result_blocks(self):
+        window = MarketResearchWindow(current_system="Kappa")
+        try:
+            product = SimpleNamespace(commodity="Monazite", summary=None, bodies=(), markets=())
+            window.analysis = SimpleNamespace(
+                system_name="Kappa", products=(product,), issues=(),
+                eligible_market_count=1, minimum_demand=100,
+            )
+            window._render()
+            document = window.results.document()
+            heading = document.find("MONAZITE")
+            suffix = document.find("Probably on:")
+            detail = document.find("INARA Avg:")
+            summary = document.find("SURFACE MINING |")
+            self.assertEqual(heading.charFormat().fontWeight(), 700)
+            self.assertNotEqual(suffix.charFormat().fontWeight(), 700)
+            self.assertEqual(heading.charFormat().fontPointSize(), window.results.font().pointSizeF() + 2)
+            self.assertEqual(detail.charFormat().fontPointSize(), window.results.font().pointSizeF() + 2)
+            self.assertEqual(summary.charFormat().fontPointSize(), window.results.font().pointSizeF() + 2)
+            self.assertNotEqual(summary.charFormat().fontWeight(), 700)
+            self.assertIn("MONAZITE", window.results.toPlainText())
+        finally:
+            window.close()
+
+    def test_ready_status_preserves_localized_prefix_and_styles_only_uppercase_system(self):
+        window = MarketResearchWindow(current_system="Kappa")
+        try:
+            window._set_ready_status("Kappa")
+            self._assert_ready_status(window, "Kappa")
         finally:
             window.close()
 

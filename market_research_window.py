@@ -1,15 +1,16 @@
 """Functional Market Research window for Surface Mining assistance."""
 
 from datetime import datetime, timedelta, timezone
+from html import escape
 from typing import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRect, QThread, QTimer, Signal, Slot, Qt
-from PySide6.QtGui import QColor, QIntValidator, QPalette, QTextCharFormat, QTextFormat
+from PySide6.QtGui import QColor, QFont, QIntValidator, QPalette, QTextCharFormat, QTextFormat
 from PySide6.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy,
-    QSpinBox, QStyleOptionViewItem, QStyledItemDelegate, QTextEdit, QTreeWidget,
-    QTreeWidgetItem, QVBoxLayout,
+    QSpinBox, QSplitter, QStyleOptionViewItem, QStyledItemDelegate, QTextEdit,
+    QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from elite_dangerous.market import load_summary_cache, save_summary_cache, SURFACE_COMMODITIES
@@ -100,7 +101,7 @@ class MarketResearchWindow(QDialog):
         self.setWindowTitle(translate('MarketResearchWindow', "Market Research — Surface Mining"))
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowCloseButtonHint |
                             Qt.WindowType.WindowMinMaxButtonsHint)
-        self.resize(900, 650)
+        self.resize(1150, 800)
         self.coordinator = coordinator
         self.service = coordinator.service
         self._current_system_provider = current_system_provider
@@ -191,10 +192,17 @@ class MarketResearchWindow(QDialog):
         self.inara_button.setToolTip(translate('MarketResearchWindow', "Update the cached INARA Avg/Max reference prices."))
         self.inara_button.hide()
         self.inara_button.clicked.connect(self.update_inara)
-        root.addWidget(self.inara_button, alignment=Qt.AlignmentFlag.AlignRight)
+        results_pane = QWidget()
+        results_layout = QVBoxLayout(results_pane)
+        results_layout.setContentsMargins(0, 0, 0, 0)
+        results_layout.addWidget(self.inara_button, alignment=Qt.AlignmentFlag.AlignRight)
         self.results = QTextEdit()
         self.results.setReadOnly(True)
-        root.addWidget(self.results, 1)
+        results_layout.addWidget(self.results, 1)
+
+        issues_pane = QWidget()
+        issues_layout = QVBoxLayout(issues_pane)
+        issues_layout.setContentsMargins(0, 0, 0, 0)
         self.issue_tree = QTreeWidget()
         self.issue_tree.setHeaderHidden(True)
         self.issue_tree.setRootIsDecorated(True)
@@ -202,14 +210,22 @@ class MarketResearchWindow(QDialog):
         self.issue_tree.setItemDelegate(self.issue_delegate)
         self.issue_heading = QLabel(translate('MarketResearchWindow', "Market data issues"))
         self.issue_heading.setVisible(False)
-        root.addWidget(self.issue_heading)
+        issues_layout.addWidget(self.issue_heading)
         self._copied_issue_item = None
         self._issue_feedback_timer = QTimer(self)
         self._issue_feedback_timer.setSingleShot(True)
         self._issue_feedback_timer.timeout.connect(self._clear_issue_copy_feedback)
         self.issue_tree.setVisible(False)
         self.issue_tree.itemDoubleClicked.connect(self._copy_issue_station)
-        root.addWidget(self.issue_tree)
+        issues_layout.addWidget(self.issue_tree, 1)
+
+        self.results_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.results_splitter.addWidget(results_pane)
+        self.results_splitter.addWidget(issues_pane)
+        self.results_splitter.setStretchFactor(0, 2)
+        self.results_splitter.setStretchFactor(1, 1)
+        self.results_splitter.setSizes([700, 350])
+        root.addWidget(self.results_splitter, 1)
         self.note = QLabel(translate('MarketResearchWindow', "When docked, use EDMC or another market-data updater to refresh and share station market data."))
         self.note.setWordWrap(True)
         root.addWidget(self.note)
@@ -322,7 +338,8 @@ class MarketResearchWindow(QDialog):
             return
         self._spansh_generation = None
         self.snapshot = snapshot
-        self._set_busy(False, f"{translate('MarketResearchWindow', 'Ready —')} {snapshot.system_name}")
+        self._set_busy(False, "")
+        self._set_ready_status(snapshot.system_name)
         self.recalculate(allow_busy=True)
 
     @Slot(str)
@@ -426,6 +443,17 @@ class MarketResearchWindow(QDialog):
             self._indicator_timer.stop()
         self.status.setText(text)
 
+    def _set_ready_status(self, system_name):
+        """Render the localized ready prefix and emphasized uppercase system name."""
+        prefix = translate('MarketResearchWindow', 'Ready —')
+        result_size = self.results.font().pointSizeF() + 2
+        self.status.setTextFormat(Qt.TextFormat.RichText)
+        self.status.setText(
+            f"{escape(prefix)} "
+            f"<span style=\"font-size: {result_size:g}pt; font-weight: 700;\">"
+            f"{escape(system_name.upper())}</span>"
+        )
+
     def _animate(self):
         self._indicator = (self._indicator + 1) % 4
         self.status.setText(self.status.text().rsplit(" ", 1)[0] + " " + "|—\\/"[self._indicator])
@@ -434,31 +462,60 @@ class MarketResearchWindow(QDialog):
         if self.analysis is None:
             return
         now = datetime.now(timezone.utc)
+        summary_heading = translate('MarketResearchWindow', 'SURFACE MINING —').rstrip(' —-')
         lines = [
-            f"{translate('MarketResearchWindow', 'SURFACE MINING —')} {self.analysis.system_name.upper()} | "
+            f"{summary_heading} | "
             f"{self.analysis.eligible_market_count} {translate('MarketResearchWindow', 'MARKETS')} | "
             f"{len(SURFACE_COMMODITIES)} {translate('MarketResearchWindow', 'PRODUCTS')} | "
             f"{translate('MarketResearchWindow', 'LOCAL DEMAND >')} {self.analysis.minimum_demand} t",
             f"{translate('MarketResearchWindow', 'INARA Avg/Max:')} {self.inara_state}",
             "",
         ]
+        summary_end = len(lines[0])
+        product_ranges = []
         for product in self.analysis.products:
             summary = product.summary
             avg = getattr(summary, "average_sell", None) if summary else None
             maximum = getattr(summary, "maximum_sell", None) if summary else None
             bodies = ", ".join(name.split(self.analysis.system_name + " ", 1)[-1] for name in product.bodies) or translate('MarketResearchWindow', "none identified")
-            lines.append(f"{product.commodity} — {translate('MarketResearchWindow', 'Probably on:')} {bodies}")
+            heading = f"{product.commodity.upper()} — {translate('MarketResearchWindow', 'Probably on:')} {bodies}"
+            heading_start = len("\n".join(lines)) + 1 if lines else 0
+            lines.append(heading)
             unavailable = translate('MarketResearchWindow', "unavailable")
             lines.append(f"  {translate('MarketResearchWindow', 'INARA Avg:')} {avg if avg is not None else unavailable} | {translate('MarketResearchWindow', 'Max:')} {maximum if maximum is not None else unavailable}")
             for market in product.markets:
                 age = self._format_market_age(market.market_updated_at, now=now)
                 lines.append(f"  {market.station.name} | {translate('MarketResearchWindow', 'Sell')} {market.sell_price} | {translate('MarketResearchWindow', 'Demand')} {market.demand} | {translate('MarketResearchWindow', 'Pad')} {market.station.max_landing_pad or '?'} | {translate('MarketResearchWindow', 'Age')} {age}")
             lines.append("")
+            block_end = len("\n".join(lines))
+            product_ranges.append((heading_start, block_end, heading_start, heading_start + len(product.commodity)))
         if not self.analysis.products:
             lines.append(translate('MarketResearchWindow', "No eligible commercial results."))
         self.results.setPlainText("\n".join(lines))
         self._style_inara_status()
+        self._style_product_results(product_ranges, summary_end)
         self._render_issues(self.analysis.issues)
+
+    def _style_product_results(self, product_ranges, summary_end):
+        """Apply shared heading size while bolding only product names."""
+        result_size = self.results.font().pointSizeF() + 2
+        size_format = QTextCharFormat()
+        size_format.setFontPointSize(result_size)
+        cursor = self.results.textCursor()
+        cursor.setPosition(0)
+        cursor.setPosition(summary_end, cursor.MoveMode.KeepAnchor)
+        cursor.mergeCharFormat(size_format)
+        for block_start, block_end, heading_start, heading_end in product_ranges:
+            cursor = self.results.textCursor()
+            cursor.setPosition(block_start)
+            cursor.setPosition(block_end, cursor.MoveMode.KeepAnchor)
+            cursor.mergeCharFormat(size_format)
+
+            heading_format = QTextCharFormat()
+            heading_format.setFontWeight(QFont.Weight.Bold)
+            cursor.setPosition(heading_start)
+            cursor.setPosition(heading_end, cursor.MoveMode.KeepAnchor)
+            cursor.mergeCharFormat(heading_format)
 
     def _style_inara_status(self):
         """Colour only the rendered INARA freshness text, not price values."""
@@ -466,6 +523,13 @@ class MarketResearchWindow(QDialog):
         cursor = self.results.document().find(prefix)
         if cursor.isNull():
             return
+        # setPlainText preserves the document's current char format on some Qt
+        # versions. Reset the document before applying semantic colouring so a
+        # translated prefix cannot leak its formatting into the whole result.
+        document_cursor = self.results.textCursor()
+        document_cursor.select(document_cursor.SelectionType.Document)
+        document_cursor.setCharFormat(QTextCharFormat())
+        cursor = self.results.document().find(prefix)
         # Collapse the prefix selection before extending to the end of the line;
         # otherwise KeepAnchor would retain the prefix as part of the range.
         cursor.setPosition(cursor.selectionEnd())
