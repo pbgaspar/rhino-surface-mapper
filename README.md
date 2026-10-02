@@ -16,6 +16,20 @@ Beta 2 is for 64-bit Windows 10 and Windows 11. Extract the complete ZIP to a wr
 
 This is a portable Beta. It stores `options.json` and the `MAPAS/` directory beside the executable.
 
+### Upgrading from Beta 1
+
+Do not extract Beta 2 directly over your existing Beta 1 installation.
+
+Extract Beta 2 to a new folder and, with Rhino Surface Mapper closed, copy the following from the Beta 1 folder to the new folder:
+
+- `MAPAS/` — your maps;
+- `MAPAS_TRASH/` — any maps currently in Trash;
+- `options.json` — your settings and preferences.
+
+Then start Rhino Surface Mapper from the new folder. It is recommended that you keep the Beta 1 folder until you have confirmed that your maps and settings are present and that Beta 2 is working normally.
+
+The market-data cache file does not need to be copied; Beta 2 includes its own cache and can update it later.
+
 ## What's new in Beta 2
 
 ### Surface Mining
