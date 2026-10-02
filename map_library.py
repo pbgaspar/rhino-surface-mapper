@@ -690,7 +690,7 @@ class MapLibraryWindow(QDialog):
             layout.addWidget(warning)
         listing = QListWidget()
         for entry in sorted(entries, key=lambda value: value.deleted_at, reverse=True):
-            row = f'{entry.original_relative_path}    Deleted {entry.deleted_at.astimezone().strftime("%d/%m/%Y %H:%M")}'
+            row = f'{entry.original_relative_path}    {translate("MapLibraryWindow", "Deleted")} {entry.deleted_at.astimezone().strftime("%d/%m/%Y %H:%M")}'
             listing.addItem(row)
             listing.item(listing.count() - 1).setData(Qt.ItemDataRole.UserRole, entry)
         if not entries:

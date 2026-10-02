@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from elite_dangerous.market import load_summary_cache, save_summary_cache, SURFACE_COMMODITIES
 from inara_acquisition import fetch_inara_summary
 from surface_mining_service import MarketAcquisitionError, SystemNotFoundError
+from i18n import translate
 
 
 INARA_TTL = timedelta(hours=12)
@@ -66,7 +67,7 @@ class _IssueItemDelegate(QStyledItemDelegate):
         painter.save()
         painter.fillRect(feedback_rect, background)
         painter.setPen(foreground)
-        painter.drawText(feedback_rect, Qt.AlignmentFlag.AlignCenter, "Copied")
+        painter.drawText(feedback_rect, Qt.AlignmentFlag.AlignCenter, translate('MarketResearchWindow', "Copied"))
         painter.restore()
 
 
@@ -86,7 +87,7 @@ class _Worker(QObject):
         except (SystemNotFoundError, MarketAcquisitionError, RuntimeError, OSError, ValueError) as exc:
             self.failed.emit(str(exc))
         except Exception:
-            self.failed.emit("Unable to complete the requested update.")
+            self.failed.emit(translate('MarketResearchWindow', "Unable to complete the requested update."))
         finally:
             self.finished.emit()
 
@@ -96,7 +97,7 @@ class MarketResearchWindow(QDialog):
 
     def __init__(self, parent=None, *, coordinator, current_system="", current_system_provider: Callable[[], str | None] | None = None, cache_path=INARA_CACHE_PATH):
         super().__init__(parent)
-        self.setWindowTitle("Market Research — Surface Mining")
+        self.setWindowTitle(translate('MarketResearchWindow', "Market Research — Surface Mining"))
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowCloseButtonHint |
                             Qt.WindowType.WindowMinMaxButtonsHint)
         self.resize(900, 650)
@@ -124,26 +125,26 @@ class MarketResearchWindow(QDialog):
 
         root = QVBoxLayout(self)
         system_row = QHBoxLayout()
-        self.system_label = QLabel("System")
+        self.system_label = QLabel(translate('MarketResearchWindow', "System"))
         self.system = QLineEdit(current_system or "")
         self.system.returnPressed.connect(self.search)
-        self.current_system_button = QPushButton("Current >")
+        self.current_system_button = QPushButton(translate('MarketResearchWindow', "Current >"))
         self.current_system_button.setSizePolicy(
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
         )
         self.current_system_button.setAutoDefault(False)
         self.current_system_button.setDefault(False)
-        self.current_system_button.setToolTip("Use the commander's current or last known system.")
+        self.current_system_button.setToolTip(translate('MarketResearchWindow', "Use the commander's current or last known system."))
         self.current_system_button.clicked.connect(self.use_current_system)
         self.system.textChanged.connect(self.update_current_system_indicator)
-        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button = QPushButton(translate('MarketResearchWindow', "Refresh"))
         self.refresh_button.setSizePolicy(
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
         )
         self.refresh_button.setAutoDefault(False)
         self.refresh_button.setDefault(False)
         self.refresh_button.setToolTip(
-            "Download fresh market data for this system, ignoring the cached snapshot."
+            translate('MarketResearchWindow', "Download fresh market data for this system, ignoring the cached snapshot.")
         )
         self.refresh_button.clicked.connect(lambda: self.search(force=True))
         system_row.addWidget(self.system_label)
@@ -156,9 +157,9 @@ class MarketResearchWindow(QDialog):
         self.top_products = self._spin(3, 3, 10)
         self.top_markets = self._spin(3, 3, 5)
         self.minimum_demand = QLineEdit("100")
-        self.top_products_label = QLabel("Top products")
-        self.top_markets_label = QLabel("Top markets per product")
-        self.minimum_demand_label = QLabel("Minimum demand (t)")
+        self.top_products_label = QLabel(translate('MarketResearchWindow', "Top products"))
+        self.top_markets_label = QLabel(translate('MarketResearchWindow', "Top markets per product"))
+        self.minimum_demand_label = QLabel(translate('MarketResearchWindow', "Minimum demand (t)"))
         for control in (self.top_products, self.top_markets):
             control.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             control.setFixedWidth(control.sizeHint().width())
@@ -168,9 +169,9 @@ class MarketResearchWindow(QDialog):
         self.minimum_demand.setFixedWidth(
             self.minimum_demand.fontMetrics().horizontalAdvance("2000000") + 24
         )
-        self.top_products.setToolTip("Number of best Surface Mining commodities to show.")
-        self.top_markets.setToolTip("Maximum number of markets shown for each commodity.")
-        self.minimum_demand.setToolTip("Ignore markets with demand below this value.")
+        self.top_products.setToolTip(translate('MarketResearchWindow', "Number of best Surface Mining commodities to show."))
+        self.top_markets.setToolTip(translate('MarketResearchWindow', "Maximum number of markets shown for each commodity."))
+        self.minimum_demand.setToolTip(translate('MarketResearchWindow', "Ignore markets with demand below this value."))
         self.minimum_demand.setValidator(QIntValidator(0, 2_000_000, self.minimum_demand))
         self.minimum_demand.returnPressed.connect(self._commit_minimum_demand)
         parameter_row = QHBoxLayout()
@@ -184,10 +185,10 @@ class MarketResearchWindow(QDialog):
         root.addLayout(parameter_row)
         self.status = QLabel()
         root.addWidget(self.status)
-        self.inara_button = QPushButton("Update INARA")
+        self.inara_button = QPushButton(translate('MarketResearchWindow', "Update INARA"))
         self.inara_button.setAutoDefault(False)
         self.inara_button.setDefault(False)
-        self.inara_button.setToolTip("Update the cached INARA Avg/Max reference prices.")
+        self.inara_button.setToolTip(translate('MarketResearchWindow', "Update the cached INARA Avg/Max reference prices."))
         self.inara_button.hide()
         self.inara_button.clicked.connect(self.update_inara)
         root.addWidget(self.inara_button, alignment=Qt.AlignmentFlag.AlignRight)
@@ -199,7 +200,7 @@ class MarketResearchWindow(QDialog):
         self.issue_tree.setRootIsDecorated(True)
         self.issue_delegate = _IssueItemDelegate(self.issue_tree)
         self.issue_tree.setItemDelegate(self.issue_delegate)
-        self.issue_heading = QLabel("Market data issues")
+        self.issue_heading = QLabel(translate('MarketResearchWindow', "Market data issues"))
         self.issue_heading.setVisible(False)
         root.addWidget(self.issue_heading)
         self._copied_issue_item = None
@@ -209,7 +210,7 @@ class MarketResearchWindow(QDialog):
         self.issue_tree.setVisible(False)
         self.issue_tree.itemDoubleClicked.connect(self._copy_issue_station)
         root.addWidget(self.issue_tree)
-        self.note = QLabel("When docked, use EDMC or another market-data updater to refresh and share station market data.")
+        self.note = QLabel(translate('MarketResearchWindow', "When docked, use EDMC or another market-data updater to refresh and share station market data."))
         self.note.setWordWrap(True)
         root.addWidget(self.note)
         for control in (self.top_products, self.top_markets):
@@ -287,11 +288,11 @@ class MarketResearchWindow(QDialog):
         name = self.system.text().strip()
         self.system.setText(name)
         if not name:
-            self.status.setText("Enter a system name.")
+            self.status.setText(translate('MarketResearchWindow', "Enter a system name."))
             return
         generation = self.coordinator.request_snapshot(name, force=force)
         if generation is None:
-            self.status.setText("Unable to start the requested update.")
+            self.status.setText(translate('MarketResearchWindow', "Unable to start the requested update."))
             return
         self._spansh_generation = generation
 
@@ -301,13 +302,13 @@ class MarketResearchWindow(QDialog):
             return
         if not force:
             self._clear_surface_mining_results()
-        self._set_busy(True, f"Searching {system_name} |")
+        self._set_busy(True, f"{translate('MarketResearchWindow', 'Searching')} {system_name} |")
 
     def _clear_surface_mining_results(self):
         """Clear only Surface Mining output before a normal acquisition."""
         self.analysis = None
         self.results.clear()
-        self.results.setPlainText(f"INARA Avg/Max: {self.inara_state}")
+        self.results.setPlainText(f"{translate('MarketResearchWindow', 'INARA Avg/Max:')} {self.inara_state}")
         self._style_inara_status()
         self.issue_tree.clear()
         self.issue_heading.setVisible(False)
@@ -321,7 +322,7 @@ class MarketResearchWindow(QDialog):
             return
         self._spansh_generation = None
         self.snapshot = snapshot
-        self._set_busy(False, f"Ready — {snapshot.system_name}")
+        self._set_busy(False, f"{translate('MarketResearchWindow', 'Ready —')} {snapshot.system_name}")
         self.recalculate(allow_busy=True)
 
     @Slot(str)
@@ -336,9 +337,9 @@ class MarketResearchWindow(QDialog):
             return
         self._spansh_generation = None
         if isinstance(error, (SystemNotFoundError, MarketAcquisitionError)):
-            message = str(error) or "Unable to retrieve market data."
+            message = str(error) or translate('MarketResearchWindow', "Unable to retrieve market data.")
         else:
-            message = "Unable to complete the requested update."
+            message = translate('MarketResearchWindow', "Unable to complete the requested update.")
         self._set_busy(False, message)
 
     def recalculate(self, *, allow_busy=False):
@@ -398,7 +399,7 @@ class MarketResearchWindow(QDialog):
         self.inara_stored_at = stored_at
         self._inara_fresh = fresh
         age = self._format_inara_age(stored_at)
-        self.inara_state = f"updated {age}" if fresh else f"OLD — updated {age}"
+        self.inara_state = f"{translate('MarketResearchWindow', 'updated')} {age}" if fresh else f"{translate('MarketResearchWindow', 'OLD — updated')} {age}"
         self.inara_button.setVisible(not fresh)
 
     @staticmethod
@@ -408,13 +409,13 @@ class MarketResearchWindow(QDialog):
         age = max(current - stored_at, timedelta(0))
         minutes = age.total_seconds() // 60
         if minutes < 1:
-            return "just now"
+            return translate('MarketResearchWindow', "just now")
         if minutes < 60:
-            return f"{int(minutes)}m ago"
+            return f"{int(minutes)}{translate('MarketResearchWindow', 'm ago')}"
         hours = minutes // 60
         if hours < 24:
-            return f"{int(hours)}h ago"
-        return f"{int(hours // 24)}d ago"
+            return f"{int(hours)}{translate('MarketResearchWindow', 'h ago')}"
+        return f"{int(hours // 24)}{translate('MarketResearchWindow', 'd ago')}"
 
     def _set_busy(self, busy, text):
         for control in (self.system, self.refresh_button, self.top_products, self.top_markets, self.minimum_demand):
@@ -434,33 +435,34 @@ class MarketResearchWindow(QDialog):
             return
         now = datetime.now(timezone.utc)
         lines = [
-            f"SURFACE MINING — {self.analysis.system_name.upper()} | "
-            f"{self.analysis.eligible_market_count} MARKETS | "
-            f"{len(SURFACE_COMMODITIES)} PRODUCTS | "
-            f"LOCAL DEMAND > {self.analysis.minimum_demand} t",
-            f"INARA Avg/Max: {self.inara_state}",
+            f"{translate('MarketResearchWindow', 'SURFACE MINING —')} {self.analysis.system_name.upper()} | "
+            f"{self.analysis.eligible_market_count} {translate('MarketResearchWindow', 'MARKETS')} | "
+            f"{len(SURFACE_COMMODITIES)} {translate('MarketResearchWindow', 'PRODUCTS')} | "
+            f"{translate('MarketResearchWindow', 'LOCAL DEMAND >')} {self.analysis.minimum_demand} t",
+            f"{translate('MarketResearchWindow', 'INARA Avg/Max:')} {self.inara_state}",
             "",
         ]
         for product in self.analysis.products:
             summary = product.summary
             avg = getattr(summary, "average_sell", None) if summary else None
             maximum = getattr(summary, "maximum_sell", None) if summary else None
-            bodies = ", ".join(name.split(self.analysis.system_name + " ", 1)[-1] for name in product.bodies) or "none identified"
-            lines.append(f"{product.commodity} — Probably on: {bodies}")
-            lines.append(f"  INARA Avg: {avg if avg is not None else 'unavailable'} | Max: {maximum if maximum is not None else 'unavailable'}")
+            bodies = ", ".join(name.split(self.analysis.system_name + " ", 1)[-1] for name in product.bodies) or translate('MarketResearchWindow', "none identified")
+            lines.append(f"{product.commodity} — {translate('MarketResearchWindow', 'Probably on:')} {bodies}")
+            unavailable = translate('MarketResearchWindow', "unavailable")
+            lines.append(f"  {translate('MarketResearchWindow', 'INARA Avg:')} {avg if avg is not None else unavailable} | {translate('MarketResearchWindow', 'Max:')} {maximum if maximum is not None else unavailable}")
             for market in product.markets:
                 age = self._format_market_age(market.market_updated_at, now=now)
-                lines.append(f"  {market.station.name} | Sell {market.sell_price} | Demand {market.demand} | Pad {market.station.max_landing_pad or '?'} | Age {age}")
+                lines.append(f"  {market.station.name} | {translate('MarketResearchWindow', 'Sell')} {market.sell_price} | {translate('MarketResearchWindow', 'Demand')} {market.demand} | {translate('MarketResearchWindow', 'Pad')} {market.station.max_landing_pad or '?'} | {translate('MarketResearchWindow', 'Age')} {age}")
             lines.append("")
         if not self.analysis.products:
-            lines.append("No eligible commercial results.")
+            lines.append(translate('MarketResearchWindow', "No eligible commercial results."))
         self.results.setPlainText("\n".join(lines))
         self._style_inara_status()
         self._render_issues(self.analysis.issues)
 
     def _style_inara_status(self):
         """Colour only the rendered INARA freshness text, not price values."""
-        prefix = "INARA Avg/Max: "
+        prefix = f"{translate('MarketResearchWindow', 'INARA Avg/Max:')} "
         cursor = self.results.document().find(prefix)
         if cursor.isNull():
             return
@@ -483,10 +485,10 @@ class MarketResearchWindow(QDialog):
         self._clear_issue_copy_feedback()
         self.issue_tree.clear()
         grouped = {
-            "no_valid_data": ("No valid market data", []),
-            "too_old": ("Too old >365 days", []),
-            "age_unknown": ("Age unknown", []),
-            "other": ("Other market data issues", []),
+            "no_valid_data": (translate('MarketResearchWindow', "No valid market data"), []),
+            "too_old": (translate('MarketResearchWindow', "Too old >365 days"), []),
+            "age_unknown": (translate('MarketResearchWindow', "Age unknown"), []),
+            "other": (translate('MarketResearchWindow', "Other market data issues"), []),
         }
         for issue in issues:
             label, stations = grouped.get(issue.category, grouped["other"])

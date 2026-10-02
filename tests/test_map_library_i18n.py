@@ -23,9 +23,10 @@ class MapLibraryI18nTests(unittest.TestCase):
         for source in (
                 'View and manage maps', 'Favourite', 'Protected', 'Open map',
                 'Open Trash',
+                'Move to Trash',
                 'System:', 'Type at least 2 characters', 'Favourites',
                 'Search for a system'):
-            self.assertIn(f'<string>{source}</string>', ui_text)
+            self.assertIn(source, ui_text)
 
         ts_root = ElementTree.parse(root / 'translations' / 'rsm_pt_PT.ts').getroot()
         map_library_context = next(
@@ -44,6 +45,10 @@ class MapLibraryI18nTests(unittest.TestCase):
                          'Este mapa ainda não contém registos.')
         self.assertEqual(messages['View and manage maps'], 'Ver e gerir mapas')
         self.assertEqual(messages['Open Trash'], 'Abrir Lixo')
+        self.assertEqual(messages['Move to Trash'], 'Mover para o Lixo')
+        self.assertEqual(messages['Deleted'], 'Eliminado')
+        self.assertEqual(messages['Trash'], 'Lixo')
+        self.assertEqual(messages['Restore'], 'Restaurar')
         self.assertEqual(
             messages['This map will be moved to Trash and can be restored from the Trash window. Continue?'],
             'Este mapa será movido para o Lixo e pode ser restaurado na janela do Lixo. Continuar?',

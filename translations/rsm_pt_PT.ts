@@ -46,6 +46,10 @@
     </context>
     <context>
         <name>MapLibraryWindow</name>
+        <message><source>Move to Trash</source><translation>Mover para o Lixo</translation></message>
+        <message><source>Deleted</source><translation>Eliminado</translation></message>
+        <message><source>Trash</source><translation>Lixo</translation></message>
+        <message><source>Restore</source><translation>Restaurar</translation></message>
         <message><source>View and manage maps</source><translation>Ver e gerir mapas</translation></message>
         <message><source>Open Trash</source><translation>Abrir Lixo</translation></message>
         <message><source>This map will be moved to Trash and can be restored from the Trash window. Continue?</source><translation>Este mapa será movido para o Lixo e pode ser restaurado na janela do Lixo. Continuar?</translation></message>
@@ -233,6 +237,9 @@
     </context>
     <context>
         <name>LayoutOptions</name>
+        <message><source>Storage</source><translation>Armazenamento</translation></message>
+        <message><source>Trash retention</source><translation>Período de conservação no Lixo</translation></message>
+        <message><source>days</source><translation>dias</translation></message>
         <message><source>Windows system</source><translation>Como o Windows</translation></message>
         <message><source>Maps</source><translation>Mapas</translation></message>
         <message><source>Marker</source><translation>Marca</translation></message>
@@ -375,5 +382,59 @@
         <name>TurnTrial</name>
         <message><source>No turns measured</source><translation>Sem guinadas medidas</translation></message>
         <message><source>Average {value:.1f}º · {count} turns</source><translation>Média {value:.1f}º · {count} guinadas</translation></message>
+    </context>
+    <context>
+        <name>MarketResearchWindow</name>
+        <message><source>Market Research — Surface Mining</source><translation>Pesquisa de mercado — Mineração de superfície</translation></message>
+        <message><source>Copied</source><translation>Copiado</translation></message>
+        <message><source>System</source><translation>Sistema</translation></message>
+        <message><source>Current &gt;</source><translation>Atual &gt;</translation></message>
+        <message><source>Refresh</source><translation>Atualizar</translation></message>
+        <message><source>Use the commander's current or last known system.</source><translation>Usar o sistema atual ou o último sistema conhecido do comandante.</translation></message>
+        <message><source>Download fresh market data for this system, ignoring the cached snapshot.</source><translation>Transferir dados de mercado novos para este sistema, ignorando o instantâneo em cache.</translation></message>
+        <message><source>Top products</source><translation>Melhores produtos</translation></message>
+        <message><source>Top markets per product</source><translation>Melhores mercados por produto</translation></message>
+        <message><source>Minimum demand (t)</source><translation>Procura mínima (t)</translation></message>
+        <message><source>Market data issues</source><translation>Problemas dos dados de mercado</translation></message>
+        <message><source>Update INARA</source><translation>Atualizar INARA</translation></message>
+        <message><source>Update the cached INARA Avg/Max reference prices.</source><translation>Atualizar os preços de referência médios/máximos da INARA em cache.</translation></message>
+        <message><source>When docked, use EDMC or another market-data updater to refresh and share station market data.</source><translation>Quando estiver atracado, use o EDMC ou outro atualizador de dados de mercado para atualizar e partilhar os dados de mercado das estações.</translation></message>
+        <message><source>Enter a system name.</source><translation>Introduza o nome de um sistema.</translation></message>
+        <message><source>Unable to start the requested update.</source><translation>Não foi possível iniciar a atualização solicitada.</translation></message>
+        <message><source>Unable to retrieve market data.</source><translation>Não foi possível obter os dados de mercado.</translation></message>
+        <message><source>Unable to complete the requested update.</source><translation>Não foi possível concluir a atualização solicitada.</translation></message>
+        <message><source>Searching</source><translation>A procurar</translation></message>
+        <message><source>Ready —</source><translation>Pronto —</translation></message>
+        <message><source>MARKETS</source><translation>MERCADOS</translation></message>
+        <message><source>PRODUCTS</source><translation>PRODUTOS</translation></message>
+        <message><source>LOCAL DEMAND &gt;</source><translation>PROCURA LOCAL &gt;</translation></message>
+        <message><source>updated</source><translation>atualizado</translation></message>
+        <message><source>INARA Avg/Max:</source><translation>Média/Máximo INARA:</translation></message>
+        <message><source>INARA Avg:</source><translation>Média INARA:</translation></message>
+        <message><source>Max:</source><translation>Máximo:</translation></message>
+        <message><source>just now</source><translation>agora mesmo</translation></message>
+        <message><source>m ago</source><translation> min atrás</translation></message>
+        <message><source>h ago</source><translation> h atrás</translation></message>
+        <message><source>d ago</source><translation> d atrás</translation></message>
+        <message><source>OLD - updated</source><translation>ANTIGO - atualizado</translation></message>
+        <message><source>OLD — updated</source><translation>ANTIGO — atualizado</translation></message>
+        <message><source>Ready -</source><translation>Pronto -</translation></message>
+        <message><source>Probably on:</source><translation>Provavelmente em:</translation></message>
+        <message><source>SURFACE MINING -</source><translation>MINERAÇÃO DE SUPERFÍCIE -</translation></message>
+        <message><source>SURFACE MINING —</source><translation>MINERAÇÃO DE SUPERFÍCIE —</translation></message>
+        <message><source>none identified</source><translation>nenhum identificado</translation></message>
+        <message><source>unavailable</source><translation>indisponível</translation></message>
+        <message><source>Sell</source><translation>Venda</translation></message>
+        <message><source>Demand</source><translation>Procura</translation></message>
+        <message><source>Pad</source><translation>Plataforma</translation></message>
+        <message><source>Age</source><translation>Idade</translation></message>
+        <message><source>No valid market data</source><translation>Dados de mercado inválidos</translation></message>
+        <message><source>Too old &gt;365 days</source><translation>Demasiado antigos &gt;365 dias</translation></message>
+        <message><source>Age unknown</source><translation>Idade desconhecida</translation></message>
+        <message><source>Other market data issues</source><translation>Outros problemas dos dados de mercado</translation></message>
+        <message><source>No eligible commercial results.</source><translation>Não existem resultados comerciais elegíveis.</translation></message>
+        <message><source>Number of best Surface Mining commodities to show.</source><translation>Número de melhores matérias-primas de mineração de superfície a mostrar.</translation></message>
+        <message><source>Maximum number of markets shown for each commodity.</source><translation>Número máximo de mercados mostrados para cada matéria-prima.</translation></message>
+        <message><source>Ignore markets with demand below this value.</source><translation>Ignorar mercados com procura inferior a este valor.</translation></message>
     </context>
 </TS>

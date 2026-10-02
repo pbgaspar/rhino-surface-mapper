@@ -335,14 +335,33 @@ class LayoutTests(unittest.TestCase):
 
     def test_language_selector_uses_stable_codes_and_persists_selection(self):
         from PySide6.QtWidgets import QComboBox
-        w = self.window
-        selector = w.options_panel.findChild(QComboBox, 'language_selector')
-        self.assertIsNotNone(selector)
-        self.assertEqual(selector.findData('en_GB') >= 0, True)
-        self.assertEqual(selector.findData('pt_PT') >= 0, True)
-        selector.setCurrentIndex(selector.findData('pt_PT'))
-        self.assertEqual(selector.currentData(), 'pt_PT')
-        self.assertEqual(json.loads(w.options_path.read_text(encoding='utf-8'))['language'], 'pt_PT')
+        options_path = Path(self.temp.name) / 'language-options.json'
+        with patch(
+            'rhino_surface_mapper_qt.load_preferences',
+            return_value={'language': 'en_GB'},
+        ):
+            w = MapperWindow(
+                Path(self.temp.name) / 'Status-language.json',
+                game_running_check=lambda: True,
+            )
+        try:
+            for timer in (w.timer, w.radar_timer, w.assist_timer):
+                timer.stop()
+            w.options_path = options_path
+            w.loading_settings = False
+            selector = w.options_panel.findChild(QComboBox, 'language_selector')
+            self.assertIsNotNone(selector)
+            self.assertEqual(selector.findData('en_GB') >= 0, True)
+            self.assertEqual(selector.findData('pt_PT') >= 0, True)
+            selector.setCurrentIndex(selector.findData('en_GB'))
+            selector.setCurrentIndex(selector.findData('pt_PT'))
+            self.assertEqual(selector.currentData(), 'pt_PT')
+            self.assertEqual(
+                json.loads(options_path.read_text(encoding='utf-8'))['language'],
+                'pt_PT',
+            )
+        finally:
+            w.close()
 
     def test_legacy_persisted_theme_loads_as_system_theme(self):
         from unittest.mock import patch

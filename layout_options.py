@@ -345,9 +345,9 @@ class LayoutOptions:
         self.option_resets[SECTION_LAYOUT].append(lambda:family.setCurrentFont(QFont('Segoe UI')))
         number(form,SECTION_LAYOUT,'Panel width','panel_width',320,280,440,lambda v:self.options_panel.setFixedWidth(v),' px')
         number(form,SECTION_LAYOUT,'Button height','button_height',34,28,44,self.resize_buttons,' px')
-        form = section(SECTION_STORAGE, 'Storage')
-        number(form, SECTION_STORAGE, 'Trash retention', 'trash_retention_days', 30, 1, 3650,
-               lambda value: None, ' days')
+        form = section(SECTION_STORAGE, translate('LayoutOptions', 'Storage'))
+        number(form, SECTION_STORAGE, translate('LayoutOptions', 'Trash retention'), 'trash_retention_days', 30, 1, 3650,
+               lambda value: None, f" {translate('LayoutOptions', 'days')}")
         for section_id,(header,content) in self.option_sections.items():
             if self.option_resets[section_id]:
                 reset = QPushButton(translate('LayoutOptions', 'Reset to defaults'))
