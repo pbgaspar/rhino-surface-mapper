@@ -110,6 +110,24 @@ class ProtectionTests(unittest.TestCase):
         self.assertEqual(self.original, self.path.read_bytes())
         self.assertEqual(w.state.deposits, self.state.deposits)
 
+    def test_new_version_refreshes_an_open_map_library(self):
+        w = self.make_window()
+        w.state = self.state
+        w.state.protected = False
+        w.state.mining_only = False
+        with patch('qt_map_operations.maps_directory', return_value=self.root), \
+                patch('map_library.maps_directory', return_value=self.root):
+            library = MapLibraryWindow(w)
+            library.select_system('Kappa')
+            w.map_library = library
+
+            self.assertEqual(library.tree.topLevelItem(0).childCount(), 1)
+            path = w.save_new_pml_version()
+
+            self.assertEqual(path.name, 'Kappa 2 [6] v2.json')
+            self.assertEqual(library.tree.topLevelItem(0).childCount(), 2)
+            self.assertEqual(library.tree.topLevelItem(0).child(0).text(0), path.name)
+
     def test_cancel_and_failed_copy_preserve_active_map(self):
         w = self.make_window()
         previous = w.state

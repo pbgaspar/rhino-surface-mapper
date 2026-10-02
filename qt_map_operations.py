@@ -473,6 +473,12 @@ class MapOperations:
         state.save(destination)
         return destination
 
+    def refresh_open_map_library(self):
+        """Refresh the session-owned Map Library when it is already open."""
+        library = getattr(self, 'map_library', None)
+        if library is not None and library.current_system is not None:
+            library.select_system(library.current_system)
+
     def setup_new_pml(self, state=None):
         """Pede os dados mínimos para identificar um PML ainda desconhecido."""
         s = state or self.state
@@ -629,6 +635,7 @@ class MapOperations:
         candidate = canonical.with_name(f'{canonical.stem} v{highest+1}.json')
         self.state.save(candidate)
         self.current_map_path = candidate
+        self.refresh_open_map_library()
         return candidate
 
     def confirm_pml_exit(self):
