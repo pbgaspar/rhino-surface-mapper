@@ -287,12 +287,33 @@ class ProtectionTests(unittest.TestCase):
             library = MapLibraryWindow(w)
             library.select_system('Kappa')
             library.select_map(library.tree.topLevelItem(0).child(0), 1)
-            with patch.object(w, 'prepare_to_replace_current_map', return_value=True):
+            with patch.object(w, 'prepare_to_replace_current_map', return_value=True) as prepare:
                 library.protected_check.setChecked(True)
+            prepare.assert_called_once_with(
+                translate('MapperWindow', 'Protect map'),
+                translate('MapperWindow', 'protecting the map'))
             self.assertTrue(w.state.protected and w.state.mining_only)
             self.assertEqual(count, len(w.state.points))
             library.favorite_check.setChecked(False)
             self.assertFalse(w.state.favorite)
+            library.close()
+
+    def test_library_protection_cancel_does_not_change_active_map(self):
+        w = self.make_window()
+        self.state.protected = False
+        MapperState.set_file_flags(self.path, favorite=True, protected=False)
+        w.state = w.view.state = self.state
+        w.current_map_path = self.path
+        with patch('map_library.maps_directory', return_value=self.root):
+            library = MapLibraryWindow(w)
+            library.select_system('Kappa')
+            library.select_map(library.tree.topLevelItem(0).child(0), 1)
+            with patch.object(w, 'prepare_to_replace_current_map', return_value=False) as prepare:
+                library.protected_check.setChecked(True)
+            prepare.assert_called_once_with(
+                translate('MapperWindow', 'Protect map'),
+                translate('MapperWindow', 'protecting the map'))
+            self.assertFalse(json.loads(self.path.read_text())['protected'])
             library.close()
 
     def test_real_choice_dialog_restores_timers_on_cancel(self):

@@ -543,7 +543,9 @@ class MapLibraryWindow(QDialog):
                     and self.protected_check.isChecked() and not parent.state.read_only):
                 # Resolve primeiro os registos ainda não gravados; proteger não
                 # pode fazer desaparecer a oportunidade de os conservar.
-                if not parent.prepare_to_replace_current_map('Proteger mapa'):
+                if not parent.prepare_to_replace_current_map(
+                        translate('MapperWindow', 'Protect map'),
+                        translate('MapperWindow', 'protecting the map')):
                     self.select_map(self.selected_item, 0)
                     return
             MapperState.set_file_flags(self.selected_path, favorite=self.favorite_check.isChecked(),
