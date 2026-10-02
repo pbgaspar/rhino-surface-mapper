@@ -25,7 +25,7 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
-# Beta 1 targets Windows 10/11 x64, where UCRT is an OS component; this prevents environment-dependent collection.
+# Beta 2 targets Windows 10/11 x64, where UCRT is an OS component; this prevents environment-dependent collection.
 a.binaries = [entry for entry in a.binaries if not is_top_level_ucrt_binary(entry)]
 pyz = PYZ(a.pure)
 

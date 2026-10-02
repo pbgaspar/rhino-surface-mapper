@@ -1,7 +1,7 @@
 Licence file provenance
 =======================
 
-The files in this directory accompany the Rhino Surface Mapper Beta 1 Windows
+The files in this directory accompany the Rhino Surface Mapper Beta 2 Windows
 binary distribution.
 
 - Apache-2.0.txt was downloaded unchanged from

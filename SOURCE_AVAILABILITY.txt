@@ -1,4 +1,4 @@
-Rhino Surface Mapper Beta 1 - source availability
+Rhino Surface Mapper Beta 2 - source availability
 =================================================
 
 Rhino Surface Mapper
@@ -7,12 +7,12 @@ The source repository is:
 
 https://github.com/pbgaspar/rhino-surface-mapper
 
-For each Beta 1 binary GitHub Release, publish a source archive generated from
-the exact same release commit/tag and place a direct link to that archive next
-to the binary ZIP. The corresponding source includes the maintained
-RhinoSurfaceMapper.spec and the scripts/configuration in that revision needed
-to build the application. The release tag has not yet been chosen: insert and
-verify the final tag in the release notes instead of inventing one here.
+For the Beta 2 GitHub Release, publish
+RhinoSurfaceMapper-Beta2-Windows-x64.zip and a source archive generated from
+the exact same release commit tagged beta-2. Place a direct link to the source
+archive next to the binary ZIP. The corresponding source includes the
+maintained RhinoSurfaceMapper.spec and the scripts/configuration in that
+revision needed to build the application.
 
 The project is licensed under GNU GPL version 3; see LICENSE.
 

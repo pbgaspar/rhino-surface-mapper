@@ -1,4 +1,4 @@
-Rhino Surface Mapper Beta 1 - third-party runtime notices
+Rhino Surface Mapper Beta 2 - third-party runtime notices
 =========================================================
 
 This notice applies to the Windows 10/11 x64 PyInstaller onedir distribution.

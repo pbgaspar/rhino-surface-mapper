@@ -1,4 +1,4 @@
-# Rhino Surface Mapper — Beta 1
+# Rhino Surface Mapper — Beta 2
 
 Rhino Surface Mapper is an independent companion tool for *Elite Dangerous* Commanders, designed to help map Surface Mining activity, keep track of explored areas and recorded deposits, and navigate back to points of interest.
 
@@ -8,13 +8,37 @@ Rhino Surface Mapper is an independent companion tool for *Elite Dangerous* Comm
 
 When Surface Mining and the Rhino SRV arrived in *Elite Dangerous*, I found it difficult to search for deposits systematically: avoiding repeated coverage, knowing which areas I had already investigated, and remembering where I had found deposits of interest. What started as a simple application to solve that problem gradually gained additional functionality that I hope will be useful to other Commanders.
 
-## Download Beta 1
+## Download Beta 2
 
-Download the complete Beta 1 ZIP from [GitHub Releases](https://github.com/pbgaspar/rhino-surface-mapper/releases).
+Download `RhinoSurfaceMapper-Beta2-Windows-x64.zip` from [GitHub Releases](https://github.com/pbgaspar/rhino-surface-mapper/releases).
 
-Beta 1 is for 64-bit Windows 10 and Windows 11. Extract the complete ZIP to a writable folder, keep the extracted folder together, and run `RhinoSurfaceMapper.exe`. Do not run the executable from inside the ZIP, and avoid protected locations such as `Program Files`.
+Beta 2 is for 64-bit Windows 10 and Windows 11. Extract the complete ZIP to a writable folder, keep the extracted folder together, and run `RhinoSurfaceMapper.exe`. Do not run the executable from inside the ZIP, and avoid protected locations such as `Program Files`.
 
 This is a portable Beta. It stores `options.json` and the `MAPAS/` directory beside the executable.
+
+## What's new in Beta 2
+
+### Surface Mining
+
+Beta 2 introduces **Surface Mining Market Research**, allowing you to find markets in a given system that consume commodities that can be mined from planets within that same system. This provides a good opportunity to earn merits for **PowerPlay**.
+
+For each commodity, the **planet types where it is most likely to be found** are also indicated, helping identify the most promising bodies for surface prospecting. Where available, information about market data freshness is shown, allowing you to assess how recent the results are.
+
+Commodity selection when creating or editing **marks and deposits** has also been improved, with suggestions that make it easier to use canonical commodity names.
+
+![Surface Mining Market Research](docs/images/market-research.jpg)
+
+### Map Library
+
+Maps can now be moved to Trash and restored instead of being deleted immediately. The Map Library also provides improved Favorites and Protected filtering, and refreshes more reliably after creating a new map version.
+
+### Map versions and protection
+
+Map versions are ordered more reliably using their actual saved dates. Protected-map replacement prompts and related version-management behavior are clearer and safer when continuing work on a protected map.
+
+### Interface and localization
+
+The Map Library layout and preview experience have been refined, Market Research presentation has been improved, and Portuguese (Portugal) localization coverage has been expanded.
 
 ## Features
 
