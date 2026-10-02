@@ -323,6 +323,7 @@ class LayoutTests(unittest.TestCase):
 
     def test_theme_uses_stable_values_and_accepts_legacy_label(self):
         w = self.window
+        w.theme_selector.setCurrentText('Light')
         w.theme_selector.setCurrentText('Dark')
         self.assertEqual(w.theme_selector.currentData(), THEME_DARK)
         self.assertEqual(json.loads(w.options_path.read_text(encoding='utf-8'))['theme'], THEME_DARK)
