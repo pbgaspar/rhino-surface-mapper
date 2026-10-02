@@ -22,6 +22,7 @@ class MapLibraryI18nTests(unittest.TestCase):
         ui_text = (root / 'ui' / 'map_library_window.ui').read_text(encoding='utf-8')
         for source in (
                 'View and manage maps', 'Favourite', 'Protected', 'Open map',
+                'Open Trash',
                 'System:', 'Type at least 2 characters', 'Favourites',
                 'Search for a system'):
             self.assertIn(f'<string>{source}</string>', ui_text)
@@ -42,6 +43,11 @@ class MapLibraryI18nTests(unittest.TestCase):
         self.assertEqual(messages['This map has no records yet.'],
                          'Este mapa ainda não contém registos.')
         self.assertEqual(messages['View and manage maps'], 'Ver e gerir mapas')
+        self.assertEqual(messages['Open Trash'], 'Abrir Lixo')
+        self.assertEqual(
+            messages['This map will be moved to Trash and can be restored from the Trash window. Continue?'],
+            'Este mapa será movido para o Lixo e pode ser restaurado na janela do Lixo. Continuar?',
+        )
         self.assertEqual(messages['{count} deposits'], '{count} depósitos')
         self.assertEqual(messages['{deposits} deposits · {rigs} rigs · {marks} marks'],
                          '{deposits} depósitos · {rigs} rigs · {marks} marcas')

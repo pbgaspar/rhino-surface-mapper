@@ -47,6 +47,8 @@
     <context>
         <name>MapLibraryWindow</name>
         <message><source>View and manage maps</source><translation>Ver e gerir mapas</translation></message>
+        <message><source>Open Trash</source><translation>Abrir Lixo</translation></message>
+        <message><source>This map will be moved to Trash and can be restored from the Trash window. Continue?</source><translation>Este mapa será movido para o Lixo e pode ser restaurado na janela do Lixo. Continuar?</translation></message>
         <message><source>Favourite</source><translation>Favorito</translation></message>
         <message><source>Protected</source><translation>Protegido</translation></message>
         <message><source>Open map</source><translation>Abrir mapa</translation></message>

@@ -2,6 +2,7 @@
 import json
 import html
 import math
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -10,14 +11,15 @@ from PySide6.QtGui import QColor, QPainter, QPen, QIcon, QFontMetricsF
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import (QDialog, QLabel, QLineEdit, QListWidget,
     QSplitter, QTextEdit, QTreeWidget, QTreeWidgetItem, QWidget, QCheckBox,
-    QMessageBox, QPushButton, QStyledItemDelegate)
+    QMessageBox, QPushButton, QStyledItemDelegate, QDialogButtonBox, QVBoxLayout)
 from deposit_marker import deposit_bounds, draw_deposit
 from PySide6.QtSvg import QSvgRenderer
 
 from app_paths import maps_directory
-from map_pml import infer_legacy_pml
+from map_pml import infer_legacy_pml, next_version_path
 from mapper_core import MapperState
 from i18n import translate
+from map_trash import inspect_trash, restore_trash_entry, soft_delete_map
 
 
 def _version_sort_key(path, state):
@@ -332,6 +334,11 @@ class MapLibraryWindow(QDialog):
         self.open_button = self.findChild(QPushButton, 'openButton')
         self.open_button.setEnabled(False)
         self.open_button.clicked.connect(self.open_selected_map)
+        self.delete_button = self.findChild(QPushButton, 'deleteButton')
+        self.delete_button.setEnabled(False)
+        self.delete_button.clicked.connect(self.delete_selected_map)
+        self.trash_button = self.findChild(QPushButton, 'trashButton')
+        self.trash_button.clicked.connect(self.show_trash)
         self.info_panel = self.findChild(QWidget, 'mapDetails')
         self.system_title = self.findChild(QLabel, 'systemTitle')
         self.search = self.findChild(QLineEdit, 'searchInput')
@@ -524,6 +531,7 @@ class MapLibraryWindow(QDialog):
             checkbox.setEnabled(False)
             checkbox.blockSignals(False)
         self.open_button.setEnabled(False)
+        self.delete_button.setEnabled(False)
 
     def change_flags(self):
         """Guarda apenas os atributos de gestão e sincroniza o mapa principal."""
@@ -607,6 +615,8 @@ class MapLibraryWindow(QDialog):
             checkbox.setEnabled(True)
             checkbox.blockSignals(False)
         self.open_button.setEnabled(self.parent() is not None)
+        active = getattr(self.parent(), 'current_map_path', None)
+        self.delete_button.setEnabled(not state.protected and path != active)
         self.preview.show_map(state)
         modified = datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d %H:%M')
         completed = len(state.route_history)
@@ -643,3 +653,80 @@ class MapLibraryWindow(QDialog):
             sections.append(f'<h4>{translate("MapLibraryWindow", "Marked rigs")}</h4><ul>' + ''.join(
                 f"<li>{item.get('lat', 0):.5f}, {item.get('lon', 0):.5f}</li>" for item in state.rigs) + '</ul>')
         self.info.setHtml(''.join(sections))
+
+    def delete_selected_map(self):
+        """Confirm and soft-delete the selected map, then rebuild the library."""
+        if self.selected_path is None:
+            return
+        answer = QMessageBox.question(
+            self, translate('MapLibraryWindow', 'Move map to Trash?'),
+            translate('MapLibraryWindow',
+                      'This map will be moved to Trash and can be restored from the Trash window. Continue?'))
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            soft_delete_map(self.selected_path, active_path=getattr(self.parent(), 'current_map_path', None))
+        except (OSError, ValueError, TypeError) as exc:
+            QMessageBox.critical(self, translate('MapLibraryWindow', 'Error moving map to Trash'), str(exc))
+            self.select_map(self.selected_item, 0)
+            return
+        system = self.current_system
+        self.clear_selection()
+        if system:
+            self.select_system(system)
+
+    def show_trash(self):
+        """Show valid Trash entries and restore one selected map."""
+        entries, invalid_count = inspect_trash()
+        dialog = QDialog(self)
+        dialog.setWindowTitle(translate('MapLibraryWindow', 'Trash'))
+        layout = QVBoxLayout(dialog)
+        warning = QLabel()
+        if invalid_count:
+            warning.setText(translate('MapLibraryWindow',
+                '{count} Trash entries could not be restored automatically and were preserved.').format(count=invalid_count))
+            layout.addWidget(warning)
+        listing = QListWidget()
+        for entry in sorted(entries, key=lambda value: value.deleted_at, reverse=True):
+            row = f'{entry.original_relative_path}    Deleted {entry.deleted_at.astimezone().strftime("%d/%m/%Y %H:%M")}'
+            listing.addItem(row)
+            listing.item(listing.count() - 1).setData(Qt.ItemDataRole.UserRole, entry)
+        if not entries:
+            listing.addItem(translate('MapLibraryWindow', 'No restorable maps in Trash.'))
+            listing.item(0).setFlags(Qt.ItemFlag.NoItemFlags)
+        layout.addWidget(listing)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        restore_button = buttons.addButton(translate('MapLibraryWindow', 'Restore'), QDialogButtonBox.ButtonRole.AcceptRole)
+        restore_button.setEnabled(False)
+        listing.itemSelectionChanged.connect(lambda: restore_button.setEnabled(
+            any(item.data(Qt.ItemDataRole.UserRole) for item in listing.selectedItems())))
+        buttons.rejected.connect(dialog.reject)
+        restore_button.clicked.connect(lambda: self._restore_selected_trash(dialog, listing))
+        layout.addWidget(buttons)
+        dialog.resize(720, 320)
+        dialog.exec()
+
+    def _restore_selected_trash(self, dialog, listing):
+        selected_items = listing.selectedItems()
+        if not selected_items:
+            return
+        entry = selected_items[0].data(Qt.ItemDataRole.UserRole)
+        if entry is None:
+            return
+        destination = entry.destination
+        if destination.exists():
+            canonical_stem = re.sub(r' v\d+$', '', destination.stem, flags=re.IGNORECASE)
+            canonical = destination.with_name(canonical_stem + '.json')
+            proposed = next_version_path(canonical, destination.parent.iterdir())
+            answer = QMessageBox.question(self, translate('MapLibraryWindow', 'Restore map'),
+                translate('MapLibraryWindow', 'The original destination exists. Restore as {name}?').format(name=proposed.name))
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            destination = proposed
+        try:
+            restore_trash_entry(entry, destination)
+        except (OSError, ValueError, TypeError) as exc:
+            QMessageBox.critical(self, translate('MapLibraryWindow', 'Error restoring map'), str(exc))
+            return
+        dialog.accept()
+        self.select_system(self.current_system) if self.current_system else None

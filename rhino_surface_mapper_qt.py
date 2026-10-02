@@ -29,6 +29,7 @@ from surface_mining_coordinator import SurfaceMiningCoordinator
 from deposit_marker import draw_deposit, deposit_bounds
 from numeric_fields import MetresSpinBox, DegreesSpinBox
 from i18n import install_translator, translate
+from map_trash import cleanup_expired_trash, retention_days, TRASH_RETENTION_KEY
 from PySide6.QtWidgets import QDialog, QFormLayout, QComboBox, QLineEdit, QDialogButtonBox
 
 
@@ -606,6 +607,12 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.scanner_group = 0
         self.bindings_override = ''
         options = load_preferences(self.options_path)
+        options[TRASH_RETENTION_KEY] = retention_days(options.get(TRASH_RETENTION_KEY))
+        try:
+            cleanup_expired_trash(options[TRASH_RETENTION_KEY])
+        except OSError:
+            # Trash cleanup is maintenance and must not prevent application startup.
+            pass
         group = options.get('scanner_group', 0)
         if type(group) is int and 0 <= group <= 25:
             self.scanner_group = group
