@@ -10,7 +10,7 @@ from radar_input import read_bindings, virtual_key
 class RadarTests(unittest.TestCase):
     def state(self):
         s = MapperState()
-        s.process_status(dict(Flags=0x04000000, Latitude=0, Longitude=0,
+        s.process_status(dict(Flags=0x04200000, Latitude=0, Longitude=0,
                               BodyName='Test', PlanetRadius=6000000))
         return s
 

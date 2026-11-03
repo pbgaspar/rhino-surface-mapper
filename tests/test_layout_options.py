@@ -11,6 +11,13 @@ from PySide6.QtCore import Qt
 from layout_options import (OP_MAPS, OP_MARK, SECTION_LAYOUT, THEME_DARK,
                             THEME_LABELS, THEME_LIGHT, THEME_SYSTEM,
                             _theme_is_dark)
+from airlift_preferences import (
+    AIRLIFT_DEPLOYMENT_COUNT_KEY,
+    AIRLIFT_FADE_SECONDS_KEY,
+    AIRLIFT_RADIUS_KEY,
+    normalize_airlift_preferences,
+)
+from settings_persistence import load_preferences
 from rhino_surface_mapper_qt import MapperWindow
 from surface_mining_coordinator import SurfaceMiningCoordinator
 
@@ -287,25 +294,183 @@ class LayoutTests(unittest.TestCase):
         from unittest.mock import patch
         w = self.window
         target = Path(self.temp.name)/'preset.json'
+        w.setting_fields[AIRLIFT_RADIUS_KEY][1](7)
+        w.setting_fields[AIRLIFT_DEPLOYMENT_COUNT_KEY][1](18)
+        w.setting_fields[AIRLIFT_FADE_SECONDS_KEY][1](10)
+        w.preferences.update({
+            AIRLIFT_RADIUS_KEY: w.airlift_radius_km,
+            AIRLIFT_DEPLOYMENT_COUNT_KEY: w.airlift_deployment_count,
+            AIRLIFT_FADE_SECONDS_KEY: w.airlift_fade_seconds,
+        })
         w.setting_fields['rhino_size'][1](81)
         w.setting_fields['theme'][1]('Dark')
         w.setting_fields['wave_color'][1]('#123456')
+        w.setting_fields['ship_size'][1](101)
+        w.setting_fields['ship_color'][1]('#d3334c')
         with patch('layout_options.QFileDialog.getSaveFileName',return_value=(str(target),'')):
             w.export_settings()
         w.reset_settings()
         self.assertEqual(w.view.rhino_height,56)
+        self.assertEqual(w.view.ship_width,72)
+        self.assertEqual(w.view.ship_color,'#557194')
         self.assertEqual(w.theme_selector.currentText(),THEME_LABELS[THEME_SYSTEM])
+        self.assertEqual(
+            (w.airlift_radius_km, w.airlift_deployment_count,
+             w.airlift_fade_seconds),
+            (5, 10, 5),
+        )
         with patch('layout_options.QFileDialog.getOpenFileName',return_value=(str(target),'')):
             w.import_settings()
         self.assertEqual(w.view.rhino_height,81)
+        self.assertEqual(w.view.ship_width,101)
+        self.assertEqual(w.view.ship_color,'#d3334c')
         self.assertEqual(w.view.colors['wave_color'],'#123456')
         self.assertEqual(w.theme_selector.currentText(),'Dark')
+        self.assertEqual(
+            (w.airlift_radius_km, w.airlift_deployment_count,
+             w.airlift_fade_seconds),
+            (7, 18, 10),
+        )
         self.assertEqual(json.loads(w.options_path.read_text())['rhino_size'],81)
+        self.assertEqual(json.loads(w.options_path.read_text())['ship_size'],101)
+        saved = json.loads(w.options_path.read_text(encoding='utf-8'))
+        self.assertEqual(saved[AIRLIFT_RADIUS_KEY], 7)
+        self.assertEqual(saved[AIRLIFT_DEPLOYMENT_COUNT_KEY], 18)
+        self.assertEqual(saved[AIRLIFT_FADE_SECONDS_KEY], 10)
+        self.assertFalse(any('airlift' in key and 'active' in key
+                             for key in saved))
+        ship_size = w.findChild(QSpinBox, 'ship_size')
+        self.assertEqual((ship_size.minimum(), ship_size.maximum()), (20, 160))
+        self.assertFalse(w.setting_fields['ship_size'][2](19))
+        self.assertFalse(w.setting_fields['ship_size'][2](161))
+        self.assertFalse(w.setting_fields['ship_color'][2]('#888888'))
         target.write_text(json.dumps({'rhino_settings_version':1,'settings':{'rhino_size':75,'assist_speed':-1}}))
         with patch('layout_options.QFileDialog.getOpenFileName',return_value=(str(target),'')), patch('layout_options.QMessageBox.warning') as warning:
             w.import_settings()
         warning.assert_called_once()
         self.assertEqual(w.view.rhino_height,81)
+
+    def test_airlift_preferences_default_and_persisted_values(self):
+        from unittest.mock import patch
+
+        with patch(
+                'rhino_surface_mapper_qt.load_preferences',
+                return_value={}):
+            w = MapperWindow(
+                Path(self.temp.name) / 'Status-airlift-defaults.json',
+                game_running_check=lambda: True)
+        try:
+            for timer in (w.timer, w.radar_timer, w.assist_timer):
+                timer.stop()
+            w.options_path = Path(self.temp.name) / 'airlift-options.json'
+            w.loading_settings = False
+            self._assert_airlift_defaults_and_persistence(w)
+        finally:
+            w.close()
+
+    def _assert_airlift_defaults_and_persistence(self, w):
+        self.assertEqual(
+            (w.airlift_radius_km, w.airlift_deployment_count,
+             w.airlift_fade_seconds),
+            (5, 10, 5),
+        )
+        self.assertFalse(any(
+            key in w.preferences
+            for key in ('airlift_active', 'airlift_enabled')
+        ))
+
+        w.setting_fields[AIRLIFT_RADIUS_KEY][1](7)
+        self.assertEqual(w.airlift_deployment_count, 19)
+        w.save_preference(AIRLIFT_RADIUS_KEY, 7)
+        saved = json.loads(w.options_path.read_text(encoding='utf-8'))
+        self.assertEqual(saved[AIRLIFT_RADIUS_KEY], 7)
+        self.assertEqual(saved[AIRLIFT_DEPLOYMENT_COUNT_KEY], 19)
+
+        for radius, count in (
+                *((5, value) for value in range(6, 11)),
+                *((7, value) for value in range(13, 20))):
+            with self.subTest(radius=radius, count=count):
+                w.setting_fields[AIRLIFT_RADIUS_KEY][1](radius)
+                w.setting_fields[AIRLIFT_DEPLOYMENT_COUNT_KEY][1](count)
+                w.preferences[AIRLIFT_RADIUS_KEY] = radius
+                w.preferences[AIRLIFT_DEPLOYMENT_COUNT_KEY] = count
+                w.save_preference(AIRLIFT_FADE_SECONDS_KEY, 0)
+                saved = json.loads(w.options_path.read_text(encoding='utf-8'))
+                self.assertEqual(saved[AIRLIFT_RADIUS_KEY], radius)
+                self.assertEqual(saved[AIRLIFT_DEPLOYMENT_COUNT_KEY], count)
+                self.assertEqual(saved[AIRLIFT_FADE_SECONDS_KEY], 0)
+                reloaded = normalize_airlift_preferences(
+                    load_preferences(w.options_path))
+                self.assertEqual(reloaded[AIRLIFT_RADIUS_KEY], radius)
+                self.assertEqual(reloaded[AIRLIFT_DEPLOYMENT_COUNT_KEY], count)
+                self.assertEqual(reloaded[AIRLIFT_FADE_SECONDS_KEY], 0)
+                w.preferences[AIRLIFT_RADIUS_KEY] = 5
+                w.preferences[AIRLIFT_DEPLOYMENT_COUNT_KEY] = 10
+                w.preferences[AIRLIFT_FADE_SECONDS_KEY] = 5
+                w.airlift_radius_km = 5
+                w.airlift_deployment_count = 10
+                w.airlift_fade_seconds = 5
+
+    def test_valid_airlift_preferences_are_applied_at_startup(self):
+        from unittest.mock import patch
+
+        for index, (radius, count) in enumerate(((5, 6), (7, 19))):
+            with self.subTest(radius=radius, count=count), patch(
+                    'rhino_surface_mapper_qt.load_preferences',
+                    return_value={
+                        AIRLIFT_RADIUS_KEY: radius,
+                        AIRLIFT_DEPLOYMENT_COUNT_KEY: count,
+                        AIRLIFT_FADE_SECONDS_KEY: 10,
+                    }):
+                window = MapperWindow(
+                    Path(self.temp.name) / f'Status-valid-{index}.json',
+                    game_running_check=lambda: True)
+                try:
+                    self.assertEqual(
+                        (window.airlift_radius_km,
+                         window.airlift_deployment_count,
+                         window.airlift_fade_seconds),
+                        (radius, count, 10),
+                    )
+                    self.assertTrue(hasattr(window, 'airlift_active'))
+                    self.assertFalse(window.airlift_active)
+                    self.assertNotIn('airlift_active', window.preferences)
+                    self.assertNotIn('airlift_active', window.setting_fields)
+                finally:
+                    window.close()
+
+    def test_invalid_loaded_airlift_preferences_recover_to_valid_defaults(self):
+        from unittest.mock import patch
+
+        cases = (
+            {AIRLIFT_RADIUS_KEY: 5, AIRLIFT_DEPLOYMENT_COUNT_KEY: 11},
+            {AIRLIFT_RADIUS_KEY: 7, AIRLIFT_DEPLOYMENT_COUNT_KEY: 20},
+            {AIRLIFT_RADIUS_KEY: 7, AIRLIFT_DEPLOYMENT_COUNT_KEY: 21},
+            {AIRLIFT_RADIUS_KEY: True, AIRLIFT_DEPLOYMENT_COUNT_KEY: 10},
+            {AIRLIFT_RADIUS_KEY: 7, AIRLIFT_DEPLOYMENT_COUNT_KEY: True},
+            {AIRLIFT_RADIUS_KEY: 7, AIRLIFT_DEPLOYMENT_COUNT_KEY: 10},
+            {AIRLIFT_FADE_SECONDS_KEY: 11},
+            {AIRLIFT_FADE_SECONDS_KEY: True},
+        )
+        for index, preferences in enumerate(cases):
+            with self.subTest(preferences=preferences), patch(
+                    'rhino_surface_mapper_qt.load_preferences',
+                    return_value=preferences):
+                window = MapperWindow(
+                    Path(self.temp.name) / f'Status-{index}.json',
+                    game_running_check=lambda: True)
+                try:
+                    self.assertIn(window.airlift_radius_km, (5, 7))
+                    self.assertTrue(
+                        window.setting_fields[AIRLIFT_DEPLOYMENT_COUNT_KEY][2](
+                            window.airlift_deployment_count))
+                    self.assertTrue(
+                        window.setting_fields[AIRLIFT_FADE_SECONDS_KEY][2](
+                            window.airlift_fade_seconds))
+                    self.assertNotIn('airlift_active', window.preferences)
+                    self.assertNotIn('airlift_enabled', window.preferences)
+                finally:
+                    window.close()
 
     def test_operation_and_section_identity_is_not_display_text(self):
         w = self.window

@@ -10,7 +10,7 @@ from unittest.mock import patch
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtWidgets import QApplication
 from layout_options import OP_MARK
-from mapper_core import MapperState, SRV_FLAG
+from mapper_core import HAS_LAT_LONG_FLAG, MapperState, SRV_FLAG
 from radar import RadarPulse
 from rhino_surface_mapper_qt import MapperWindow
 from map_library import MapLibraryWindow
@@ -27,7 +27,7 @@ class ProtectionTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.path = self.root/'Kappa'/'Kappa 2 [6].json'
         self.path.parent.mkdir()
-        self.status = dict(Flags=SRV_FLAG, Latitude=38, Longitude=-9, Heading=0,
+        self.status = dict(Flags=SRV_FLAG | HAS_LAT_LONG_FLAG, Latitude=38, Longitude=-9, Heading=0,
                            StarSystem='Kappa', BodyName='Kappa 2')
         self.state = MapperState()
         self.state.process_status(self.status)

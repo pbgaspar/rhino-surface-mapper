@@ -9,7 +9,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtWidgets import QApplication, QHBoxLayout
 
 from map_library import MapLibraryWindow
-from mapper_core import MapperState, SRV_FLAG
+from mapper_core import HAS_LAT_LONG_FLAG, MapperState, SRV_FLAG
 
 
 class MapLibraryFilterTests(unittest.TestCase):
@@ -26,7 +26,7 @@ class MapLibraryFilterTests(unittest.TestCase):
         for index, (favorite, protected) in enumerate(combinations):
             path = system / f'Kappa {index} [{index}].json'
             state = MapperState()
-            state.process_status(dict(Flags=SRV_FLAG, Latitude=38, Longitude=-9,
+            state.process_status(dict(Flags=SRV_FLAG | HAS_LAT_LONG_FLAG, Latitude=38, Longitude=-9,
                                       Heading=0, StarSystem='Kappa', BodyName=f'Kappa {index}'))
             state.pml_id = str(index)
             state.favorite = favorite
@@ -131,7 +131,7 @@ class MapLibraryFilterTests(unittest.TestCase):
         older = system / 'Kappa 9 [9].json'
         newer = system / 'Kappa 9 [9] v2.json'
         state = MapperState()
-        state.process_status(dict(Flags=SRV_FLAG, Latitude=38, Longitude=-9,
+        state.process_status(dict(Flags=SRV_FLAG | HAS_LAT_LONG_FLAG, Latitude=38, Longitude=-9,
                                   Heading=0, StarSystem='Kappa', BodyName='Kappa 9'))
         state.pml_id = '9'
         state.last_saved_at = '2024-01-01T12:00:00Z'

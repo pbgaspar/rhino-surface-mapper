@@ -8,12 +8,12 @@ from pathlib import Path
 APP_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP_DIR))
 
-from mapper_core import MapperState, SRV_FLAG
+from mapper_core import HAS_LAT_LONG_FLAG, MapperState, SRV_FLAG
 
 
 def sample_status(**changes):
     base = {
-        "Flags": SRV_FLAG,
+        "Flags": SRV_FLAG | HAS_LAT_LONG_FLAG,
         "Latitude": 38.0,
         "Longitude": -9.0,
         "Heading": 0.0,
@@ -136,4 +136,3 @@ class NavigationMarkerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

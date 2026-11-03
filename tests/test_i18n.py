@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
+from xml.etree import ElementTree
 
 from PySide6.QtCore import QCoreApplication, QTranslator
 
@@ -70,6 +71,22 @@ class I18nContractTests(unittest.TestCase):
         self.assertIs(result, translator)
         translator.load.assert_called_once_with(str(i18n.catalogue_path("pt_PT")))
         app.installTranslator.assert_called_once_with(translator)
+
+    def test_ship_options_have_portuguese_catalogue_entries(self):
+        catalog_path = Path(i18n.__file__).resolve().parent / "translations" / "rsm_pt_PT.ts"
+        root = ElementTree.parse(catalog_path).getroot()
+        context = next(item for item in root.findall("context")
+                       if item.findtext("name") == "LayoutOptions")
+        messages = {
+            message.findtext("source"): message.findtext("translation")
+            for message in context.findall("message")
+        }
+
+        self.assertEqual(messages["Ship"], "Nave")
+        self.assertEqual(messages["Ship colour"], "Cor da nave")
+        self.assertEqual(
+            messages["Choose a colour with a hue."],
+            "Escolha uma cor com tonalidade.")
 
     def test_translate_delegates_to_qt(self):
         with patch.object(QCoreApplication, "translate", return_value="Translated") as qt_translate:

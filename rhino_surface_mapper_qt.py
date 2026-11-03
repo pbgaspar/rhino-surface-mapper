@@ -2,16 +2,17 @@
 import json
 import copy
 import math
+import re
 import sys
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QByteArray, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter, QPen, QKeySequence, QShortcut, QFont, QPainterPath, QFontMetricsF, QIcon, QTransform
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QSpinBox, QCheckBox, QFileDialog, QMessageBox)
-from mapper_core import MapperState
+from mapper_core import CommanderPresentation, CommanderPresentationKind, MapperState
 from map_pml import corresponds_to_map, newest_by_pml
 from settings_persistence import load_preferences
 from elite_dangerous.status import elite_dangerous_is_running, read_status_if_changed
@@ -22,7 +23,8 @@ from radar import RadarPulse
 from radar_input import RadarInput
 from steering_ui import SteeringUI
 from layout_options import (LayoutOptions, OP_EXIT, OP_MARK, OP_MARK_DEPOSIT,
-                            OP_MARK_RIG)
+                            OP_MARK_RIG, SHIP_COLOR_DEFAULT as DEFAULT_SHIP_COLOR,
+                            SHIP_SIZE_DEFAULT as DEFAULT_SHIP_SIZE)
 from map_library import MapLibraryWindow
 from market_research_window import MarketResearchWindow
 from surface_mining_coordinator import SurfaceMiningCoordinator
@@ -31,11 +33,48 @@ from numeric_fields import MetresSpinBox, DegreesSpinBox
 from i18n import install_translator, translate
 from map_trash import cleanup_expired_trash, retention_days, TRASH_RETENTION_KEY
 from PySide6.QtWidgets import QDialog, QFormLayout, QComboBox, QLineEdit, QDialogButtonBox
+from airlift import (
+    COVERAGE_RADIUS_KM,
+    deployment_positions,
+    get_operational_configuration,
+    load_catalog,
+)
+from airlift_dialog import AirliftConfigurationDialog
+from airlift_preferences import (
+    AIRLIFT_DEPLOYMENT_COUNT_KEY,
+    AIRLIFT_FADE_SECONDS_KEY,
+    AIRLIFT_RADIUS_KEY,
+)
 
 
 OPTIONS_PATH = Path(
     sys.executable if getattr(sys, 'frozen', False) else __file__
 ).resolve().parent / 'options.json'
+
+SHIP_COLOR_PATTERN = re.compile(r'(?<![\w-])#[0-9A-Fa-f]{6}(?![0-9A-Fa-f])')
+
+
+def recolor_ship_svg(svg_source: str, target_color: str) -> str:
+    """Recolor only light, saturated blue-cyan SVG paints while preserving HSL."""
+    target = QColor(target_color)
+    target_hue = target.hslHueF() if target.isValid() else -1
+    if target_hue < 0:
+        raise ValueError('Ship colour must have a valid hue.')
+
+    def replace_color(match: re.Match[str]) -> str:
+        source_color = QColor(match.group())
+        hue, saturation, lightness, alpha = source_color.getHslF()
+        if (190 / 360 <= hue <= 235 / 360
+                and saturation >= 0.22 and lightness >= 0.48):
+            return QColor.fromHslF(target_hue, saturation, lightness, alpha).name()
+        return match.group()
+
+    return SHIP_COLOR_PATTERN.sub(replace_color, svg_source)
+
+
+def ship_rotation(heading: float | None) -> float:
+    """Return the painter rotation for a left-facing ship bow and ED heading."""
+    return (heading + 90.0) % 360.0 if heading is not None else 0.0
 
 
 class AzimuthSpinBox(DegreesSpinBox):
@@ -80,11 +119,114 @@ class MapView(QWidget):
         self._trail_line_path = QPainterPath()
         self._trail_dot_path = QPainterPath()
         self._isolated_coverage_points = []
+        self.airlift_points = ()
+        self.airlift_fade_seconds = 0
+        self.airlift_fade_started_at = None
         self.setMinimumSize(400, 300)
         self.setMouseTracking(True)
         base = Path(__file__).resolve().parent
         self.rhino_renderer = QSvgRenderer(str(base / 'assets' / 'Rhino.svg'), self)
         self.rhino_height = 56.0
+        self.ship_svg_source = (base / 'assets' / 'Caspian Explorer.svg').read_text(
+            encoding='utf-8-sig')
+        self.ship_renderer = QSvgRenderer(self)
+        self.ship_width = DEFAULT_SHIP_SIZE
+        self.ship_color = DEFAULT_SHIP_COLOR
+        self.current_presentation_visible = False
+        self.set_ship_color(DEFAULT_SHIP_COLOR)
+
+    def set_ship_color(self, color: str) -> None:
+        """Prepare the cached Caspian renderer for a selected hull hue."""
+        prepared_svg = recolor_ship_svg(self.ship_svg_source, color)
+        if not self.ship_renderer.load(QByteArray(prepared_svg.encode('utf-8'))):
+            raise RuntimeError('Could not load the Caspian Explorer SVG.')
+        self.ship_color = QColor(color).name()
+        self.update()
+
+    def ship_render_bounds(self) -> QRectF | None:
+        """Return the pixel-sized ship target rectangle with the SVG aspect ratio."""
+        bounds = self.ship_renderer.viewBoxF()
+        if (not self.ship_renderer.isValid()
+                or bounds.width() <= 0 or bounds.height() <= 0):
+            return None
+        height = self.ship_width * bounds.height() / bounds.width()
+        return QRectF(-self.ship_width / 2, -height / 2,
+                      self.ship_width, height)
+
+    def draw_ship(self, painter, presentation: CommanderPresentation):
+        """Draw the current ship at its validated position and heading."""
+        if (presentation.latitude is None or presentation.longitude is None
+                or not self.ship_renderer.isValid()):
+            return
+        position = self.screen(*self.state.llxy(
+            presentation.latitude, presentation.longitude))
+        target = self.ship_render_bounds()
+        if target is None:
+            return
+        painter.save()
+        painter.translate(position)
+        painter.rotate(ship_rotation(presentation.heading))
+        self.ship_renderer.render(painter, target)
+        painter.restore()
+
+    @staticmethod
+    def draw_person(painter: QPainter, position: QPointF,
+                    heading: float | None) -> None:
+        """Draw a small fixed-colour person glyph, rotated when heading is known."""
+        painter.save()
+        painter.translate(position)
+        if heading is not None:
+            painter.rotate(heading)
+        painter.setPen(QPen(QColor('#202020'), 1.5))
+        painter.setBrush(QColor('#f2c14e'))
+        painter.drawEllipse(QPointF(0, -5), 2.2, 2.2)
+        painter.drawLine(QPointF(0, -2.5), QPointF(0, 3))
+        painter.drawLine(QPointF(-3.5, -0.5), QPointF(3.5, -0.5))
+        painter.drawLine(QPointF(0, 3), QPointF(-2.8, 7))
+        painter.drawLine(QPointF(0, 3), QPointF(2.8, 7))
+        painter.restore()
+
+    def airlift_disk_opacity(self, now: float | None = None) -> float:
+        """Return the current coverage-disk opacity without affecting markers."""
+        if self.airlift_fade_seconds == 0 or self.airlift_fade_started_at is None:
+            return 1.0
+        current_time = time.monotonic() if now is None else now
+        elapsed = max(0.0, current_time - self.airlift_fade_started_at)
+        return max(0.0, 1.0 - elapsed / self.airlift_fade_seconds)
+
+    def draw_airlift_disks(self, painter: QPainter) -> None:
+        """Draw cached deployment disks; geometry is prepared outside painting."""
+        if not self.airlift_points:
+            return
+        opacity = self.airlift_disk_opacity()
+        if opacity <= 0.0:
+            return
+        color = QColor(self.colors.get("coverage_color", "#8cbd8c"))
+        color.setAlphaF(color.alphaF() * opacity * 0.42)
+        outline = QColor("#287a4b")
+        outline.setAlphaF(opacity * 0.8)
+        painter.save()
+        painter.setPen(QPen(outline, 1.5))
+        painter.setBrush(color)
+        radius = COVERAGE_RADIUS_KM * 1000 * self.scale
+        for point in self.airlift_points:
+            painter.drawEllipse(self.screen(point.x_m, point.y_m), radius, radius)
+        painter.restore()
+
+    def draw_airlift_markers(self, painter: QPainter) -> None:
+        """Draw numbered deployment markers independently of disk opacity."""
+        painter.save()
+        painter.setFont(self.map_font())
+        for point in self.airlift_points:
+            position = self.screen(point.x_m, point.y_m)
+            painter.setPen(QPen(QColor("#163d2b"), 1.5))
+            painter.setBrush(QColor("#f4fff7"))
+            painter.drawEllipse(position, 10, 10)
+            painter.setPen(QPen(QColor("#163d2b"), 1))
+            painter.drawText(
+                QRectF(position.x() - 9, position.y() - 8, 18, 16),
+                Qt.AlignmentFlag.AlignCenter, str(point.number))
+        painter.restore()
 
     def screen(self, x, y):
         """Converte X/Y do mapa, em metros, num QPointF em píxeis.
@@ -147,6 +289,19 @@ class MapView(QWidget):
             self.dragged = False
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
+    def cursor_reference_position(self):
+        """Return the validated (lat, lon) of the current commander representation.
+        Informational only; None when no valid presentation is shown."""
+        s = self.state
+        if not self.current_presentation_visible:
+            return None
+        presentation = s.current_presentation
+        if presentation.kind is CommanderPresentationKind.SRV:
+            lat, lon = s.rhino_lat, s.rhino_lon
+        else:
+            lat, lon = presentation.latitude, presentation.longitude
+        return None if lat is None or lon is None else (lat, lon)
+
     def mouseMoveEvent(self, event):
         """Desloca a vista durante um arrasto e calcula a informação do cursor.
         A distância é em metros; o azimute é contado a partir do norte, no sentido horário."""
@@ -163,8 +318,9 @@ class MapView(QWidget):
             lat, lon = s.xyll(q.x(), q.y())
             text = translate('MapView', 'Cursor: {latitude:.5f}°, {longitude:.5f}°').format(
                 latitude=lat, longitude=lon)
-            if s.rhino_lat is not None:
-                x, y = s.llxy(s.rhino_lat, s.rhino_lon)
+            reference = self.cursor_reference_position()
+            if reference is not None:
+                x, y = s.llxy(*reference)
                 dx, dy = q.x()-x, q.y()-y
                 text += translate(
                     'MapView', ' | Distance: {distance:.0f} m | Bearing: {bearing:03.0f}°').format(
@@ -402,7 +558,9 @@ class MapView(QWidget):
             for point in isolated_points:
                 p.drawEllipse(point, coverage_radius_m, coverage_radius_m)
             p.restore()
-            if s.in_srv and s.rhino_lat is not None:
+            if (self.current_presentation_visible
+                    and s.current_presentation.kind is CommanderPresentationKind.SRV
+                    and s.rhino_lat is not None and s.rhino_lon is not None):
                 q = self.screen(*s.llxy(s.rhino_lat,s.rhino_lon))
                 if s.points:
                     last = s.points[-1]
@@ -439,7 +597,10 @@ class MapView(QWidget):
                 p.setPen(QPen(QColor('#cc7a00'),2))
                 p.drawEllipse(q,8,8)
                 p.drawText(q+QPointF(12,12),'DATUM')
-        if s.in_srv and s.rhino_lat is not None:
+        self.draw_airlift_disks(p)
+        if (self.current_presentation_visible
+                and s.current_presentation.kind is CommanderPresentationKind.SRV
+                and s.rhino_lat is not None and s.rhino_lon is not None):
             q = self.screen(*s.llxy(s.rhino_lat,s.rhino_lon))
             p.setPen(QPen(QColor('#7777aa'),1,Qt.PenStyle.DashLine))
             radius = s.scanner_range_m*self.scale
@@ -478,6 +639,17 @@ class MapView(QWidget):
             else:
                 p.setPen(QPen(QColor('#cc2222'),3))
                 p.drawEllipse(q,6,6)
+        elif (self.current_presentation_visible
+                and s.current_presentation.kind is CommanderPresentationKind.SHIP):
+            self.draw_ship(p, s.current_presentation)
+        elif (self.current_presentation_visible
+                and s.current_presentation.kind is CommanderPresentationKind.ON_FOOT
+                and s.current_presentation.latitude is not None
+                and s.current_presentation.longitude is not None):
+            position = self.screen(*s.llxy(
+                s.current_presentation.latitude,
+                s.current_presentation.longitude))
+            self.draw_person(p, position, s.current_presentation.heading)
         p.setPen(QPen(QColor('#c43b3b'),2))
         for item in s.deposits:
             q = self.screen(item['x'],item['y'])
@@ -506,6 +678,7 @@ class MapView(QWidget):
             p.setPen(QPen(QColor('#b8860b'), 1))
             p.drawText(p_pos + QPointF(15, 4), translate('MapView', 'PAUSED'))
             p.restore()
+        self.draw_airlift_markers(p)
         self.draw_corners(p, step)
 
     def default_map_color(self, key):
@@ -576,6 +749,10 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         # Uma única instância de estado é partilhada por janela, mapa e operações.
         # O overlay recebe apenas texto/cores, não modifica os dados do mapa.
         self.state = MapperState()
+        self.airlift_active = False
+        self.airlift_catalog = load_catalog()
+        self._airlift_geometry_key = None
+        self.airlift_fade_started_at = None
         self.placing_rig = False
         self.parameter_spins = {}
         self.status_path = Path(status_path) if status_path else Path.home()/'Saved Games'/'Frontier Developments'/'Elite Dangerous'/'Status.json'
@@ -667,6 +844,17 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
             setattr(self, control_id, button)
             button.setEnabled(enabled)
             button.clicked.connect(callback)
+        self.airlift_button = QPushButton(
+            translate('MapperWindow', 'Airlift: Off'))
+        self.airlift_button.setCheckable(True)
+        self.airlift_button.setObjectName('airlift_button')
+        self.airlift_button.clicked.connect(self.handle_airlift_button)
+        self.airlift_config_button = QPushButton(
+            translate('MapperWindow', 'Configure Airlift'))
+        self.airlift_config_button.setObjectName('airlift_config_button')
+        self.airlift_config_button.clicked.connect(self.configure_airlift)
+        self.airlift_coverage_label = QLabel()
+        self.airlift_coverage_label.setObjectName('airlift_coverage_label')
         self.follow = QCheckBox(translate('MapperWindow', 'Centre'))
         self.follow.toggled.connect(lambda checked: self.view.recenter() if checked else None)
         # Barra inferior consolidada numa única linha
@@ -721,6 +909,10 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
     def update_radar(self):
         now = time.monotonic()
         s = self.state
+        if (self.airlift_active and self.airlift_fade_seconds > 0
+                and self.airlift_fade_started_at is not None
+                and now < self.airlift_fade_started_at + self.airlift_fade_seconds):
+            self.view.update()
         if self.transition_required:
             self.view.radar.waves.clear()
             self.radar_info.setText(translate('MapperWindow', 'Radar: waiting for map change'))
@@ -824,11 +1016,135 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                 self, translate('MapperWindow', 'Start search'),
                 translate('MapperWindow', 'Replace the current Datum?')) != QMessageBox.StandardButton.Yes:
             return
+        if self.airlift_active:
+            self.set_airlift_active(False)
         self.search_azimuth_spin.interpretText()
         if not self.state.start_search(self.search_azimuth_spin.value()):
             QMessageBox.information(
                 self, translate('MapperWindow', 'Start search'),
                 translate('MapperWindow', 'Enter the SRV first and wait for its position.'))
+        self.refresh()
+
+    def _deactivate_search(self) -> None:
+        """Stop Search using the same cleanup as the existing stop action."""
+        self.state.search_started = False
+        self.state.search_paused = False
+        self.state.search_pause_point = None
+        self.state.return_to_pause = False
+        self.state.next_target_xy = None
+        if self.state.active_nav_target is None:
+            self.overlay.hide()
+            self.overlay_mode_active = False
+
+    def handle_airlift_button(self, checked: bool = False) -> None:
+        """Apply the session-only Airlift toggle."""
+        self.set_airlift_active(checked)
+
+    def set_airlift_active(self, active: bool) -> bool:
+        """Activate Airlift only for a valid map, or clear its session state."""
+        if active and not self._airlift_map_is_valid():
+            active = False
+            QMessageBox.information(
+                self, translate('MapperWindow', 'Airlift'),
+                translate('MapperWindow', 'Airlift requires a valid PML map.'))
+        if active and self.state.search_started:
+            self._deactivate_search()
+        self.airlift_active = active
+        self.airlift_fade_started_at = time.monotonic() if active else None
+        self._airlift_geometry_key = None
+        self.airlift_button.blockSignals(True)
+        self.airlift_button.setChecked(active)
+        self.airlift_button.blockSignals(False)
+        self.refresh()
+        return active
+
+    def _airlift_map_is_valid(self) -> bool:
+        """Require complete active map/PML coordinates before placing geometry."""
+        state = self.state
+        return bool(
+            not self.transition_required
+            and state.system.strip()
+            and state.body.strip()
+            and state.body_key
+            and state.pml_id.strip()
+            and state.pml_center_lat is not None
+            and state.pml_center_lon is not None
+            and state.center_lat is not None
+            and state.center_lon is not None
+            and all(math.isfinite(value) for value in (
+                state.pml_center_lat, state.pml_center_lon,
+                state.center_lat, state.center_lon, state.radius))
+            and -90 <= state.pml_center_lat <= 90
+            and -180 <= state.pml_center_lon <= 180
+            and -90 <= state.center_lat <= 90
+            and -180 <= state.center_lon <= 180
+            and state.radius > 0
+        )
+
+    def _refresh_airlift_visualization(self) -> None:
+        """Recompute cached deployment positions only when map/config changes."""
+        state = self.state
+        valid_map = self._airlift_map_is_valid()
+        self.airlift_button.setEnabled(
+            not self.transition_required and (valid_map or self.airlift_active))
+        self.airlift_button.setText(translate(
+            'MapperWindow',
+            'Airlift: On' if self.airlift_active else 'Airlift: Off'))
+        configuration = get_operational_configuration(
+            self.airlift_catalog, self.airlift_radius_km,
+            self.airlift_deployment_count)
+        self.airlift_coverage_label.setText(translate(
+            'MapperWindow', 'Coverage: {coverage:.1f}%').format(
+                coverage=configuration.authoritative_coverage_percent))
+
+        points = ()
+        if self.airlift_active and valid_map:
+            key = (
+                state.body_key, state.pml_id, state.pml_center_lat,
+                state.pml_center_lon, state.center_lat, state.center_lon,
+                state.radius, self.airlift_radius_km,
+                self.airlift_deployment_count, self.airlift_fade_seconds,
+            )
+            if key != self._airlift_geometry_key:
+                points = deployment_positions(
+                    configuration, state.pml_center_lat,
+                    state.pml_center_lon, state)
+                self._airlift_geometry_key = key
+                self.airlift_fade_started_at = time.monotonic()
+            else:
+                points = self.view.airlift_points
+        else:
+            self._airlift_geometry_key = None
+
+        self.view.airlift_points = points
+        self.view.airlift_fade_seconds = self.airlift_fade_seconds
+        self.view.airlift_fade_started_at = self.airlift_fade_started_at
+
+    def configure_airlift(self) -> None:
+        """Persist the chosen configuration and restart its active disk fade."""
+        dialog = AirliftConfigurationDialog(
+            self, self.airlift_catalog, self.airlift_radius_km,
+            self.airlift_deployment_count, self.airlift_fade_seconds)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        radius, count, fade_seconds = dialog.values()
+        self.loading_settings = True
+        try:
+            self.setting_fields[AIRLIFT_RADIUS_KEY][1](radius)
+            self.setting_fields[AIRLIFT_DEPLOYMENT_COUNT_KEY][1](count)
+            self.setting_fields[AIRLIFT_FADE_SECONDS_KEY][1](fade_seconds)
+            values = {
+                AIRLIFT_RADIUS_KEY: radius,
+                AIRLIFT_DEPLOYMENT_COUNT_KEY: count,
+                AIRLIFT_FADE_SECONDS_KEY: fade_seconds,
+            }
+            self.preferences.update(values)
+        finally:
+            self.loading_settings = False
+        self.save_preference(AIRLIFT_RADIUS_KEY, radius)
+        if self.airlift_active:
+            self.airlift_fade_started_at = time.monotonic()
+        self._airlift_geometry_key = None
         self.refresh()
 
     def handle_search_button(self):
@@ -837,14 +1153,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
             if QMessageBox.question(
                     self, translate('MapperWindow', 'Stop search'),
                     translate('MapperWindow', 'Stop the current search?')) == QMessageBox.StandardButton.Yes:
-                self.state.search_started = False
-                self.state.search_paused = False
-                self.state.search_pause_point = None
-                self.state.return_to_pause = False
-                self.state.next_target_xy = None
-                if self.state.active_nav_target is None:
-                    self.overlay.hide()
-                    self.overlay_mode_active = False
+                self._deactivate_search()
                 self.refresh()
         else:
             self.start_search()
@@ -896,6 +1205,17 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         """Sincroniza combustível, navegação, botão Overlay e desenho com o estado.
         Só a transição para um modo autorizado abre automaticamente o overlay."""
         s = self.state
+        self._refresh_airlift_visualization()
+        presentation = s.current_presentation
+        self.view.current_presentation_visible = bool(
+            not self.transition_required
+            and presentation.kind is not CommanderPresentationKind.UNKNOWN
+            and (presentation.kind is CommanderPresentationKind.SRV
+                 or (presentation.latitude is not None
+                     and presentation.longitude is not None
+                     and self.active_map_corresponds(
+                         presentation.system, presentation.body,
+                         presentation.latitude, presentation.longitude) is True)))
         fuel = s.fuel_percent
         if fuel is None:
             self.info_right.setText('FUEL : —')
@@ -996,6 +1316,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         s = self.state
         nav_sig = (s.active_nav_target.get('x'), s.active_nav_target.get('y')) if s.active_nav_target else None
         return (s.body_key, s.rhino_lat, s.rhino_lon, s.rhino_heading, s.in_srv,
+                s.current_presentation,
                 len(s.points), s.next_target_xy, len(s.route_history),
                 nav_sig, s.search_paused, s.search_pause_point, s.return_to_pause)
 
@@ -1013,6 +1334,10 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         if (not self.transition_required and status_update.accepted
                 and (status_update.location_changed or correspondence is False)):
             self.transition_required = True
+            self.view.current_presentation_visible = False
+            self.view.airlift_points = ()
+            self._airlift_geometry_key = None
+            self.view.update()
             self.pending_status_update = status_update
             snapshot = self.latest_status_snapshot if raw_status is None else raw_status
             self.pending_status_snapshot = copy.deepcopy(snapshot)
@@ -1203,7 +1528,8 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
             self.status_valid or self.live_status or self.transition_required
             or self.state.in_srv or self.state.fuel_percent is not None
             or self.state.rhino_lat is not None or self.state.rhino_lon is not None
-            or self.state.rhino_heading is not None)
+            or self.state.rhino_heading is not None
+            or self.state.current_presentation.kind is not CommanderPresentationKind.UNKNOWN)
         try:
             self.last_mtime = self.status_path.stat().st_mtime_ns
         except OSError:
@@ -1217,9 +1543,8 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.state.fuel_reservoir = None
         self.state.fuel_percent = None
         self.state.fuel_low = False
-        self.state.rhino_lat = None
-        self.state.rhino_lon = None
-        self.state.rhino_heading = None
+        self.state.clear_current_presentation()
+        self.view.current_presentation_visible = False
         if had_live_state:
             self.stop_assistance()
             self.view.radar.waves.clear()
@@ -1299,6 +1624,20 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                 changed = before != self.map_signature()
                 # Só memorizamos a data depois de processar uma leitura válida.
                 self.last_mtime = mtime
+                presentation = self.state.current_presentation
+                if (not accepted
+                        and not self.transition_required
+                        and self.state.body_key is None
+                        and presentation.kind is CommanderPresentationKind.SHIP
+                        and presentation.latitude is not None
+                        and presentation.longitude is not None):
+                    previous_state = self.state
+                    self.open_or_create_pml_for_current_position(
+                        position=(presentation.latitude, presentation.longitude),
+                        system=presentation.system,
+                        body=presentation.body,
+                        allow_create=False)
+                    changed = changed or self.state is not previous_state
                 if accepted:
                     if not self.transition_required:
                         self.observe_steering()
@@ -1327,6 +1666,10 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         except (OSError, ValueError, TypeError, AttributeError) as exc:
             self.status_valid = False
             self.retry_status = True
+            self.state.in_srv = False
+            self.state.clear_current_presentation()
+            self.view.current_presentation_visible = False
+            changed = True
             self.info_left.setText(translate(
                 'MapperWindow', 'Waiting for a valid Status.json read: {error}').format(error=exc))
 

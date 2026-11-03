@@ -10,12 +10,19 @@ from pathlib import Path
 APP_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP_DIR))
 
-from mapper_core import MapperState, SRV_FLAG
+from mapper_core import (
+    CommanderPresentationKind,
+    HAS_LAT_LONG_FLAG,
+    MAIN_SHIP_FLAG,
+    ON_FOOT_FLAG,
+    SRV_FLAG,
+    MapperState,
+)
 
 
 def status(**changes):
     base = {
-        "Flags": SRV_FLAG,
+        "Flags": SRV_FLAG | HAS_LAT_LONG_FLAG,
         "Latitude": 38.0,
         "Longitude": -9.0,
         "Heading": 0.0,
@@ -69,6 +76,71 @@ class MapperCoreTests(unittest.TestCase):
         state = MapperState()
         self.assertFalse(state.process_status(status(Flags=0)))
         self.assertEqual(state.points, [])
+
+    def test_current_presentation_classifies_srv_ship_and_on_foot(self):
+        state = MapperState()
+        self.assertTrue(state.process_status(status()))
+        self.assertEqual(state.current_presentation.kind, CommanderPresentationKind.SRV)
+
+        ship = status(Flags=HAS_LAT_LONG_FLAG | MAIN_SHIP_FLAG, Heading=361)
+        self.assertFalse(state.process_status(ship))
+        self.assertEqual(state.current_presentation.kind, CommanderPresentationKind.SHIP)
+        self.assertEqual(state.current_presentation.heading, 1.0)
+        self.assertIsNone(state.rhino_lat)
+        self.assertIsNone(state.rhino_lon)
+        self.assertIsNone(state.rhino_heading)
+
+        on_foot = status(Flags=HAS_LAT_LONG_FLAG, Flags2=ON_FOOT_FLAG | 0x10,
+                         Heading=90)
+        self.assertFalse(state.process_status(on_foot))
+        self.assertEqual(state.current_presentation.kind, CommanderPresentationKind.ON_FOOT)
+        self.assertEqual(state.current_presentation.heading, 90.0)
+
+    def test_current_presentation_rejects_fighters_and_contradictory_flags(self):
+        state = MapperState()
+        for sample in (
+                status(Flags=HAS_LAT_LONG_FLAG | 0x02000000),
+                status(Flags=HAS_LAT_LONG_FLAG | SRV_FLAG | MAIN_SHIP_FLAG),
+                status(Flags=HAS_LAT_LONG_FLAG | MAIN_SHIP_FLAG,
+                       Flags2=ON_FOOT_FLAG)):
+            with self.subTest(sample=sample):
+                state.process_status(sample)
+                self.assertEqual(
+                    state.current_presentation.kind,
+                    CommanderPresentationKind.UNKNOWN)
+
+    def test_invalid_surface_sample_clears_live_position_and_heading(self):
+        invalid_samples = (
+            status(Latitude=None),
+            status(Longitude=None),
+            status(Latitude='invalid'),
+            status(Latitude=float('nan')),
+            status(Longitude=float('inf')),
+            status(Latitude=91),
+            status(Longitude=181),
+            status(Flags=SRV_FLAG),
+        )
+        for sample in invalid_samples:
+            with self.subTest(sample=sample):
+                state = MapperState()
+                state.process_status(status())
+                self.assertIsNotNone(state.rhino_lat)
+                self.assertFalse(state.process_status(sample))
+                self.assertEqual(
+                    state.current_presentation.kind,
+                    CommanderPresentationKind.UNKNOWN)
+                self.assertIsNone(state.rhino_lat)
+                self.assertIsNone(state.rhino_lon)
+                self.assertIsNone(state.rhino_heading)
+
+    def test_missing_or_invalid_heading_is_not_retained(self):
+        state = MapperState()
+        state.process_status(status(Heading=37))
+        self.assertTrue(state.process_status(status(Heading='invalid')))
+        self.assertIsNone(state.rhino_heading)
+        self.assertIsNone(state.current_presentation.heading)
+        self.assertTrue(state.process_status(status(Heading=None)))
+        self.assertIsNone(state.rhino_heading)
 
     def test_status_reports_body_change_without_resetting_active_map(self):
         state = MapperState()

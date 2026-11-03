@@ -19,13 +19,29 @@ class MapOperationsTests(unittest.TestCase):
         self.window = MapperWindow(
             Path(self.temp.name)/'Status.json', game_running_check=lambda: True)
         self.window.timer.stop()
-        self.window.state.process_status(dict(Flags=0x04000000,Latitude=38,Longitude=-9,Heading=0,BodyName='Test'))
+        self.window.state.process_status(dict(Flags=0x04200000,Latitude=38,Longitude=-9,Heading=0,BodyName='Test'))
 
     def tearDown(self):
         self.window.transition_required = False
         with patch.object(self.window, 'confirm_pml_exit', return_value=True):
             self.window.close()
         self.temp.cleanup()
+
+    def _write_existing_pml(self, maps_root):
+        from mapper_core import HAS_LAT_LONG_FLAG, SRV_FLAG, MapperState
+
+        map_path = maps_root / 'Sol' / 'Earth [6].json'
+        map_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_map = MapperState()
+        existing_map.process_status(dict(
+            Flags=HAS_LAT_LONG_FLAG | SRV_FLAG,
+            Latitude=38, Longitude=-9, Heading=0,
+            StarSystem='Sol', BodyName='Earth'))
+        existing_map.pml_id = '6'
+        existing_map.pml_center_lat = 38
+        existing_map.pml_center_lon = -9
+        existing_map.save(map_path)
+        return map_path
 
     def test_deposit_dialog_ui_preserves_widget_contract_and_defaults(self):
         from qt_map_operations import DepositDialog
@@ -262,7 +278,7 @@ class MapOperationsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             status_path = Path(directory)/'Status.json'
             map_path = Path(directory)/'map.json'
-            status_path.write_text(json.dumps(dict(Flags=0x04000000,Latitude=38,Longitude=-9,Heading=90,BodyName='Test',Fuel=dict(FuelReservoir=0.4))),encoding='utf-8')
+            status_path.write_text(json.dumps(dict(Flags=0x04200000,Latitude=38,Longitude=-9,Heading=90,BodyName='Test',Fuel=dict(FuelReservoir=0.4))),encoding='utf-8')
             w.status_path = status_path
             w.poll()
             w.state.start_search()
@@ -283,7 +299,7 @@ class MapOperationsTests(unittest.TestCase):
 
         w = self.window
         w.status_path.write_text(json.dumps(dict(
-            Flags=0x04000000, Latitude=38, Longitude=-9, Heading=0,
+            Flags=0x04200000, Latitude=38, Longitude=-9, Heading=0,
             StarSystem='Teste', BodyName='Test')),
             encoding='utf-8')
 
@@ -294,6 +310,88 @@ class MapOperationsTests(unittest.TestCase):
                          ('Teste', 'Test', 'Teste|Test'))
         self.assertFalse(w.transition_required)
         open_pml.assert_called_once_with()
+
+    def test_ship_startup_restores_matching_existing_pml_without_srv_telemetry(self):
+        import json
+        from mapper_core import HAS_LAT_LONG_FLAG, MAIN_SHIP_FLAG, MapperState
+
+        w = self.window
+        w.state = w.view.state = MapperState()
+        w.current_map_path = None
+        w.status_path.write_text(json.dumps(dict(
+            Flags=HAS_LAT_LONG_FLAG | MAIN_SHIP_FLAG,
+            Latitude=38, Longitude=-9, Heading=90,
+            StarSystem='Sol', BodyName='Earth')), encoding='utf-8')
+        maps_root = Path(self.temp.name) / 'maps'
+        map_path = self._write_existing_pml(maps_root)
+
+        with patch('qt_map_operations.maps_directory', return_value=maps_root):
+            w.poll()
+
+        self.assertEqual(w.current_map_path, map_path)
+        self.assertEqual((w.state.system, w.state.body, w.state.pml_id),
+                         ('Sol', 'Earth', '6'))
+        self.assertFalse(w.state.in_srv)
+        self.assertTrue(w.view.current_presentation_visible)
+        self.assertEqual(w.state.current_presentation.kind.value, 'ship')
+
+    def test_ship_startup_without_matching_map_does_not_create_map(self):
+        import json
+        from mapper_core import HAS_LAT_LONG_FLAG, MAIN_SHIP_FLAG, MapperState
+
+        w = self.window
+        w.state = w.view.state = MapperState()
+        w.current_map_path = None
+        w.status_path.write_text(json.dumps(dict(
+            Flags=HAS_LAT_LONG_FLAG | MAIN_SHIP_FLAG,
+            Latitude=38, Longitude=-9, Heading=90,
+            StarSystem='Sol', BodyName='Earth')), encoding='utf-8')
+        maps_root = Path(self.temp.name) / 'empty-maps'
+
+        with patch('qt_map_operations.maps_directory', return_value=maps_root), \
+                patch.object(w, 'setup_new_pml') as setup_pml:
+            w.poll()
+
+        setup_pml.assert_not_called()
+        self.assertIsNone(w.current_map_path)
+        self.assertIsNone(w.state.body_key)
+        self.assertFalse(w.view.current_presentation_visible)
+        self.assertFalse(maps_root.exists())
+
+    def test_invalid_or_pending_ship_startup_does_not_restore_existing_map(self):
+        import json
+        from mapper_core import (
+            HAS_LAT_LONG_FLAG, MAIN_SHIP_FLAG, ON_FOOT_FLAG, MapperState,
+        )
+
+        w = self.window
+        maps_root = Path(self.temp.name) / 'maps'
+        self._write_existing_pml(maps_root)
+        for name, flags, pending in (
+                ('invalid position', MAIN_SHIP_FLAG, False),
+                ('contradictory state',
+                 HAS_LAT_LONG_FLAG | MAIN_SHIP_FLAG, False),
+                ('pending transition',
+                 HAS_LAT_LONG_FLAG | MAIN_SHIP_FLAG, True)):
+            with self.subTest(name=name):
+                w.state = w.view.state = MapperState()
+                w.current_map_path = None
+                w.last_mtime = None
+                w.transition_required = pending
+                w.view.current_presentation_visible = False
+                status = dict(
+                    Flags=flags, Flags2=ON_FOOT_FLAG if name == 'contradictory state' else 0,
+                    Latitude=38, Longitude=-9, Heading=90,
+                    StarSystem='Sol', BodyName='Earth')
+                w.status_path.write_text(json.dumps(status), encoding='utf-8')
+
+                with patch('qt_map_operations.maps_directory', return_value=maps_root), \
+                        patch.object(w, 'open_or_create_pml_for_current_position') as open_pml:
+                    w.poll()
+
+                open_pml.assert_not_called()
+                self.assertIsNone(w.current_map_path)
+                self.assertFalse(w.view.current_presentation_visible)
 
     def test_first_map_bootstrap_uses_journal_system_when_status_omits_it(self):
         import json
@@ -307,7 +405,7 @@ class MapOperationsTests(unittest.TestCase):
         w = self.window
         w.journal_identity = JournalIdentityReader(journal_root)
         w.status_path.write_text(json.dumps(dict(
-            Flags=0x04000000, Latitude=38, Longitude=-9, Heading=0,
+            Flags=0x04200000, Latitude=38, Longitude=-9, Heading=0,
             BodyName='Test')), encoding='utf-8')
 
         with patch.object(w, 'setup_new_pml', return_value=False) as setup_pml:
@@ -323,7 +421,7 @@ class MapOperationsTests(unittest.TestCase):
 
         status_path = Path(self.temp.name)/'stale-status.json'
         status_path.write_text(json.dumps(dict(
-            Flags=0x04000000, Fuel=dict(FuelReservoir=0.4),
+            Flags=0x04200000, Fuel=dict(FuelReservoir=0.4),
             Latitude=38, Longitude=-9, Heading=90,
             StarSystem='Kappa', BodyName='Kappa 2 a')), encoding='utf-8')
         with patch.object(
@@ -348,7 +446,7 @@ class MapOperationsTests(unittest.TestCase):
 
         w = self.window
         w.status_path.write_text(json.dumps(dict(
-            Flags=0x04000000, Fuel=dict(FuelReservoir=0.4),
+            Flags=0x04200000, Fuel=dict(FuelReservoir=0.4),
             Latitude=38, Longitude=-9, Heading=90,
             StarSystem='Teste', BodyName='Test')), encoding='utf-8')
         with patch.object(w, 'open_or_create_pml_for_current_position'):
@@ -412,7 +510,7 @@ class MapOperationsTests(unittest.TestCase):
         with patch.object(w, 'edit_mark_values', return_value=dict(name='Local', azimuth=0, distance=100)):
             w.mark()
         before = list(w.state.marks)
-        result = w.state.process_status(dict(Flags=0x04000000, Latitude=38,
+        result = w.state.process_status(dict(Flags=0x04200000, Latitude=38,
                                              Longitude=-9, Heading=0, BodyName='Other'))
         self.assertTrue(result.location_changed)
         self.assertEqual(w.state.marks, before)
@@ -423,7 +521,7 @@ class MapOperationsTests(unittest.TestCase):
 
         w = self.window
         state = MapperState()
-        state.process_status(dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+        state.process_status(dict(Flags=0x04200000, Latitude=38, Longitude=-9,
                                   Heading=0, StarSystem='Sol', BodyName='Earth'))
         state.pml_id = '6'
         state.pml_center_lat, state.pml_center_lon = 38, -9
@@ -433,7 +531,7 @@ class MapOperationsTests(unittest.TestCase):
 
         nearby = w.active_map_corresponds('Sol', 'Earth', 38, -9 + degrees / 2)
         self.assertTrue(nearby)
-        nearby_update = state.process_status(dict(Flags=0x04000000, Latitude=38,
+        nearby_update = state.process_status(dict(Flags=0x04200000, Latitude=38,
                                                    Longitude=-9 + degrees / 2,
                                                    Heading=0, StarSystem='Sol',
                                                    BodyName='Earth'))
@@ -449,7 +547,7 @@ class MapOperationsTests(unittest.TestCase):
         mismatch = w.active_map_corresponds('Sol', 'Earth', mismatch_lat, -9)
         self.assertFalse(mismatch)
         before_position = (state.rhino_lat, state.rhino_lon, list(state.points))
-        mismatch_update = state.process_status(dict(Flags=0x04000000, Latitude=mismatch_lat,
+        mismatch_update = state.process_status(dict(Flags=0x04200000, Latitude=mismatch_lat,
                                                      Longitude=-9,
                                                      Heading=0, StarSystem='Sol',
                                                      BodyName='Earth'),
@@ -463,7 +561,7 @@ class MapOperationsTests(unittest.TestCase):
                           state.rhino_lat, state.rhino_lon, state.points,
                           w.current_map_path), original)
 
-        corresponding_update = state.process_status(dict(Flags=0x04000000, Latitude=38,
+        corresponding_update = state.process_status(dict(Flags=0x04200000, Latitude=38,
                                                           Longitude=-9, Heading=0,
                                                           StarSystem='Sol', BodyName='Earth'))
         w.evaluate_status_update(corresponding_update, True)
@@ -483,7 +581,7 @@ class MapOperationsTests(unittest.TestCase):
         for identifier in ('6', 'JD1'):
             w = self.window
             state = MapperState()
-            state.process_status(dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+            state.process_status(dict(Flags=0x04200000, Latitude=38, Longitude=-9,
                                       Heading=0, StarSystem='Sol', BodyName='Earth'))
             state.pml_id = identifier
             state.pml_center_lat, state.pml_center_lon = 38, -9
@@ -498,7 +596,7 @@ class MapOperationsTests(unittest.TestCase):
                       state.pml_center_lat, state.pml_center_lon,
                       list(state.marks), state.protected, state.mining_only)
 
-            incoming = state.process_status(dict(Flags=0x04000000, Latitude=38,
+            incoming = state.process_status(dict(Flags=0x04200000, Latitude=38,
                                                  Longitude=-9, Heading=0,
                                                  StarSystem='Other', BodyName='Mars'))
             correspondence = w.active_map_corresponds('Other', 'Mars', 38, -9)
@@ -516,12 +614,12 @@ class MapOperationsTests(unittest.TestCase):
 
         w = self.window
         state = MapperState()
-        state.process_status(dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+        state.process_status(dict(Flags=0x04200000, Latitude=38, Longitude=-9,
                                   Heading=0, StarSystem='Sol', BodyName='Earth'))
         state.pml_id = '6'
         state.pml_center_lat, state.pml_center_lon = 38, -9
         w.state = w.view.state = state
-        raw_status = dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+        raw_status = dict(Flags=0x04200000, Latitude=38, Longitude=-9,
                           Heading=12, StarSystem='Other', BodyName='Mars',
                           PlanetRadius=3_000_000)
         update = state.process_status(raw_status, record_position=False)
@@ -542,7 +640,7 @@ class MapOperationsTests(unittest.TestCase):
 
         w = self.window
         state = MapperState()
-        state.process_status(dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+        state.process_status(dict(Flags=0x04200000, Latitude=38, Longitude=-9,
                                   Heading=0, StarSystem='Sol', BodyName='Earth'))
         state.pml_id = '6'
         state.pml_center_lat, state.pml_center_lon = 38, -9
@@ -551,7 +649,7 @@ class MapOperationsTests(unittest.TestCase):
                   state.system, state.body, state.pml_id,
                   state.pml_center_lat, state.pml_center_lon)
         w.status_path.write_text(json.dumps(dict(
-            Flags=0x04000000 | 0x08000000,
+            Flags=0x04200000 | 0x08000000,
             Latitude=38, Longitude=-9, Heading=45,
             StarSystem='Other', BodyName='Mars',
             PlanetRadius=3_000_000, FireGroup=0, GuiFocus=0)),
@@ -624,7 +722,7 @@ class MapOperationsTests(unittest.TestCase):
 
         w = self.window
         old_state = w.state
-        status = dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+        status = dict(Flags=0x04200000, Latitude=38, Longitude=-9,
                       Heading=0, StarSystem='Sol', BodyName='Earth',
                       PlanetRadius=3_000_000)
         w.latest_status_snapshot = status
@@ -655,7 +753,7 @@ class MapOperationsTests(unittest.TestCase):
 
         w = self.window
         old_state = w.state
-        status = dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+        status = dict(Flags=0x04200000, Latitude=38, Longitude=-9,
                       Heading=0, StarSystem='Sol', BodyName='Earth')
         w.latest_status_snapshot = status
         candidate = MapperState()
@@ -679,7 +777,7 @@ class MapOperationsTests(unittest.TestCase):
 
         w = self.window
         old_state = w.state
-        status = dict(Flags=0x04000000, Latitude=38, Longitude=-9,
+        status = dict(Flags=0x04200000, Latitude=38, Longitude=-9,
                       Heading=12, StarSystem='Sol', BodyName='Earth')
         candidate = MapperState()
         candidate.process_status(status)
@@ -707,10 +805,10 @@ class MapOperationsTests(unittest.TestCase):
 
         w = self.window
         old_state = w.state
-        status = dict(Flags=0x04000000, Latitude=38.2, Longitude=-9,
+        status = dict(Flags=0x04200000, Latitude=38.2, Longitude=-9,
                       Heading=12, StarSystem='Sol', BodyName='Earth')
         candidate = MapperState()
-        candidate.process_status(dict(Flags=0x04000000, Latitude=38,
+        candidate.process_status(dict(Flags=0x04200000, Latitude=38,
                                       Longitude=-9, Heading=0,
                                       StarSystem='Sol', BodyName='Earth'))
         candidate.pml_id = '6'
@@ -732,7 +830,7 @@ class MapOperationsTests(unittest.TestCase):
 
         w = self.window
         candidate = MapperState()
-        candidate.process_status(dict(Flags=0x04000000, Latitude=38,
+        candidate.process_status(dict(Flags=0x04200000, Latitude=38,
                                       Longitude=-9, Heading=0,
                                       StarSystem='Sol', BodyName='Earth'))
         candidate.pml_id = '6'
@@ -740,7 +838,7 @@ class MapOperationsTests(unittest.TestCase):
         w.transition_required = True
         w.pending_old_map_resolved = True
         w.latest_status_snapshot = dict(
-            Flags=0x04000000, Latitude=38, Longitude=-9,
+            Flags=0x04200000, Latitude=38, Longitude=-9,
             StarSystem='Sol', BodyName='Earth')
         w.pending_destination = dict(state=candidate, path=None,
                                      source_text='preparado')
@@ -759,7 +857,7 @@ class MapOperationsTests(unittest.TestCase):
         w = self.window
         old_state = w.state
         candidate = MapperState()
-        candidate.process_status(dict(Flags=0x04000000, Latitude=38,
+        candidate.process_status(dict(Flags=0x04200000, Latitude=38,
                                       Longitude=-9, Heading=0,
                                       StarSystem='Sol', BodyName='Earth'))
         candidate.pml_id = '6'
@@ -767,7 +865,7 @@ class MapOperationsTests(unittest.TestCase):
         w.transition_required = True
         w.pending_old_map_resolved = True
         w.latest_status_snapshot = dict(
-            Flags=0x04000000, Latitude=38, Longitude=-9,
+            Flags=0x04200000, Latitude=38, Longitude=-9,
             StarSystem='Sol', BodyName='Earth')
         w.pending_destination = dict(state=candidate, path=None,
                                      source_text='preparado')

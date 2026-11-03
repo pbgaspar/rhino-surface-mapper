@@ -3,13 +3,13 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from mapper_core import MapperState, SRV_FLAG
+from mapper_core import HAS_LAT_LONG_FLAG, MapperState, SRV_FLAG
 
 
 class MapValidationTests(unittest.TestCase):
     def setUp(self):
         self.state = MapperState()
-        self.state.process_status(dict(Flags=SRV_FLAG,Latitude=38,Longitude=-9,Heading=0))
+        self.state.process_status(dict(Flags=SRV_FLAG | HAS_LAT_LONG_FLAG,Latitude=38,Longitude=-9,Heading=0))
         self.data = copy.deepcopy(self.state.to_dict())
 
     def test_invalid_maps_leave_existing_state_unchanged(self):

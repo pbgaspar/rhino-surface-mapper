@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -23,9 +24,114 @@ from map_persistence import (
 
 # Flags é um conjunto de bits enviado pelo jogo. Este bit identifica uso do SRV.
 SRV_FLAG = 0x04000000
+HAS_LAT_LONG_FLAG = 0x00200000
+MAIN_SHIP_FLAG = 0x01000000
+FIGHTER_FLAG = 0x02000000
+ON_FOOT_FLAG = 0x00000001
 DEFAULT_RADIUS_M = 6_371_000.0
 SEARCH_RADIUS_M = 3_500.0
 SEARCH_SPACING_M = 1_800.0
+
+
+class CommanderPresentationKind(str, Enum):
+    """The one live commander representation eligible for map display."""
+
+    UNKNOWN = "unknown"
+    SRV = "srv"
+    SHIP = "ship"
+    ON_FOOT = "on_foot"
+
+
+@dataclass(frozen=True)
+class CommanderPresentation:
+    """Validated presentation data for the current commander location."""
+
+    kind: CommanderPresentationKind = CommanderPresentationKind.UNKNOWN
+    latitude: float | None = None
+    longitude: float | None = None
+    heading: float | None = None
+    system: str = ""
+    body: str = ""
+
+
+def _status_flag(status: dict[str, Any], key: str, default: int | None = None) -> int | None:
+    """Read an integer status flag without accepting malformed or fractional values."""
+    value = status.get(key, default)
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if isinstance(value, float) and not value.is_integer():
+        return None
+    return parsed
+
+
+def _valid_surface_position(status: dict[str, Any]) -> tuple[float, float] | None:
+    """Return finite, in-range surface coordinates only when HasLatLong is set."""
+    flags = _status_flag(status, "Flags")
+    if flags is None or not flags & HAS_LAT_LONG_FLAG:
+        return None
+    latitude_value, longitude_value = status.get("Latitude"), status.get("Longitude")
+    if (latitude_value is None or longitude_value is None
+            or isinstance(latitude_value, bool) or isinstance(longitude_value, bool)):
+        return None
+    try:
+        latitude, longitude = float(latitude_value), float(longitude_value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if (not math.isfinite(latitude) or not math.isfinite(longitude)
+            or not -90.0 <= latitude <= 90.0
+            or not -180.0 <= longitude <= 180.0):
+        return None
+    return latitude, longitude
+
+
+def _normalise_heading(value: Any) -> float | None:
+    """Return a finite heading in [0, 360), or None when it is unavailable."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        heading = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(heading):
+        return None
+    return heading % 360.0
+
+
+def current_commander_presentation(status: dict[str, Any]) -> CommanderPresentation:
+    """Classify a Status.json sample without changing SRV operational semantics."""
+    if not isinstance(status, dict):
+        return CommanderPresentation()
+    flags = _status_flag(status, "Flags", 0)
+    flags2 = _status_flag(status, "Flags2", 0)
+    position = _valid_surface_position(status)
+    if flags is None or flags2 is None or position is None:
+        return CommanderPresentation()
+    if flags & FIGHTER_FLAG:
+        return CommanderPresentation()
+
+    in_srv = bool(flags & SRV_FLAG)
+    in_ship = bool(flags & MAIN_SHIP_FLAG)
+    on_foot = bool(flags2 & ON_FOOT_FLAG)
+    if sum((in_srv, in_ship, on_foot)) != 1:
+        return CommanderPresentation()
+
+    kind = (CommanderPresentationKind.SRV if in_srv else
+            CommanderPresentationKind.SHIP if in_ship else
+            CommanderPresentationKind.ON_FOOT)
+    system = status.get("StarSystem", "")
+    body = status.get("BodyName", "")
+    return CommanderPresentation(
+        kind=kind,
+        latitude=position[0],
+        longitude=position[1],
+        heading=_normalise_heading(status.get("Heading")),
+        system=system if isinstance(system, str) else "",
+        body=body if isinstance(body, str) else "",
+    )
 
 
 @dataclass(frozen=True)
@@ -79,6 +185,7 @@ class MapperState:
         self.rhino_lat: float | None = None
         self.rhino_lon: float | None = None
         self.rhino_heading: float | None = None
+        self.current_presentation = CommanderPresentation()
         self.fuel_reservoir: float | None = None
         self.fuel_percent: float | None = None
         self.fuel_low = False
@@ -172,10 +279,29 @@ class MapperState:
 
         Devolve ``True`` quando a posição foi aceite como telemetria do Rhino.
         """
-        flags = int(status.get("Flags", 0))
+        self.current_presentation = current_commander_presentation(status)
+        if not isinstance(status, dict):
+            self.in_srv = False
+            self.clear_current_presentation()
+            return StatusUpdate(False)
+        flags = _status_flag(status, "Flags", 0)
+        if flags is None:
+            self.in_srv = False
+            self.clear_current_presentation()
+            return StatusUpdate(False)
         self.in_srv = bool(flags & SRV_FLAG)
         if not self.in_srv:
+            self._clear_rhino_position()
             return StatusUpdate(False)
+
+        position = _valid_surface_position(status)
+        if position is None:
+            self._clear_rhino_position()
+            return StatusUpdate(False)
+        latitude, longitude = position
+        if record_position:
+            self.rhino_lat, self.rhino_lon = latitude, longitude
+        self.rhino_heading = _normalise_heading(status.get("Heading"))
 
         fuel = status.get("Fuel") or {}
         reservoir = fuel.get("FuelReservoir")
@@ -183,18 +309,6 @@ class MapperState:
             self.fuel_reservoir = float(reservoir)
             self.fuel_percent = max(0.0, min(100.0, self.fuel_reservoir / 0.80 * 100.0))
             self.fuel_low = bool(int(status.get("Flags", 0)) & 0x00080000)
-
-        heading = status.get("Heading")
-        if heading is not None:
-            try:
-                self.rhino_heading = float(heading) % 360.0
-            except (TypeError, ValueError):
-                self.rhino_heading = None
-
-        lat, lon = status.get("Latitude"), status.get("Longitude")
-        if lat is None or lon is None:
-            return StatusUpdate(False)
-        latitude, longitude = float(lat), float(lon)
 
         system, body = status.get("StarSystem", ""), status.get("BodyName", "")
         # O Status.json pode omitir StarSystem durante vários segundos. Quando
@@ -208,8 +322,6 @@ class MapperState:
             self.body_key = body_key
         if self.body_key and self.body_key != body_key:
             return StatusUpdate(True, True, system, body, latitude, longitude)
-        if record_position:
-            self.rhino_lat, self.rhino_lon = latitude, longitude
         if self.read_only and self.body_key != body_key:
             # Consultar outro planeta não pode apagar o mapa protegido.
             return StatusUpdate(True, True, system, body, latitude, longitude)
@@ -237,6 +349,16 @@ class MapperState:
 
         self.update_next()
         return StatusUpdate(True, False, system, body, latitude, longitude)
+
+    def clear_current_presentation(self) -> None:
+        """Clear live presentation and SRV position without changing saved map data."""
+        self.current_presentation = CommanderPresentation()
+        self._clear_rhino_position()
+
+    def _clear_rhino_position(self) -> None:
+        self.rhino_lat = None
+        self.rhino_lon = None
+        self.rhino_heading = None
 
     def start_search(self, azimuth: int = 0) -> bool:
         """Define o Datum na posição atual e prepara o primeiro destino."""

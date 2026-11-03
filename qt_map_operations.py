@@ -525,19 +525,25 @@ class MapOperations:
             translate('MapperWindow', 'PML [{pml_id}] created. Save the map to keep it.').format(pml_id=pml_id))
         return True
 
-    def open_or_create_pml_for_current_position(self):
-        """Abre o PML próximo ou inicia a identificação de um PML novo.
+    def open_or_create_pml_for_current_position(
+            self, *, position=None, system=None, body=None,
+            allow_create=True):
+        """Abre um PML próximo e cria um novo somente quando permitido.
 
         Só é chamado com sistema, planeta e posição fornecidos pelo jogo. Assim
         nunca são criadas pastas John Doe por falta temporária de telemetria.
         """
         s = self.state
-        if not (s.body.strip() and s.rhino_lat is not None):
+        latitude, longitude = position or (s.rhino_lat, s.rhino_lon)
+        current_system = s.system if system is None else system
+        current_body = s.body if body is None else body
+        if (not isinstance(current_body, str) or not current_body.strip()
+                or latitude is None or longitude is None):
             return
-        system_is_known = bool(s.system.strip())
-        matches = (self.nearby_pml_maps(s.system, s.body, s.rhino_lat, s.rhino_lon)
+        system_is_known = isinstance(current_system, str) and bool(current_system.strip())
+        matches = (self.nearby_pml_maps(current_system, current_body, latitude, longitude)
                    if system_is_known else
-                   self.nearby_pml_maps_without_system(s.body, s.rhino_lat, s.rhino_lon))
+                   self.nearby_pml_maps_without_system(current_body, latitude, longitude))
         # Várias versões do mesmo PML não são vários PML. Abrimos a cópia mais
         # recente automaticamente; as versões antigas continuam disponíveis em
         # Abrir, sem interromper a entrada normal no Rhino.
@@ -590,7 +596,7 @@ class MapOperations:
             self.statusBar().showMessage(
                 translate('MapperWindow', 'Map opened: {filename}').format(filename=path.name))
             return
-        if system_is_known:
+        if system_is_known and allow_create:
             if self.setup_new_pml():
                 # O primeiro mapa de um PML tem sempre o nome principal, sem
                 # sufixo de versão. Passa logo a ser o mapa atual.
@@ -604,7 +610,7 @@ class MapOperations:
                             pml_id=self.state.pml_id, filename=path.name))
                 except OSError as exc:
                     QMessageBox.critical(self, translate('MapperWindow', 'Error creating PML'), str(exc))
-        else:
+        elif not system_is_known:
             self.statusBar().showMessage(translate(
                 'MapperWindow', 'The game did not provide a system; a new PML cannot be created.'))
 

@@ -93,6 +93,12 @@
         <message><source>Continue exploration</source><translation>Continuar a exploração</translation></message>
         <message><source>Mining only</source><translation>Só minerar</translation></message>
         <message><source>Cancel</source><translation>Cancelar</translation></message>
+        <message><source>Airlift: Off</source><translation>Airlift: desligado</translation></message>
+        <message><source>Airlift: On</source><translation>Airlift: ativo</translation></message>
+        <message><source>Configure Airlift</source><translation>Configurar Airlift</translation></message>
+        <message><source>Coverage: {coverage:.1f}%</source><translation>Cobertura: {coverage:.1f}%</translation></message>
+        <message><source>Airlift</source><translation>Airlift</translation></message>
+        <message><source>Airlift requires a valid PML map.</source><translation>O Airlift requer um mapa PML válido.</translation></message>
         <message><source>Read-only map</source><translation>Mapa só para consulta</translation></message>
         <message><source>Open the map and choose Continue exploration to create a new editable version.</source><translation>Abra o mapa e escolha Continuar a exploração para criar uma nova versão editável.</translation></message>
         <message><source>Open the map and choose Continue exploration.</source><translation>Abra o mapa e escolha Continuar a exploração.</translation></message>
@@ -259,6 +265,9 @@
         <message><source>Wave colour</source><translation>Cor da onda</translation></message>
         <message><source>Size</source><translation>Tamanho</translation></message>
         <message><source>Hull colour</source><translation>Cor da blindagem</translation></message>
+        <message><source>Ship</source><translation>Nave</translation></message>
+        <message><source>Ship colour</source><translation>Cor da nave</translation></message>
+        <message><source>Choose a colour with a hue.</source><translation>Escolha uma cor com tonalidade.</translation></message>
         <message><source>Steering assistance</source><translation>Assistência de direção</translation></message>
         <message><source>Estimated maximum speed</source><translation>Velocidade máxima estimada</translation></message>
         <message><source>Maximum base duration</source><translation>Duração máxima base</translation></message>
@@ -295,6 +304,17 @@
         <message><source>Settings</source><translation>Configurações</translation></message>
         <message><source>Could not save settings: {error}</source><translation>Não foi possível guardar as configurações: {error}</translation></message>
         <message><source>Could not load settings: {error}</source><translation>Não foi possível carregar as configurações: {error}</translation></message>
+    </context>
+    <context>
+        <name>AirliftDialog</name>
+        <message><source>Airlift configuration</source><translation>Configuração do Airlift</translation></message>
+        <message><source>{radius} km</source><translation>{radius} km</translation></message>
+        <message><source> seconds</source><translation> segundos</translation></message>
+        <message><source>PML radius:</source><translation>Raio do PML:</translation></message>
+        <message><source>Deployment count:</source><translation>Número de pontos:</translation></message>
+        <message><source>Coverage-disk fade:</source><translation>Desvanecimento dos discos:</translation></message>
+        <message><source>Coverage:</source><translation>Cobertura:</translation></message>
+        <message><source>Coverage: {coverage:.1f}%</source><translation>Cobertura: {coverage:.1f}%</translation></message>
     </context>
     <context>
         <name>MapView</name>

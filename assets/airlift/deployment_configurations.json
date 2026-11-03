@@ -1,0 +1,19 @@
+{
+  "configurations": [
+    {"target_radius_km": 5, "deployment_count": 6, "rings": [{"point_count": 5, "radius_km": 3.37, "phase_deg": 0.0}], "authoritative_coverage_percent": 85.45268524648},
+    {"target_radius_km": 5, "deployment_count": 7, "rings": [{"point_count": 6, "radius_km": 3.65, "phase_deg": 0.0}], "authoritative_coverage_percent": 93.902039695352},
+    {"target_radius_km": 5, "deployment_count": 8, "rings": [{"point_count": 7, "radius_km": 4.025, "phase_deg": 0.0}], "authoritative_coverage_percent": 95.642328363086},
+    {"target_radius_km": 5, "deployment_count": 9, "rings": [{"point_count": 8, "radius_km": 3.825, "phase_deg": 0.0}], "authoritative_coverage_percent": 99.582714818717},
+    {"target_radius_km": 5, "deployment_count": 10, "rings": [{"point_count": 9, "radius_km": 3.8, "phase_deg": 0.0}], "authoritative_coverage_percent": 99.964163115565},
+    {"target_radius_km": 5, "deployment_count": 11, "rings": [{"point_count": 10, "radius_km": 3.63, "phase_deg": 0.0}], "authoritative_coverage_percent": 99.99999999999997, "covering_radius_km": 1.911425765884181, "covering_status": "complete within tolerance"},
+    {"target_radius_km": 7, "deployment_count": 13, "rings": [{"point_count": 5, "radius_km": 3.330391784644491, "phase_deg": 0.0}, {"point_count": 7, "radius_km": 5.524909502308197, "phase_deg": 36.22460312191592}], "authoritative_coverage_percent": 84.25806279560484},
+    {"target_radius_km": 7, "deployment_count": 14, "rings": [{"point_count": 5, "radius_km": 3.2160215370495764, "phase_deg": 0.0}, {"point_count": 8, "radius_km": 5.50840113432437, "phase_deg": 0.0}], "authoritative_coverage_percent": 89.83912880521021},
+    {"target_radius_km": 7, "deployment_count": 15, "rings": [{"point_count": 5, "radius_km": 3.161843531269979, "phase_deg": 0.0}, {"point_count": 9, "radius_km": 5.689043947248912, "phase_deg": 0.0}], "authoritative_coverage_percent": 94.83792591958826},
+    {"target_radius_km": 7, "deployment_count": 16, "rings": [{"point_count": 5, "radius_km": 3.062398869122304, "phase_deg": 0.0}, {"point_count": 10, "radius_km": 5.838170218587775, "phase_deg": 0.0}], "authoritative_coverage_percent": 98.12070694479415},
+    {"target_radius_km": 7, "deployment_count": 17, "rings": [{"point_count": 5, "radius_km": 3.0540004727020946, "phase_deg": 0.0}, {"point_count": 11, "radius_km": 5.724485961218425, "phase_deg": 0.0}], "authoritative_coverage_percent": 98.68746762726441},
+    {"target_radius_km": 7, "deployment_count": 18, "rings": [{"point_count": 6, "radius_km": 3.296282314084089, "phase_deg": 0.0}, {"point_count": 11, "radius_km": 5.970936848728272, "phase_deg": 28.143648326587694}], "authoritative_coverage_percent": 99.61327910850376, "covering_radius_km": 2.1502834934991646, "covering_status": "incomplete"},
+    {"target_radius_km": 7, "deployment_count": 19, "rings": [{"point_count": 6, "radius_km": 3.388108023463593, "phase_deg": 0.0}, {"point_count": 12, "radius_km": 5.95183689552196, "phase_deg": 3.396961247542679}], "authoritative_coverage_percent": 100.0, "covering_radius_km": 1.9915498595765435, "covering_status": "complete within tolerance"},
+    {"target_radius_km": 7, "deployment_count": 20, "rings": [{"point_count": 6, "radius_km": 3.44507912691783, "phase_deg": 0.0}, {"point_count": 13, "radius_km": 5.722819684927505, "phase_deg": 13.846156846619412}], "authoritative_coverage_percent": 99.99999999999999, "covering_radius_km": 1.9898029818558385, "covering_status": "complete within tolerance"},
+    {"target_radius_km": 7, "deployment_count": 21, "rings": [{"point_count": 6, "radius_km": 3.3357236028083306, "phase_deg": 0.0}, {"point_count": 14, "radius_km": 5.674548815362681, "phase_deg": 4.364621265287511}], "authoritative_coverage_percent": 100.0, "covering_radius_km": 1.9361404520457284, "covering_status": "complete within tolerance"}
+  ]
+}

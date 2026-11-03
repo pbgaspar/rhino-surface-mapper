@@ -7,6 +7,17 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLineEdit, QFileDialog, QLabel, QColorDialog, QMessageBox, QSizePolicy, QFontComboBox, QStyleFactory, QAbstractSpinBox)
 from settings_persistence import (read_exported_settings, save_preferences,
                                   write_exported_settings)
+from airlift import DEFAULT_DEPLOYMENT_COUNTS, is_operational_configuration
+from airlift_preferences import (
+    AIRLIFT_DEPLOYMENT_COUNT_KEY,
+    AIRLIFT_FADE_SECONDS_KEY,
+    AIRLIFT_FADE_SECONDS_RANGE,
+    AIRLIFT_RADIUS_KEY,
+    DEFAULT_AIRLIFT_FADE_SECONDS,
+    DEFAULT_AIRLIFT_RADIUS_KM,
+    normalize_airlift_preferences,
+    validate_airlift_preferences,
+)
 from i18n import SUPPORTED_LANGUAGES, normalize_language, translate
 
 
@@ -19,12 +30,18 @@ OP_EXIT = 'exit'
 SECTION_SEARCH = 'search_navigation'
 SECTION_RADAR = 'radar'
 SECTION_RHINO = 'rhino'
+SECTION_SHIP = 'ship'
 SECTION_ASSIST = 'steering_assistance'
 SECTION_ED_PARAMETERS = 'ed_parameters'
 SECTION_MAP = 'map'
 SECTION_OVERLAY = 'overlay'
 SECTION_LAYOUT = 'layout'
 SECTION_STORAGE = 'storage'
+
+SHIP_SIZE_DEFAULT = 72
+SHIP_SIZE_MIN = 20
+SHIP_SIZE_MAX = 160
+SHIP_COLOR_DEFAULT = '#557194'
 
 THEME_SYSTEM = 'system'
 THEME_DARK = 'dark'
@@ -87,6 +104,10 @@ class LayoutOptions:
         self.setting_fields = {}
         self.loading_settings = False
         self.preferences = dict(options) if isinstance(options, dict) else {}
+        self.preferences.update(normalize_airlift_preferences(self.preferences))
+        self.airlift_radius_km = self.preferences[AIRLIFT_RADIUS_KEY]
+        self.airlift_deployment_count = self.preferences[AIRLIFT_DEPLOYMENT_COUNT_KEY]
+        self.airlift_fade_seconds = self.preferences[AIRLIFT_FADE_SECONDS_KEY]
         if 'theme' in self.preferences:
             theme = normalize_theme_value(self.preferences['theme'])
             if theme is not None:
@@ -131,7 +152,13 @@ class LayoutOptions:
         self.op_buttons[OP_EXIT].show()
         self.fixed_buttons.extend([(self.options_button,125), (self.op_buttons[OP_EXIT],90)])
         operations.addStretch()
-        for button, width in [(self.search_button,140),(self.skip_button,150),(self.overlay_button,90)]:
+        for button, width in [
+                (self.search_button, 140),
+                (self.skip_button, 150),
+                (self.airlift_button, 105),
+                (self.airlift_config_button, 100),
+                (self.airlift_coverage_label, 115),
+                (self.overlay_button, 90)]:
             controls.addWidget(button)
             button.show()
             self.fixed_buttons.append((button,width))
@@ -207,27 +234,90 @@ class LayoutOptions:
             button.setObjectName(key)
             self.color_buttons[key] = button
             value = self.preferences.get(key, default)
-            if not isinstance(value, str) or not QColor(value).isValid():
+            if not valid_color(value, key):
                 value = default
             def apply(value, save=True):
                 self.view.colors[key] = value
                 if key == "rhino_color":
                     svg = (Path(__file__).resolve().parent / "assets" / "Rhino.svg").read_text(encoding="utf-8-sig")
                     self.view.rhino_renderer.load(QByteArray(svg.replace("#e6ebf0", value).encode("utf-8")))
+                elif key == 'ship_color':
+                    self.view.set_ship_color(value)
                 button.setText(value)
                 button.setStyleSheet(f'border-left: 18px solid {value}; padding: 5px;')
                 self.view.update()
                 if save:
                     self.save_preference(key, value)
-            self.setting_fields[key] = (lambda: self.view.colors[key], apply, lambda v: isinstance(v,str) and QColor(v).isValid())
+            self.setting_fields[key] = (
+                lambda: self.view.colors[key], apply,
+                lambda v: valid_color(v, key))
             apply(value, False)
             def choose():
                 value = QColorDialog.getColor(QColor(self.view.colors[key]), self, label)
                 if value.isValid():
-                    apply(value.name())
+                    if not valid_color(value.name(), key):
+                        QMessageBox.information(
+                            self, translate('LayoutOptions', 'Ship colour'),
+                            translate('LayoutOptions', 'Choose a colour with a hue.'))
+                    else:
+                        apply(value.name())
             button.clicked.connect(choose)
             form.addRow(translate('LayoutOptions', label), button)
             self.option_resets[theme].append(lambda: apply(self.view.default_map_color(key) if key in ('map_background','grid_color') else default))
+
+        def valid_color(value, key):
+            if not isinstance(value, str) or not QColor(value).isValid():
+                return False
+            return key != 'ship_color' or QColor(value).hslHueF() >= 0
+
+        def set_airlift_radius(value):
+            if type(value) is not int or value not in DEFAULT_DEPLOYMENT_COUNTS:
+                raise ValueError('Airlift radius must be 5 or 7.')
+            self.airlift_radius_km = value
+            self.airlift_deployment_count = DEFAULT_DEPLOYMENT_COUNTS[value]
+
+        def set_airlift_deployment_count(value):
+            if not is_operational_configuration(self.airlift_radius_km, value):
+                raise ValueError('Airlift deployment count is not operational.')
+            self.airlift_deployment_count = value
+
+        def set_airlift_fade_seconds(value):
+            low, high = AIRLIFT_FADE_SECONDS_RANGE
+            if type(value) is not int or not low <= value <= high:
+                raise ValueError('Airlift fade duration must be in 0..10 seconds.')
+            self.airlift_fade_seconds = value
+
+        self.setting_fields[AIRLIFT_RADIUS_KEY] = (
+            lambda: self.airlift_radius_km,
+            set_airlift_radius,
+            lambda value: type(value) is int and value in DEFAULT_DEPLOYMENT_COUNTS,
+        )
+        self.setting_fields[AIRLIFT_DEPLOYMENT_COUNT_KEY] = (
+            lambda: self.airlift_deployment_count,
+            set_airlift_deployment_count,
+            lambda value: (
+                type(value) is int
+                and any(
+                    is_operational_configuration(radius, value)
+                    for radius in DEFAULT_DEPLOYMENT_COUNTS
+                )
+            ),
+        )
+        self.setting_fields[AIRLIFT_FADE_SECONDS_KEY] = (
+            lambda: self.airlift_fade_seconds,
+            set_airlift_fade_seconds,
+            lambda value: (
+                type(value) is int
+                and AIRLIFT_FADE_SECONDS_RANGE[0]
+                <= value <= AIRLIFT_FADE_SECONDS_RANGE[1]
+            ),
+        )
+        self.option_resets['_internal'] = [
+            lambda: set_airlift_radius(DEFAULT_AIRLIFT_RADIUS_KM),
+            lambda: set_airlift_deployment_count(
+                DEFAULT_DEPLOYMENT_COUNTS[DEFAULT_AIRLIFT_RADIUS_KM]),
+            lambda: set_airlift_fade_seconds(DEFAULT_AIRLIFT_FADE_SECONDS),
+        ]
 
         for field, default in [('coverage_width_m',2000),('scanner_range_m',2000),('search_azimuth',0)]:
             spin = self.parameter_spins[field]
@@ -253,6 +343,11 @@ class LayoutOptions:
         form = section(SECTION_RHINO, 'Rhino')
         number(form,SECTION_RHINO,'Size','rhino_size',56,20,160,lambda v: setattr(self.view,'rhino_height',v),' px')
         color(form,SECTION_RHINO,'Hull colour','rhino_color','#e6ebf0')
+        form = section(SECTION_SHIP, 'Ship')
+        number(form, SECTION_SHIP, 'Size', 'ship_size', SHIP_SIZE_DEFAULT,
+               SHIP_SIZE_MIN, SHIP_SIZE_MAX,
+               lambda value: setattr(self.view, 'ship_width', value), ' px')
+        color(form, SECTION_SHIP, 'Ship colour', 'ship_color', SHIP_COLOR_DEFAULT)
         form = section(SECTION_ASSIST, 'Steering assistance')
         number(form,SECTION_ASSIST,'Estimated maximum speed','assist_speed',15,15,40,lambda v:setattr(self.assist,'max_speed',v),' m/s')
         number(form,SECTION_ASSIST,'Maximum base duration','assist_pulse_ms',800,200,1000,lambda v:setattr(self.assist,'max_pulse',v/1000),' ms')
@@ -399,6 +494,23 @@ class LayoutOptions:
             for key,value in data.items():
                 if key not in self.setting_fields or not self.setting_fields[key][2](value):
                     raise ValueError(f'Configuração inválida: {key}')
+            airlift_values = {
+                key: getter()
+                for key, (getter, _, _) in self.setting_fields.items()
+                if key in (
+                    AIRLIFT_RADIUS_KEY,
+                    AIRLIFT_DEPLOYMENT_COUNT_KEY,
+                    AIRLIFT_FADE_SECONDS_KEY,
+                )
+            }
+            airlift_values.update({
+                key: value for key, value in data.items()
+                if key in airlift_values
+            })
+            if AIRLIFT_RADIUS_KEY in data and AIRLIFT_DEPLOYMENT_COUNT_KEY not in data:
+                airlift_values[AIRLIFT_DEPLOYMENT_COUNT_KEY] = (
+                    DEFAULT_DEPLOYMENT_COUNTS[airlift_values[AIRLIFT_RADIUS_KEY]])
+            validate_airlift_preferences(airlift_values)
         except (OSError,ValueError,TypeError) as exc:
             QMessageBox.warning(
                 self, translate('LayoutOptions', 'Settings'),
@@ -407,7 +519,13 @@ class LayoutOptions:
         self.loading_settings = True
         try:
             # Aplicar o tema primeiro; as cores do ficheiro prevalecem depois.
-            for key in sorted(data,key=lambda key:key != 'theme'):
+            setting_order = {
+                'theme': 0,
+                AIRLIFT_RADIUS_KEY: 1,
+                AIRLIFT_DEPLOYMENT_COUNT_KEY: 2,
+            }
+            for key in sorted(
+                    data, key=lambda key: (setting_order.get(key, 3), key)):
                 self.setting_fields[key][1](data[key])
             self.preferences.update({key:getter() for key,(getter,_,_) in self.setting_fields.items()})
         finally:
@@ -447,6 +565,24 @@ class LayoutOptions:
         if key == 'theme':
             value = normalize_theme_value(value)
             if value is None:
+                return
+        if key in (
+                AIRLIFT_RADIUS_KEY,
+                AIRLIFT_DEPLOYMENT_COUNT_KEY,
+                AIRLIFT_FADE_SECONDS_KEY):
+            airlift_values = {
+                AIRLIFT_RADIUS_KEY: (
+                    value if key == AIRLIFT_RADIUS_KEY else self.airlift_radius_km),
+                AIRLIFT_DEPLOYMENT_COUNT_KEY: (
+                    value if key == AIRLIFT_DEPLOYMENT_COUNT_KEY
+                    else self.airlift_deployment_count),
+                AIRLIFT_FADE_SECONDS_KEY: (
+                    value if key == AIRLIFT_FADE_SECONDS_KEY
+                    else self.airlift_fade_seconds),
+            }
+            validate_airlift_preferences(airlift_values)
+            self.preferences.update(airlift_values)
+            if self.loading_settings:
                 return
         self.preferences[key] = value
         if self.loading_settings:
