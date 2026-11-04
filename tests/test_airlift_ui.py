@@ -80,6 +80,174 @@ def test_airlift_starts_off_and_activation_draws_selected_deployments(window):
     assert not window.view.airlift_points
 
 
+def test_airlift_point_menu_starts_srv_navigation(window):
+    from unittest.mock import Mock, patch
+
+    window.set_airlift_active(True)
+    point = max(window.view.airlift_points,
+                key=lambda candidate: candidate.x_m ** 2 + candidate.y_m ** 2)
+    window.state.center_lat = 38
+    window.state.center_lon = -9
+    assert window.state.rhino_lat is not None
+    position = window.view.screen(point.x_m, point.y_m)
+    assert window.view.marker_at(position) == ("airlift", point)
+
+    menu = Mock()
+    with patch("qt_map_operations.QMenu", return_value=menu):
+        window.marker_menu(position)
+
+    navigate = next(
+        call for call in menu.addAction.call_args_list
+        if call.args[0] == "Navigate")
+    assert window.state.current_presentation.kind.value == "srv"
+    assert window.state.center_lat == 38
+    assert window.state.rhino_lat == 38
+    navigate.args[1]()
+
+    target = window.state.active_nav_target
+    assert target["type"] == "airlift"
+    assert target["item"] is point
+    assert (target["x"], target["y"]) == (point.x_m, point.y_m)
+    assert (target["_system"], target["_body"]) == ("Sol", "Earth")
+    assert target["_latitude"] is not None
+    assert target["_longitude"] is not None
+
+
+def test_airlift_point_menu_starts_ship_navigation(window):
+    from unittest.mock import Mock, patch
+    from mapper_core import HAS_LAT_LONG_FLAG, MAIN_SHIP_FLAG
+
+    window.set_airlift_active(True)
+    point = max(window.view.airlift_points,
+                key=lambda candidate: candidate.x_m ** 2 + candidate.y_m ** 2)
+    window.state.process_status(dict(
+        Flags=HAS_LAT_LONG_FLAG | MAIN_SHIP_FLAG,
+        Latitude=38, Longitude=-9, Heading=0,
+        StarSystem="Sol", BodyName="Earth"))
+    window.refresh()
+    position = window.view.screen(point.x_m, point.y_m)
+    assert window.view.marker_at(position) == ("airlift", point)
+
+    menu = Mock()
+    with patch("qt_map_operations.QMenu", return_value=menu):
+        window.marker_menu(position)
+
+    navigate = next(
+        call for call in menu.addAction.call_args_list
+        if call.args[0] == "Navigate")
+    navigate.args[1]()
+
+    assert window.state.active_nav_target["item"] is point
+    assert window.state.active_nav_target["type"] == "airlift"
+
+
+def _navigation_item(window, kind):
+    if kind == "marks":
+        return {"name": "Target", "lat": 38.01, "lon": -9.0}
+    if kind == "deposits":
+        return {"name": "Deposit", "x": 1200.0, "y": 0.0}
+    if kind == "rigs":
+        return {"x": 0.0, "y": 1200.0}
+    if kind == "route":
+        return {"number": 1, "x": 1500.0, "y": 0.0}
+    window.set_airlift_active(True)
+    return max(window.view.airlift_points,
+               key=lambda candidate: candidate.x_m ** 2 + candidate.y_m ** 2)
+
+
+@pytest.mark.parametrize("kind", ["marks", "deposits", "rigs", "route", "airlift"])
+def test_ship_can_navigate_to_geographic_targets(window, kind):
+    item = _navigation_item(window, kind)
+    from mapper_core import HAS_LAT_LONG_FLAG, MAIN_SHIP_FLAG
+
+    window.state.process_status(dict(
+        Flags=HAS_LAT_LONG_FLAG | MAIN_SHIP_FLAG,
+        Latitude=38, Longitude=-9, Heading=0,
+        StarSystem="Sol", BodyName="Earth"))
+    window.refresh()
+
+    window.start_navigation(kind, item)
+
+    assert window.state.active_nav_target["type"] == kind
+    assert window.state.active_nav_target["item"] is item
+
+
+@pytest.mark.parametrize("kind", ["marks", "deposits", "rigs", "route", "airlift"])
+def test_on_foot_cannot_start_geographic_navigation(window, kind):
+    item = _navigation_item(window, kind)
+    from mapper_core import HAS_LAT_LONG_FLAG, ON_FOOT_FLAG
+
+    window.state.process_status(dict(
+        Flags=HAS_LAT_LONG_FLAG, Flags2=ON_FOOT_FLAG,
+        Latitude=38, Longitude=-9, Heading=0,
+        StarSystem="Sol", BodyName="Earth"))
+
+    window.start_navigation(kind, item)
+
+    assert window.state.active_nav_target is None
+
+
+def test_ship_navigation_preserves_search_state_without_pausing_or_progressing(window):
+    from mapper_core import HAS_LAT_LONG_FLAG, MAIN_SHIP_FLAG
+
+    assert window.state.start_search()
+    search_state = (
+        window.state.search_started,
+        window.state.search_paused,
+        window.state.search_pause_point,
+        window.state.return_to_pause,
+        window.state.route_index,
+        window.state.next_target_xy,
+        list(window.state.route_history),
+    )
+    route_item = {"number": 1, "x": 10_000.0, "y": 10_000.0}
+    window.state.process_status(dict(
+        Flags=HAS_LAT_LONG_FLAG | MAIN_SHIP_FLAG,
+        Latitude=38, Longitude=-9, Heading=0,
+        StarSystem="Sol", BodyName="Earth"))
+    window.refresh()
+
+    window.start_navigation("route", route_item)
+    assert window.state.active_nav_target["item"] is route_item
+    assert window.state.search_started
+    assert window.state.search_paused is search_state[1]
+    assert window.state.search_pause_point == search_state[2]
+    assert window.state.return_to_pause is search_state[3]
+    assert window.state.route_index == search_state[4]
+    assert window.state.next_target_xy == search_state[5]
+    assert window.state.route_history == search_state[6]
+
+    window.state.update_next()
+    assert not window.state.skip_next()
+    window.stop_navigation()
+    assert (
+        window.state.search_started,
+        window.state.search_paused,
+        window.state.search_pause_point,
+        window.state.return_to_pause,
+        window.state.route_index,
+        window.state.next_target_xy,
+        window.state.route_history,
+    ) == search_state
+
+
+def test_srv_navigation_still_pauses_search_and_returns_to_pause(window):
+    assert window.state.start_search()
+    pause_point = window.state.llxy(
+        window.state.rhino_lat, window.state.rhino_lon)
+    window.start_navigation(
+        "deposits", {"name": "Deposit", "x": 10_000.0, "y": 10_000.0})
+
+    assert window.state.search_paused
+    assert window.state.search_pause_point == pause_point
+
+    window.state.rhino_lat, window.state.rhino_lon = window.state.xyll(500.0, 500.0)
+    window.stop_navigation()
+
+    assert window.state.return_to_pause
+    assert window.state.search_pause_point == pause_point
+
+
 def test_configuration_dialog_uses_operational_defaults_and_authoritative_coverage():
     from airlift import load_catalog
     from airlift_dialog import AirliftConfigurationDialog
@@ -121,6 +289,41 @@ def test_airlift_fade_only_changes_disks_and_zero_is_continuous(
     assert view.airlift_disk_opacity(now=1000.0) == 1.0
 
 
+def test_zero_duration_draws_only_disk_outlines_and_keeps_numbered_markers(window):
+    from unittest.mock import Mock, patch
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QColor
+    from airlift import DeploymentPosition
+
+    view = window.view
+    view.airlift_points = (
+        DeploymentPosition(1, 0.0, 0.0),
+        DeploymentPosition(2, 100.0, 100.0),
+    )
+    painter = Mock()
+
+    view.airlift_fade_seconds = 0
+    view.draw_airlift_disks(painter)
+    assert painter.setBrush.call_args.args == (Qt.BrushStyle.NoBrush,)
+    assert painter.drawEllipse.call_count == len(view.airlift_points)
+
+    painter.reset_mock()
+    view.airlift_fade_seconds = 5
+    view.airlift_fade_started_at = 100.0
+    with patch("rhino_surface_mapper_qt.time.monotonic", return_value=100.0):
+        view.draw_airlift_disks(painter)
+    assert isinstance(painter.setBrush.call_args.args[0], QColor)
+    assert painter.drawEllipse.call_count == len(view.airlift_points)
+
+    painter.reset_mock()
+    view.airlift_fade_seconds = 0
+    view.draw_airlift_disks(painter)
+    assert painter.setBrush.call_args.args == (Qt.BrushStyle.NoBrush,)
+    markers = Mock()
+    view.draw_airlift_markers(markers)
+    assert markers.drawText.call_count == len(view.airlift_points)
+
+
 def test_search_and_airlift_are_mutually_exclusive(window):
     assert window.state.search_started is False
     assert window.set_airlift_active(True)
@@ -130,6 +333,50 @@ def test_search_and_airlift_are_mutually_exclusive(window):
 
     assert window.set_airlift_active(True)
     assert not window.state.search_started
+
+
+def _start_srv_navigation(window, kind, item):
+    window.state.center_lat = 38
+    window.state.center_lon = -9
+    window.start_navigation(kind, item)
+
+
+def test_deactivating_airlift_cancels_airlift_navigation(window):
+    window.set_airlift_active(True)
+    point = max(window.view.airlift_points,
+                key=lambda candidate: candidate.x_m ** 2 + candidate.y_m ** 2)
+    _start_srv_navigation(window, "airlift", point)
+    assert window.state.active_nav_target["type"] == "airlift"
+
+    assert not window.set_airlift_active(False)
+
+    assert window.state.active_nav_target is None
+    assert not window.airlift_active
+    assert not window.view.airlift_points
+
+
+def test_deactivating_airlift_preserves_other_navigation(window):
+    window.set_airlift_active(True)
+    _start_srv_navigation(window, "route", {"number": 1, "x": 1500.0, "y": 0.0})
+
+    assert not window.set_airlift_active(False)
+
+    assert window.state.active_nav_target is not None
+    assert window.state.active_nav_target["type"] == "route"
+
+
+def test_starting_search_cancels_airlift_navigation(window):
+    window.set_airlift_active(True)
+    point = max(window.view.airlift_points,
+                key=lambda candidate: candidate.x_m ** 2 + candidate.y_m ** 2)
+    _start_srv_navigation(window, "airlift", point)
+
+    with patch("rhino_surface_mapper_qt.QMessageBox.information"):
+        window.start_search()
+
+    assert not window.airlift_active
+    assert window.state.search_started
+    assert window.state.active_nav_target is None
 
 
 def test_reconfiguration_updates_geometry_and_restarts_fade(window):

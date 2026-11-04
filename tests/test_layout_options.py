@@ -58,7 +58,8 @@ class LayoutTests(unittest.TestCase):
         self.app.processEvents()
         self.assertEqual(w.view.width(),width)
         menu = w.findChild(QPushButton,'maps_menu').menu()
-        self.assertEqual([a.text() for a in menu.actions()],['Open','Save','New','View and manage'])
+        self.assertEqual([a.text() for a in menu.actions()],
+                         ['Open', 'Open JSON file', 'Save', 'New', 'View and manage'])
         maps = w.findChildren(QPushButton, 'maps_menu')
         self.assertEqual(len(maps), 1)
         self.assertIs(w.op_buttons[OP_MAPS], maps[0])

@@ -126,8 +126,10 @@ class LayoutOptions:
         menu = QMenu(maps)
         # Esta é a barra efetivamente apresentada depois de aplicar o layout.
         # A ordem segue o menu de mapas definido para a utilização normal.
-        for title, callback in [('Open', self.load_map), ('Save', self.save_map),
-                                ('New', self.new_map), ('View and manage', self.show_map_library)]:
+        for title, callback in [('Open', self.load_map),
+                                ('Open JSON file', self.open_map_file),
+                                ('Save', self.save_map), ('New', self.new_map),
+                                ('View and manage', self.show_map_library)]:
             menu.addAction(translate('LayoutOptions', title), callback)
         maps.setObjectName("maps_menu")
         maps.setMenu(menu)

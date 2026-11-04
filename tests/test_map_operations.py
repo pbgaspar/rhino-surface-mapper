@@ -187,7 +187,7 @@ class MapOperationsTests(unittest.TestCase):
             with patch('qt_map_operations.QFileDialog.getSaveFileName',return_value=(path,'')):
                 w.save_map()
             with patch('qt_map_operations.QFileDialog.getOpenFileName',return_value=(path,'')), patch('qt_map_operations.QMessageBox.question',return_value=QMessageBox.StandardButton.Yes):
-                w.load_map()
+                w.open_map_file()
             # A abertura migra as datas ausentes dos mapas antigos.
             self.assertIsNotNone(w.state.created_at)
             self.assertIsNotNone(w.state.last_saved_at)
@@ -196,7 +196,7 @@ class MapOperationsTests(unittest.TestCase):
             old = w.state
             Path(path).write_text('{',encoding='utf-8')
             with patch('qt_map_operations.QFileDialog.getOpenFileName',return_value=(path,'')), patch('qt_map_operations.QMessageBox.critical') as error:
-                w.load_map()
+                w.open_map_file()
                 error.assert_called_once()
             self.assertIs(w.state,old)
             with patch('qt_map_operations.QMessageBox.question',return_value=QMessageBox.StandardButton.Yes), \
@@ -205,6 +205,14 @@ class MapOperationsTests(unittest.TestCase):
             self.assertFalse(w.state.search_started)
             self.assertFalse(w.overlay.isVisible())
             self.assertFalse(w.overlay_button.isEnabled())
+
+    def test_load_map_without_pml_context_opens_map_library(self):
+        w = self.window
+        with patch.object(w, 'show_map_library') as show_library, \
+                patch('qt_map_operations.QFileDialog.getOpenFileName') as file_picker:
+            w.load_map()
+        show_library.assert_called_once_with()
+        file_picker.assert_not_called()
 
     def test_pml_center_azimuth_dialog_wraps_without_changing_contract(self):
         from PySide6.QtWidgets import QDialog, QInputDialog, QSpinBox
@@ -285,7 +293,7 @@ class MapOperationsTests(unittest.TestCase):
             w.state.save(map_path)
             stamp = w.last_mtime
             with patch('qt_map_operations.QFileDialog.getOpenFileName',return_value=(str(map_path),'')), patch('qt_map_operations.QMessageBox.question',return_value=QMessageBox.StandardButton.Yes):
-                w.load_map()
+                w.open_map_file()
             self.assertEqual(w.last_mtime,stamp)
             self.assertEqual(w.state.rhino_lat,38)
             self.assertEqual(w.state.rhino_heading,90)
@@ -311,9 +319,10 @@ class MapOperationsTests(unittest.TestCase):
         self.assertFalse(w.transition_required)
         open_pml.assert_called_once_with()
 
-    def test_ship_startup_restores_matching_existing_pml_without_srv_telemetry(self):
+    def test_ship_startup_offers_matching_pml_without_automatic_load(self):
         import json
         from mapper_core import HAS_LAT_LONG_FLAG, MAIN_SHIP_FLAG, MapperState
+        from PySide6.QtWidgets import QMessageBox
 
         w = self.window
         w.state = w.view.state = MapperState()
@@ -325,14 +334,17 @@ class MapOperationsTests(unittest.TestCase):
         maps_root = Path(self.temp.name) / 'maps'
         map_path = self._write_existing_pml(maps_root)
 
-        with patch('qt_map_operations.maps_directory', return_value=maps_root):
+        with patch('qt_map_operations.maps_directory', return_value=maps_root), \
+                patch('rhino_surface_mapper_qt.QMessageBox.question',
+                      return_value=QMessageBox.StandardButton.No) as ask:
             w.poll()
 
-        self.assertEqual(w.current_map_path, map_path)
+        ask.assert_called_once()
+        self.assertIsNone(w.current_map_path)
         self.assertEqual((w.state.system, w.state.body, w.state.pml_id),
-                         ('Sol', 'Earth', '6'))
+                         ('', '', ''))
         self.assertFalse(w.state.in_srv)
-        self.assertTrue(w.view.current_presentation_visible)
+        self.assertFalse(w.view.current_presentation_visible)
         self.assertEqual(w.state.current_presentation.kind.value, 'ship')
 
     def test_ship_startup_without_matching_map_does_not_create_map(self):
@@ -358,11 +370,157 @@ class MapOperationsTests(unittest.TestCase):
         self.assertFalse(w.view.current_presentation_visible)
         self.assertFalse(maps_root.exists())
 
+    def test_pml_suggestion_no_is_latched_until_leave_and_reentry(self):
+        from mapper_core import HAS_LAT_LONG_FLAG, MAIN_SHIP_FLAG
+        from PySide6.QtWidgets import QMessageBox
+
+        w = self.window
+        maps_root = Path(self.temp.name) / 'maps'
+        self._write_existing_pml(maps_root)
+        near = dict(
+            Flags=HAS_LAT_LONG_FLAG | MAIN_SHIP_FLAG,
+            Latitude=38.15, Longitude=-9, Heading=90,
+            StarSystem='Sol', BodyName='Earth')
+        far = dict(near, Latitude=38.25)
+        w._startup_recovery_pending = False
+
+        with patch('qt_map_operations.maps_directory', return_value=maps_root), \
+                patch('rhino_surface_mapper_qt.QMessageBox.question',
+                      return_value=QMessageBox.StandardButton.No) as ask:
+            w.state.process_status(near)
+            w.update_pml_approaches(near)
+            w.update_pml_approaches(near)
+            self.assertEqual(ask.call_count, 1)
+
+            w.state.process_status(far)
+            w.update_pml_approaches(far)
+            w.state.process_status(near)
+            w.update_pml_approaches(near)
+
+        self.assertEqual(ask.call_count, 2)
+        self.assertIsNone(w.current_map_path)
+
+    def test_pml_suggestion_accepts_yes_returned_as_integer_button_value(self):
+        from mapper_core import HAS_LAT_LONG_FLAG, MAIN_SHIP_FLAG
+        from PySide6.QtWidgets import QMessageBox
+
+        w = self.window
+        maps_root = Path(self.temp.name) / 'maps'
+        self._write_existing_pml(maps_root)
+        status = dict(
+            Flags=HAS_LAT_LONG_FLAG | MAIN_SHIP_FLAG,
+            Latitude=38.15, Longitude=-9, Heading=90,
+            StarSystem='Sol', BodyName='Earth')
+        w.state.process_status(status)
+        w._startup_recovery_pending = False
+        yes_as_int = int(QMessageBox.StandardButton.Yes.value)
+
+        with patch('qt_map_operations.maps_directory', return_value=maps_root), \
+                patch('rhino_surface_mapper_qt.QMessageBox.question',
+                      return_value=yes_as_int), \
+                patch.object(w, 'prepare_to_replace_current_map',
+                             return_value=True), \
+                patch.object(w, 'install_prepared_map',
+                             wraps=w.install_prepared_map) as install:
+            self.assertTrue(w.update_pml_approaches(status))
+
+        install.assert_called_once()
+
+    def test_pml_suggestion_yes_uses_existing_map_install_flow(self):
+        from mapper_core import HAS_LAT_LONG_FLAG, MAIN_SHIP_FLAG
+        from PySide6.QtWidgets import QMessageBox
+
+        w = self.window
+        maps_root = Path(self.temp.name) / 'maps'
+        map_path = self._write_existing_pml(maps_root)
+        status = dict(
+            Flags=HAS_LAT_LONG_FLAG | MAIN_SHIP_FLAG,
+            Latitude=38.15, Longitude=-9, Heading=90,
+            StarSystem='Sol', BodyName='Earth')
+        w.state.process_status(status)
+        w._startup_recovery_pending = False
+
+        with patch('qt_map_operations.maps_directory', return_value=maps_root), \
+                patch('rhino_surface_mapper_qt.QMessageBox.question',
+                      return_value=QMessageBox.StandardButton.Yes), \
+                patch.object(w, 'prepare_to_replace_current_map',
+                             return_value=True), \
+                patch.object(w, 'install_prepared_map',
+                             wraps=w.install_prepared_map) as install:
+            self.assertTrue(w.update_pml_approaches(status))
+
+        install.assert_called_once()
+        self.assertEqual(w.current_map_path, map_path)
+        self.assertEqual((w.state.system, w.state.body, w.state.pml_id),
+                         ('Sol', 'Earth', '6'))
+        self.assertTrue(w.view.current_presentation_visible)
+
+    def test_map_install_within_same_body_preserves_geographic_navigation(self):
+        from mapper_core import HAS_LAT_LONG_FLAG, SRV_FLAG, MapperState
+
+        w = self.window
+        old_state = MapperState()
+        old_state.process_status(dict(
+            Flags=HAS_LAT_LONG_FLAG | SRV_FLAG,
+            Latitude=38, Longitude=-9, Heading=0,
+            StarSystem='Sol', BodyName='Earth'))
+        old_state.active_nav_target = {
+            'type': 'route', 'name': 'Target', 'x': 1000.0, 'y': 2000.0,
+            '_system': 'Sol', '_body': 'Earth',
+        }
+        old_state.active_nav_target['_latitude'], old_state.active_nav_target['_longitude'] = (
+            old_state.xyll(1000.0, 2000.0))
+        w.state = w.view.state = old_state
+        candidate = MapperState()
+        candidate.process_status(dict(
+            Flags=HAS_LAT_LONG_FLAG | SRV_FLAG,
+            Latitude=38, Longitude=-9, Heading=0,
+            StarSystem='sol', BodyName='earth'))
+        candidate.center_lat, candidate.center_lon = 38.1, -9.1
+        expected = candidate.llxy(
+            old_state.active_nav_target['_latitude'],
+            old_state.active_nav_target['_longitude'])
+
+        w.install_prepared_map(candidate, poll_after_install=False)
+
+        self.assertIsNotNone(w.state.active_nav_target)
+        self.assertEqual(w.state.active_nav_target['_system'], 'Sol')
+        self.assertAlmostEqual(w.state.active_nav_target['x'], expected[0])
+        self.assertAlmostEqual(w.state.active_nav_target['y'], expected[1])
+
+    def test_map_install_for_other_body_clears_geographic_navigation(self):
+        from mapper_core import HAS_LAT_LONG_FLAG, SRV_FLAG, MapperState
+
+        w = self.window
+        old_state = MapperState()
+        old_state.process_status(dict(
+            Flags=HAS_LAT_LONG_FLAG | SRV_FLAG,
+            Latitude=38, Longitude=-9, Heading=0,
+            StarSystem='Sol', BodyName='Earth'))
+        old_state.active_nav_target = {
+            'type': 'route', 'name': 'Target', 'x': 1000.0, 'y': 2000.0,
+            '_system': 'Sol', '_body': 'Earth',
+            '_latitude': 38.0, '_longitude': -9.0,
+        }
+        w.state = w.view.state = old_state
+        candidate = MapperState()
+        candidate.process_status(dict(
+            Flags=HAS_LAT_LONG_FLAG | SRV_FLAG,
+            Latitude=38, Longitude=-9, Heading=0,
+            StarSystem='Sol', BodyName='Mars'))
+        candidate.center_lat, candidate.center_lon = 38.1, -9.1
+
+        w.install_prepared_map(candidate, poll_after_install=False)
+
+        self.assertIs(w.state, candidate)
+        self.assertIsNone(w.state.active_nav_target)
+
     def test_invalid_or_pending_ship_startup_does_not_restore_existing_map(self):
         import json
         from mapper_core import (
             HAS_LAT_LONG_FLAG, MAIN_SHIP_FLAG, ON_FOOT_FLAG, MapperState,
         )
+        from PySide6.QtWidgets import QMessageBox
 
         w = self.window
         maps_root = Path(self.temp.name) / 'maps'
@@ -377,6 +535,9 @@ class MapOperationsTests(unittest.TestCase):
                 w.state = w.view.state = MapperState()
                 w.current_map_path = None
                 w.last_mtime = None
+                w._startup_recovery_pending = True
+                w._pml_approach_latches.clear()
+                w._accepted_pml_approaches.clear()
                 w.transition_required = pending
                 w.view.current_presentation_visible = False
                 status = dict(
@@ -386,6 +547,8 @@ class MapOperationsTests(unittest.TestCase):
                 w.status_path.write_text(json.dumps(status), encoding='utf-8')
 
                 with patch('qt_map_operations.maps_directory', return_value=maps_root), \
+                        patch('rhino_surface_mapper_qt.QMessageBox.question',
+                              return_value=QMessageBox.StandardButton.No), \
                         patch.object(w, 'open_or_create_pml_for_current_position') as open_pml:
                     w.poll()
 

@@ -252,6 +252,7 @@
         <message><source>Deposit</source><translation>Depósito</translation></message>
         <message><source>Rig</source><translation>Rig</translation></message>
         <message><source>Open</source><translation>Abrir</translation></message>
+        <message><source>Open JSON file</source><translation>Abrir ficheiro JSON</translation></message>
         <message><source>Save</source><translation>Guardar</translation></message>
         <message><source>New</source><translation>Novo</translation></message>
         <message><source>View and manage</source><translation>Ver e gerir</translation></message>

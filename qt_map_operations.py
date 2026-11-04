@@ -10,9 +10,10 @@ from PySide6.QtWidgets import (QCompleter, QDialog, QDialogButtonBox, QFormLayou
     QLineEdit, QComboBox, QSpinBox, QFileDialog, QMessageBox, QMenu, QApplication,
     QDoubleSpinBox, QInputDialog)
 from app_paths import maps_directory
-from mapper_core import MapperState
+from mapper_core import CommanderPresentationKind, MapperState
 from map_pml import (PML_MATCH_DISTANCE_M, infer_legacy_pml, matching_candidates,
-                     newest_by_pml, next_john_doe_id, next_version_path,
+                     newest_by_pml, newest_by_pml_save_time,
+                     next_john_doe_id, next_version_path,
                      pml_filename, pml_path as canonical_pml_path,
                      safe_filename_component, surface_distance as pml_surface_distance,
                      corresponds_to_map)
@@ -265,26 +266,18 @@ class MapOperations:
         directory = maps_directory() / safe_filename_component(system)
         return matching_candidates(directory.glob('*.json') if directory.is_dir() else (),
                                    system, body, lat, lon, self._load_candidate)
-        if not directory.is_dir():
+
+    def known_pml_candidates(self, system, body, lat, lon):
+        """Return the newest saved map and current distance for each identified PML."""
+        if not (isinstance(system, str) and system.strip()
+                and isinstance(body, str) and body.strip()):
             return []
-        matches = []
-        for path in directory.glob('*.json'):
-            try:
-                candidate = MapperState()
-                candidate.load(path)
-                self.infer_legacy_pml(candidate, path, system, body)
-                if (candidate.system.casefold() != system.casefold()
-                        or candidate.body.casefold() != body.casefold()
-                        or candidate.pml_center_lat is None):
-                    continue
-                distance = self.surface_distance(candidate.radius, lat, lon,
-                                                 candidate.pml_center_lat,
-                                                 candidate.pml_center_lon)
-                if distance < PML_MATCH_DISTANCE_M:
-                    matches.append((distance, path, candidate))
-            except (OSError, ValueError, TypeError, KeyError, AttributeError):
-                continue
-        return sorted(matches, key=lambda item: item[0])
+        directory = maps_directory() / safe_filename_component(system)
+        paths = directory.glob('*.json') if directory.is_dir() else ()
+        matches = matching_candidates(
+            paths, system, body, lat, lon, self._load_candidate,
+            max_distance=float('inf'), require_pml_id=True)
+        return newest_by_pml_save_time(matches)
 
     def nearby_pml_maps_without_system(self, body, lat, lon):
         """Procura apenas mapas existentes quando o jogo omite StarSystem.
@@ -359,6 +352,24 @@ class MapOperations:
         self.cancel_placement()
         self.view.radar.waves.clear()
         self.stop_assistance()
+        previous_state = self.state
+        active_target = previous_state.active_nav_target
+        if (active_target is not None
+                and '_system' in active_target and '_body' in active_target
+                and candidate.center_lat is not None
+                and candidate.center_lon is not None):
+            target_latitude = active_target.get('_latitude')
+            target_longitude = active_target.get('_longitude')
+            if target_latitude is None or target_longitude is None:
+                target_latitude, target_longitude = previous_state.xyll(
+                    active_target['x'], active_target['y'])
+            active_target = dict(active_target)
+            active_target['x'], active_target['y'] = candidate.llxy(
+                target_latitude, target_longitude)
+            active_target['_latitude'] = target_latitude
+            active_target['_longitude'] = target_longitude
+            candidate.active_nav_target = active_target
+        candidate.invalidate_navigation_context(candidate.system, candidate.body)
         previous = {
             'state': self.state,
             'view_state': self.view.state,
@@ -836,23 +847,8 @@ class MapOperations:
         """Abre uma versão do PML atual, sem navegar por todos os sistemas."""
         s = self.state
         if not (s.system.strip() and s.body.strip() and s.pml_id.strip()):
-            # Mantém o seletor genérico apenas para mapas antigos, sem PML.
-            # É também útil para recuperar um ficheiro antes de o migrar.
-            try:
-                directory = maps_directory()
-            except OSError as exc:
-                QMessageBox.critical(self, translate('MapperWindow', 'Error preparing MAPS'), str(exc))
-                return
-            path, _ = QFileDialog.getOpenFileName(
-                self, translate('MapperWindow', 'Open map'), str(directory), 'Rhino Map (*.json)')
-            if not path:
-                return
-            try:
-                candidate = MapperState()
-                candidate.load(Path(path))
-            except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError, ZeroDivisionError) as exc:
-                QMessageBox.critical(self, translate('MapperWindow', 'Error opening'), str(exc))
-                return
+            self.show_map_library()
+            return
         else:
             try:
                 directory = self.pml_path().parent
@@ -885,6 +881,29 @@ class MapOperations:
             if selected_index is None:
                 return
             path, candidate = versions[selected_index]
+        self._install_map_candidate(candidate, path)
+
+    def open_map_file(self):
+        """Open an arbitrary map JSON file selected by the user."""
+        try:
+            directory = maps_directory()
+        except OSError as exc:
+            QMessageBox.critical(self, translate('MapperWindow', 'Error preparing MAPS'), str(exc))
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, translate('MapperWindow', 'Open map'), str(directory), 'Rhino Map (*.json)')
+        if not path:
+            return
+        try:
+            candidate = MapperState()
+            candidate.load(Path(path))
+        except (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError, ZeroDivisionError) as exc:
+            QMessageBox.critical(self, translate('MapperWindow', 'Error opening'), str(exc))
+            return
+        self._install_map_candidate(candidate, Path(path))
+
+    def _install_map_candidate(self, candidate, path):
+        """Confirm replacement and install a selected map through the shared loader."""
         try:
             if not self.prepare_to_replace_current_map(
                     translate('MapperWindow', 'Open map'), translate('MapperWindow', 'opening the map')):
@@ -1059,12 +1078,23 @@ class MapOperations:
     def start_navigation(self, kind, item):
         """Inicia a navegação para uma marca, depósito, rig ou ponto da rota."""
         s = self.state
+        presentation_kind = s.current_presentation.kind
+        if presentation_kind not in (
+                CommanderPresentationKind.SRV, CommanderPresentationKind.SHIP):
+            return
+        if (presentation_kind is CommanderPresentationKind.SHIP
+                and not self.view.current_presentation_visible):
+            return
         if s.read_only and kind == 'route':
             return
-        if s.rhino_lat is None or s.center_lat is None:
-            QMessageBox.information(
-                self, translate('MapperWindow', 'Navigate'),
-                translate('MapperWindow', 'Enter the Rhino first and wait for its position.'))
+        if s.navigation_origin() is None:
+            if presentation_kind is CommanderPresentationKind.SRV:
+                QMessageBox.information(
+                    self, translate('MapperWindow', 'Navigate'),
+                    translate('MapperWindow', 'Enter the Rhino first and wait for its position.'))
+            return
+        presentation = s.current_presentation
+        if not (presentation.system.strip() and presentation.body.strip()):
             return
 
         if kind == 'marks':
@@ -1085,14 +1115,24 @@ class MapOperations:
             num = item.get('number', s.route_index + 1)
             name = f"[Busca] Ponto {num}"
             target_data = {'type': kind, 'item': item, 'name': name, 'x': x, 'y': y}
+        elif kind == 'airlift':
+            x, y = item.x_m, item.y_m
+            name = f"[Airlift] Point {item.number}"
+            target_data = {'type': kind, 'item': item, 'name': name, 'x': x, 'y': y}
         else:
             return
 
-        if s.search_started and not s.search_paused:
+        target_data['_system'] = presentation.system
+        target_data['_body'] = presentation.body
+        target_data['_latitude'], target_data['_longitude'] = s.xyll(x, y)
+
+        if (presentation_kind is CommanderPresentationKind.SRV
+                and s.search_started and not s.search_paused):
             s.search_paused = True
             s.search_pause_point = s.llxy(s.rhino_lat, s.rhino_lon)
 
-        s.return_to_pause = False
+        if presentation_kind is CommanderPresentationKind.SRV:
+            s.return_to_pause = False
         s.active_nav_target = target_data
         self.statusBar().showMessage(translate(
             'MapperWindow', 'Navigating to: {name}').format(name=name))
@@ -1102,6 +1142,10 @@ class MapOperations:
         """Cancela a navegação direta e gere o regresso ao ponto de pausa se aplicável."""
         s = self.state
         s.active_nav_target = None
+        if s.current_presentation.kind is CommanderPresentationKind.SHIP:
+            self.statusBar().showMessage(translate('MapperWindow', 'Navigation stopped.'))
+            self.refresh()
+            return
         if s.search_paused and s.search_pause_point is not None:
             s.return_to_pause = True
             self.statusBar().showMessage(translate(
@@ -1125,7 +1169,9 @@ class MapOperations:
         # Opção Navegar / Parar navegação para todos os tipos de marcadores
         if self.is_navigating_to(kind, item):
             menu.addAction(translate('MapperWindow', 'Stop navigation'), self.stop_navigation)
-        else:
+        elif (self.state.current_presentation.kind is CommanderPresentationKind.SRV
+              or (self.state.current_presentation.kind is CommanderPresentationKind.SHIP
+                  and self.view.current_presentation_visible)):
             menu.addAction(translate('MapperWindow', 'Navigate'),
                            lambda: self.start_navigation(kind, item))
         menu.addSeparator()

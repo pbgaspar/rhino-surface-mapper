@@ -59,6 +59,41 @@ class MapperCoreTests(unittest.TestCase):
                     self.assertEqual(loaded.search_azimuth, azimuth)
                     self.assertEqual(loaded.next_target_xy, state.next_target_xy)
 
+    def test_search_target_is_computed_outside_srv_without_progression(self):
+        state = MapperState()
+        state.process_status(status())
+        state.start_search(0)
+        target = state.next_target_xy
+        lat, lon = state.xyll(*target)
+        state.process_status(status(Flags=HAS_LAT_LONG_FLAG | MAIN_SHIP_FLAG, Latitude=lat, Longitude=lon))
+        self.assertFalse(state.in_srv)
+        self.assertEqual(state.route_index, 0)
+        self.assertEqual(state.route_history, [])
+        self.assertAlmostEqual(state.next_target_xy[0], target[0])
+        self.assertAlmostEqual(state.next_target_xy[1], target[1])
+
+    def test_search_target_restored_on_reload_and_progresses_in_srv(self):
+        import tempfile
+        state = MapperState()
+        state.process_status(status())
+        state.start_search(0)
+        target = state.next_target_xy
+        lat, lon = state.xyll(*target)
+        state.process_status(status(Latitude=lat, Longitude=lon))
+        self.assertEqual(state.route_index, 1)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'map.json'
+            state.save(path)
+            loaded = MapperState()
+            loaded.load(path)
+        self.assertIsNotNone(loaded.next_target_xy)
+        self.assertEqual(loaded.route_index, 1)
+        self.assertEqual(len(loaded.route_history), 1)
+        next_lat, next_lon = loaded.xyll(*loaded.next_target_xy)
+        loaded.process_status(status(Latitude=next_lat, Longitude=next_lon))
+        self.assertEqual(loaded.route_index, 2)
+        self.assertEqual(loaded.route_history[-1]["status"], "reached")
+
     def test_search_rejects_invalid_azimuth(self):
         state = MapperState()
         for value in (-1, 360, 1.5, '90', True):

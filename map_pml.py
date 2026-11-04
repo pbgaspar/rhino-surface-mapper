@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 PML_MATCH_DISTANCE_M = 13_000
+PML_SUGGESTION_DISTANCE_M = 20_000
 
 
 def corresponds_to_map(state: Any, system: str, body: str, lat: float, lon: float) -> bool:
@@ -72,19 +73,37 @@ def infer_legacy_pml(state: Any, path: Path, system: str, body: str) -> None:
             break
     state.body_key = f'{state.system}|{state.body}'
 
-def matching_candidates(paths: Iterable[Path], system: str, body: str, lat: float, lon: float, loader: Callable[[Path], Any]) -> list[tuple[float, Path, Any]]:
-    """Load and return nearby compatible candidates; malformed files are ignored."""
+def matching_candidates(paths: Iterable[Path], system: str, body: str, lat: float,
+                        lon: float, loader: Callable[[Path], Any],
+                        max_distance: float = PML_MATCH_DISTANCE_M,
+                        require_pml_id: bool = False) -> list[tuple[float, Path, Any]]:
+    """Load compatible map candidates within a distance; malformed files are ignored."""
     matches = []
     for path in paths:
         try:
             candidate = loader(path)
             infer_legacy_pml(candidate, path, system, body)
-            if not corresponds_to_map(candidate, system, body, lat, lon):
+            if (not isinstance(candidate.system, str)
+                    or not isinstance(candidate.body, str)
+                    or candidate.system.casefold() != system.casefold()
+                    or candidate.body.casefold() != body.casefold()
+                    or candidate.pml_center_lat is None
+                    or candidate.pml_center_lon is None
+                    or (require_pml_id
+                        and not str(candidate.pml_id).strip())):
                 continue
-            distance = surface_distance(candidate.radius, lat, lon,
-                                        candidate.pml_center_lat, candidate.pml_center_lon)
-            matches.append((distance, path, candidate))
-        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            radius = float(candidate.radius)
+            center_lat = float(candidate.pml_center_lat)
+            center_lon = float(candidate.pml_center_lon)
+            if (not math.isfinite(radius) or radius <= 0
+                    or not math.isfinite(center_lat) or abs(center_lat) > 90
+                    or not math.isfinite(center_lon) or abs(center_lon) > 180):
+                continue
+            distance = surface_distance(radius, lat, lon, center_lat, center_lon)
+            if math.isfinite(distance) and distance <= max_distance:
+                matches.append((distance, path, candidate))
+        except (OSError, ValueError, TypeError, KeyError, AttributeError,
+                OverflowError, ZeroDivisionError):
             continue
     return sorted(matches, key=lambda item: item[0])
 

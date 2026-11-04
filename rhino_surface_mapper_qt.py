@@ -13,7 +13,8 @@ from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QLabel, QPushButton, QSpinBox, QCheckBox, QFileDialog, QMessageBox)
 from mapper_core import CommanderPresentation, CommanderPresentationKind, MapperState
-from map_pml import corresponds_to_map, newest_by_pml
+from map_pml import (PML_SUGGESTION_DISTANCE_M, corresponds_to_map,
+                     newest_by_pml)
 from settings_persistence import load_preferences
 from elite_dangerous.status import elite_dangerous_is_running, read_status_if_changed
 from elite_dangerous.journal import JournalIdentityReader
@@ -169,6 +170,20 @@ class MapView(QWidget):
         self.ship_renderer.render(painter, target)
         painter.restore()
 
+    def draw_navigation_target(self, painter: QPainter, origin: QPointF) -> None:
+        """Draw the active target using the shared map navigation style."""
+        target = self.state.active_nav_target
+        if target is None:
+            return
+        position = self.screen(target['x'], target['y'])
+        painter.setPen(QPen(QColor('#00bfff'), 2.5, Qt.PenStyle.DashLine))
+        painter.drawLine(origin, position)
+        painter.drawEllipse(position, 8, 8)
+        painter.drawText(
+            position + QPointF(12, -12),
+            translate('MapperWindow', 'NAVIGATE: {name}').format(
+                name=target.get('name', '')))
+
     @staticmethod
     def draw_person(painter: QPainter, position: QPointF,
                     heading: float | None) -> None:
@@ -207,7 +222,9 @@ class MapView(QWidget):
         outline.setAlphaF(opacity * 0.8)
         painter.save()
         painter.setPen(QPen(outline, 1.5))
-        painter.setBrush(color)
+        painter.setBrush(
+            Qt.BrushStyle.NoBrush
+            if self.airlift_fade_seconds == 0 else color)
         radius = COVERAGE_RADIUS_KM * 1000 * self.scale
         for point in self.airlift_points:
             painter.drawEllipse(self.screen(point.x_m, point.y_m), radius, radius)
@@ -365,6 +382,15 @@ class MapView(QWidget):
             if d < distance:
                 route_item = {'x': tx, 'y': ty, 'number': self.state.route_index + 1, 'status': 'next'}
                 nearest, distance = ('route', route_item), d
+        if (self.current_presentation_visible
+                and self.state.current_presentation.kind in (
+                    CommanderPresentationKind.SRV,
+                    CommanderPresentationKind.SHIP)):
+            for item in self.airlift_points:
+                q = self.screen(item.x_m, item.y_m)
+                d = math.hypot(q.x() - position.x(), q.y() - position.y())
+                if d < distance:
+                    nearest, distance = ('airlift', item), d
         return nearest
 
     def map_font(self):
@@ -613,14 +639,7 @@ class MapView(QWidget):
                 p.drawEllipse(target,9,9)
                 p.drawText(target+QPointF(12,-12), translate('MapView', 'NEXT'))
             if s.active_nav_target is not None:
-                nav_pos = self.screen(s.active_nav_target['x'], s.active_nav_target['y'])
-                p.setPen(QPen(QColor('#00bfff'), 2.5, Qt.PenStyle.DashLine))
-                p.drawLine(q, nav_pos)
-                p.drawEllipse(nav_pos, 8, 8)
-                p.drawText(
-                    nav_pos + QPointF(12, -12),
-                    translate('MapperWindow', 'NAVIGATE: {name}').format(
-                        name=s.active_nav_target.get('name', '')))
+                self.draw_navigation_target(p, q)
             elif s.return_to_pause and s.search_pause_point is not None:
                 pause_screen = self.screen(*s.search_pause_point)
                 p.setPen(QPen(QColor('#ffb300'), 2.5, Qt.PenStyle.DashLine))
@@ -642,6 +661,13 @@ class MapView(QWidget):
         elif (self.current_presentation_visible
                 and s.current_presentation.kind is CommanderPresentationKind.SHIP):
             self.draw_ship(p, s.current_presentation)
+            if (s.active_nav_target is not None
+                    and s.current_presentation.latitude is not None
+                    and s.current_presentation.longitude is not None):
+                origin = self.screen(*s.llxy(
+                    s.current_presentation.latitude,
+                    s.current_presentation.longitude))
+                self.draw_navigation_target(p, origin)
         elif (self.current_presentation_visible
                 and s.current_presentation.kind is CommanderPresentationKind.ON_FOOT
                 and s.current_presentation.latitude is not None
@@ -779,6 +805,9 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self._transition_attempt_snapshot = None
         self._transition_schedule_pending = False
         self._transition_resolution_active = False
+        self._startup_recovery_pending = True
+        self._pml_approach_latches = set()
+        self._accepted_pml_approaches = set()
         self.radar_input = RadarInput()
         self.options_path = OPTIONS_PATH
         self.scanner_group = 0
@@ -1055,6 +1084,11 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.airlift_button.blockSignals(True)
         self.airlift_button.setChecked(active)
         self.airlift_button.blockSignals(False)
+        target = self.state.active_nav_target
+        if not active and target is not None and target.get('type') == 'airlift':
+            # stop_navigation refreshes the window itself.
+            self.stop_navigation()
+            return active
         self.refresh()
         return active
 
@@ -1320,6 +1354,102 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                 len(s.points), s.next_target_xy, len(s.route_history),
                 nav_sig, s.search_paused, s.search_pause_point, s.return_to_pause)
 
+    @staticmethod
+    def pml_approach_key(candidate):
+        return (candidate.system.casefold(), candidate.body.casefold(),
+                candidate.pml_id.strip().casefold())
+
+    def update_pml_approaches(self, status, *, suppress_prompts=False):
+        """Latch each known PML approach and offer its newest map once per entry."""
+        presentation = self.state.current_presentation
+        if (presentation.kind not in (CommanderPresentationKind.SRV,
+                                      CommanderPresentationKind.SHIP)
+                or presentation.latitude is None
+                or presentation.longitude is None
+                or not presentation.system.strip()
+                or not presentation.body.strip()):
+            return False
+
+        candidates = self.known_pml_candidates(
+            presentation.system, presentation.body,
+            presentation.latitude, presentation.longitude)
+        inside_keys = {
+            self.pml_approach_key(candidate)
+            for distance, _, candidate in candidates
+            if distance <= PML_SUGGESTION_DISTANCE_M
+        }
+        context = (presentation.system.casefold(), presentation.body.casefold())
+        self._pml_approach_latches = {
+            key for key in self._pml_approach_latches
+            if key[:2] == context and key in inside_keys
+        }
+        self._accepted_pml_approaches = {
+            key for key in self._accepted_pml_approaches
+            if key[:2] == context and key in inside_keys
+        }
+
+        for distance, path, candidate in candidates:
+            if distance > PML_SUGGESTION_DISTANCE_M:
+                continue
+            key = self.pml_approach_key(candidate)
+            if key in self._pml_approach_latches:
+                continue
+            self._pml_approach_latches.add(key)
+            if suppress_prompts:
+                continue
+            answer = QMessageBox.question(
+                self,
+                translate('MapperWindow', 'Known map nearby'),
+                translate(
+                    'MapperWindow',
+                    'PML [{pml_id}] for {body} in {system} is {distance:.1f} km away. '
+                    'Load the most recently saved map {filename}?').format(
+                        pml_id=candidate.pml_id,
+                        body=candidate.body,
+                        system=candidate.system,
+                        distance=distance / 1000,
+                        filename=path.name),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if answer == QMessageBox.StandardButton.Yes:
+                return self.load_suggested_pml(candidate, path, status, key)
+            return False
+        return False
+
+    def load_suggested_pml(self, candidate, path, status, key):
+        """Load a confirmed map through the normal map preparation/install flow."""
+        if not self.prepare_to_replace_current_map(
+                translate('MapperWindow', 'Open map'),
+                translate('MapperWindow', 'opening the map')):
+            return False
+        candidate_status = dict(status)
+        candidate_status['StarSystem'] = candidate.system
+        candidate_status['BodyName'] = candidate.body
+        candidate.process_status(candidate_status)
+        prepared = self.prepare_loaded_map(candidate, path)
+        if prepared is None:
+            return False
+        candidate, path = prepared
+        self.install_prepared_map(
+            candidate,
+            translate('MapperWindow', 'PML [{pml_id}] opened').format(
+                pml_id=candidate.pml_id),
+            path,
+            poll_after_install=False)
+        self._accepted_pml_approaches.add(key)
+        self.clear_transition_state()
+        self.refresh()
+        return True
+
+    def has_declined_pml_in_approach(self, system, body, latitude, longitude):
+        """Check whether an unanswered automatic path would bypass a live No."""
+        return any(
+            distance <= PML_SUGGESTION_DISTANCE_M
+            and self.pml_approach_key(candidate) in self._pml_approach_latches
+            and self.pml_approach_key(candidate) not in self._accepted_pml_approaches
+            for distance, _, candidate in self.known_pml_candidates(
+                system, body, latitude, longitude))
+
     def active_map_corresponds(self, system, body, latitude, longitude):
         """Evaluate incoming SRV location without changing the active map."""
         state = self.state
@@ -1327,6 +1457,13 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                 and state.pml_center_lat is not None
                 and state.pml_center_lon is not None):
             return None
+        if self.pml_approach_key(state) in self._accepted_pml_approaches:
+            return (state.system.casefold() == system.casefold()
+                    and state.body.casefold() == body.casefold()
+                    and self.surface_distance(
+                        state.radius, latitude, longitude,
+                        state.pml_center_lat, state.pml_center_lon)
+                    <= PML_SUGGESTION_DISTANCE_M)
         return corresponds_to_map(state, system, body, latitude, longitude)
 
     def evaluate_status_update(self, status_update, correspondence, raw_status=None):
@@ -1389,6 +1526,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
     def clear_transition_state(self):
         """Clear lifecycle-only state after a confirmed destination activation."""
         self.transition_required = False
+        self._startup_recovery_pending = False
         self.pending_status_update = None
         self.pending_status_snapshot = None
         self.latest_status_snapshot = None
@@ -1470,6 +1608,10 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         body = status['BodyName']
         latitude = float(status['Latitude'])
         longitude = float(status['Longitude'])
+        if not self._startup_recovery_pending:
+            if self.has_declined_pml_in_approach(
+                    system, body, latitude, longitude):
+                return None
         matches = self.nearby_pml_maps(system, body, latitude, longitude)
         matches = newest_by_pml(matches)
         if len(matches) > 1:
@@ -1615,29 +1757,34 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                 self.live_status = data
                 self.live_status['Flags'] = int(data.get('Flags', 0))
                 self.status_valid = accepted
+                presentation = self.state.current_presentation
+                if presentation.system.strip() and presentation.body.strip():
+                    self.state.invalidate_navigation_context(
+                        presentation.system, presentation.body)
                 if accepted:
                     self.latest_status_snapshot = copy.deepcopy(data)
                     if (self.transition_required
                             and self.latest_status_snapshot != self._transition_attempt_snapshot):
                         self.schedule_pending_transition()
+                startup_srv_recovery = (
+                    self._startup_recovery_pending
+                    and presentation.kind is CommanderPresentationKind.SRV)
+                approach_map_loaded = self.update_pml_approaches(
+                    data, suppress_prompts=startup_srv_recovery)
+                if approach_map_loaded:
+                    old_body = self.state.body_key
+                    status_update = self.state.process_status(data)
+                    accepted = bool(status_update)
+                    self.status_valid = accepted
+                    self.latest_status_snapshot = copy.deepcopy(data)
+                    correspondence = self.active_map_corresponds(
+                        presentation.system, presentation.body,
+                        presentation.latitude, presentation.longitude)
                 self.evaluate_status_update(status_update, correspondence, data)
                 changed = before != self.map_signature()
                 # Só memorizamos a data depois de processar uma leitura válida.
                 self.last_mtime = mtime
                 presentation = self.state.current_presentation
-                if (not accepted
-                        and not self.transition_required
-                        and self.state.body_key is None
-                        and presentation.kind is CommanderPresentationKind.SHIP
-                        and presentation.latitude is not None
-                        and presentation.longitude is not None):
-                    previous_state = self.state
-                    self.open_or_create_pml_for_current_position(
-                        position=(presentation.latitude, presentation.longitude),
-                        system=presentation.system,
-                        body=presentation.body,
-                        allow_create=False)
-                    changed = changed or self.state is not previous_state
                 if accepted:
                     if not self.transition_required:
                         self.observe_steering()
@@ -1648,7 +1795,12 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                         # A telemetria identifica o planeta; a operação de mapas
                         # decide se existe um PML conhecido até 10 km ou se é
                         # preciso pedir a identificação de um novo PML.
-                        self.open_or_create_pml_for_current_position()
+                        if (self._startup_recovery_pending
+                                or not self.has_declined_pml_in_approach(
+                                    presentation.system, presentation.body,
+                                    presentation.latitude,
+                                    presentation.longitude)):
+                            self.open_or_create_pml_for_current_position()
                         changed = True
                     if self.follow.isChecked():
                         self.view.recenter()
@@ -1663,6 +1815,9 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                         self.info_left.setText(translate('MapperWindow', 'Commander is not in the SRV (on foot or aboard the ship).'))
                     else:
                         self.info_left.setText(translate('MapperWindow', 'Waiting for the Rhino position.'))
+                if (presentation.kind is CommanderPresentationKind.SHIP
+                        or not self.transition_required):
+                    self._startup_recovery_pending = False
         except (OSError, ValueError, TypeError, AttributeError) as exc:
             self.status_valid = False
             self.retry_status = True

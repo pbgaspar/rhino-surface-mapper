@@ -208,10 +208,56 @@ class MapperState:
         self.in_srv = False
 
     def overlay_allowed(self) -> bool:
-        """Modos que autorizam o overlay; apenas permitido quando o comandante está no Rhino."""
-        if not self.in_srv:
+        """Allow explicit navigation for either vehicle and Search only in the SRV."""
+        if self.active_nav_target is not None:
+            return (self.navigation_target_context_matches()
+                    and self.navigation_origin() is not None)
+        return bool(
+            self.current_presentation.kind is CommanderPresentationKind.SRV
+            and self.in_srv
+            and (self.search_started or self.return_to_pause))
+
+    def navigation_target_context_matches(self) -> bool:
+        """Check the active target's captured System/Body against live telemetry."""
+        target = self.active_nav_target
+        if target is None or "_system" not in target or "_body" not in target:
+            return True
+        presentation = self.current_presentation
+        if not (presentation.system.strip() and presentation.body.strip()):
             return False
-        return bool(self.search_started or self.active_nav_target is not None or self.return_to_pause)
+        return (presentation.system.casefold() == target["_system"].casefold()
+                and presentation.body.casefold() == target["_body"].casefold())
+
+    def invalidate_navigation_context(self, system: str, body: str) -> bool:
+        """Clear explicit navigation when fresh telemetry identifies another planet."""
+        target = self.active_nav_target
+        if (target is None or "_system" not in target or "_body" not in target
+                or not isinstance(system, str) or not system.strip()
+                or not isinstance(body, str) or not body.strip()):
+            return False
+        if (system.casefold() == target["_system"].casefold()
+                and body.casefold() == target["_body"].casefold()):
+            return False
+        self.active_nav_target = None
+        return True
+
+    def navigation_origin(self) -> tuple[float, float, float | None] | None:
+        """Return the current vehicle's map position and heading, if navigable."""
+        presentation = self.current_presentation
+        if presentation.kind is CommanderPresentationKind.SRV and self.in_srv:
+            latitude, longitude = self.rhino_lat, self.rhino_lon
+            heading = self.rhino_heading
+        elif presentation.kind is CommanderPresentationKind.SHIP:
+            latitude, longitude = presentation.latitude, presentation.longitude
+            heading = presentation.heading
+        else:
+            return None
+
+        if (latitude is None or longitude is None
+                or self.center_lat is None or self.center_lon is None):
+            return None
+        x, y = self.llxy(latitude, longitude)
+        return x, y, heading
 
     @staticmethod
     def heading_error(current: float, target: float) -> float:
@@ -263,13 +309,13 @@ class MapperState:
         self.search_paused = False
         self.search_pause_point = None
         self.return_to_pause = False
-        self.active_nav_target = None
         self.datum_lat = None
         self.datum_lon = None
         if not keep_pml:
             self.pml_id = ""
             self.pml_center_lat = None
             self.pml_center_lon = None
+            self.active_nav_target = None
         self.route_index = 0
         self.next_target_xy = None
         self.route_history.clear()
@@ -366,7 +412,9 @@ class MapperState:
             return False
         if type(azimuth) is not int or not 0 <= azimuth <= 359:
             raise ValueError("AZ Busca deve ser um inteiro entre 000 e 359.")
-        if self.rhino_lat is None or self.rhino_lon is None or self.center_lat is None:
+        if (self.current_presentation.kind is not CommanderPresentationKind.SRV
+                or not self.in_srv or self.rhino_lat is None
+                or self.rhino_lon is None or self.center_lat is None):
             return False
         self.search_azimuth = azimuth
         self.datum_lat, self.datum_lon = self.rhino_lat, self.rhino_lon
@@ -388,7 +436,8 @@ class MapperState:
 
     def skip_next(self) -> bool:
         """Regista o destino atual como saltado e avança para o seguinte."""
-        if self.read_only:
+        if (self.read_only or not self.in_srv
+                or self.current_presentation.kind is not CommanderPresentationKind.SRV):
             return False
         if not self.search_started or self.next_target_xy is None:
             return False
@@ -402,7 +451,11 @@ class MapperState:
         return True
 
     def update_next(self) -> None:
-        """Atualiza o destino da procura circular e avança quando é atingido."""
+        """Atualiza o destino da procura circular e avança quando é atingido.
+
+        O destino é calculado a partir dos dados persistidos, em qualquer apresentação.
+        A progressão automática (marcar como atingido e avançar a rota) só ocorre em SRV.
+        """
         if self.read_only:
             self.next_target_xy = None
             return
@@ -420,6 +473,9 @@ class MapperState:
         target_y = datum_y + SEARCH_RADIUS_M * math.cos(angle)
         self.next_target_xy = (target_x, target_y)
 
+        if (not self.in_srv
+                or self.current_presentation.kind is not CommanderPresentationKind.SRV):
+            return
         if self.rhino_lat is None or self.rhino_lon is None:
             return
         rhino_x, rhino_y = self.llxy(self.rhino_lat, self.rhino_lon)
@@ -443,24 +499,39 @@ class MapperState:
         tx, ty = None, None
 
         if self.active_nav_target is not None:
+            if not self.navigation_target_context_matches():
+                target = self.active_nav_target
+                presentation = self.current_presentation
+                if (presentation.system.strip() and presentation.body.strip()
+                        and ("_system" in target or "_body" in target)):
+                    self.active_nav_target = None
+                return "—", "—", "#888888", "white", ""
             tx = self.active_nav_target.get("x")
             ty = self.active_nav_target.get("y")
             target_name = self.active_nav_target.get("name", "")
-        elif self.return_to_pause and self.search_pause_point is not None:
-            tx, ty = self.search_pause_point
-            target_name = "Ponto de Pausa ⏸"
-        elif self.search_started and not self.search_paused and self.next_target_xy is not None:
-            tx, ty = self.next_target_xy
-            target_name = f"Busca: Ponto {self.route_index + 1}"
+            origin = self.navigation_origin()
+        elif (self.current_presentation.kind is CommanderPresentationKind.SRV
+              and self.in_srv):
+            if self.return_to_pause and self.search_pause_point is not None:
+                tx, ty = self.search_pause_point
+                target_name = "Ponto de Pausa ⏸"
+            elif (self.search_started and not self.search_paused
+                  and self.next_target_xy is not None):
+                tx, ty = self.next_target_xy
+                target_name = f"Busca: Ponto {self.route_index + 1}"
+            origin = self.navigation_origin()
+        else:
+            return "—", "—", "#888888", "white", ""
 
-        if (not self.in_srv or tx is None or ty is None or self.rhino_lat is None
-                or self.rhino_lon is None or self.rhino_heading is None):
+        if origin is None or tx is None or ty is None:
             return "—", "—", "#888888", "white", target_name
 
-        rx, ry = self.llxy(self.rhino_lat, self.rhino_lon)
+        rx, ry, heading_now = origin
+        if heading_now is None:
+            return "—", "—", "#888888", "white", target_name
         distance = math.hypot(tx - rx, ty - ry)
         bearing = (math.degrees(math.atan2(tx - rx, ty - ry)) + 360.0) % 360.0
-        error = MapperState.heading_error(self.rhino_heading, bearing)
+        error = MapperState.heading_error(heading_now, bearing)
         if abs(error) <= 2.0:
             color = "#00cc44"
         elif abs(error) <= 8.0:
@@ -493,10 +564,11 @@ class MapperState:
             if self.active_nav_target is not None:
                 self.navigation_arrivals = getattr(self, 'navigation_arrivals', 0)+1
                 self.active_nav_target = None
-                if self.search_paused and self.search_pause_point is not None:
-                    self.return_to_pause = True
-                else:
-                    self.search_paused = False
+                if self.current_presentation.kind is CommanderPresentationKind.SRV:
+                    if self.search_paused and self.search_pause_point is not None:
+                        self.return_to_pause = True
+                    else:
+                        self.search_paused = False
             elif self.return_to_pause:
                 self.return_to_pause = False
                 self.search_paused = False

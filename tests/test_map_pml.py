@@ -1,3 +1,4 @@
+import math
 import os
 import tempfile
 import unittest
@@ -13,7 +14,7 @@ class MapPmlTests(unittest.TestCase):
     def make_state(self, *, system='Sol', body='Earth', center_lon=0, pml_id='1'):
         return SimpleNamespace(system=system, body=body, radius=6_371_000,
                                pml_center_lat=0, pml_center_lon=center_lon,
-                               pml_id=pml_id)
+                               pml_id=pml_id, marks=[], body_key='')
 
     def test_correspondence_uses_identity_and_inclusive_distance(self):
         state = self.make_state()
@@ -65,6 +66,35 @@ class MapPmlTests(unittest.TestCase):
                                        pml_id='1', marks=[], body_key='')
             result = matching_candidates([valid, invalid], 'Sol', 'Earth', 0, 0, load)
             self.assertEqual([item[1] for item in result], [valid])
+
+    def test_suggestion_candidates_use_20_km_and_require_pml_identity(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'Earth [6].json'
+            path.touch()
+            degrees_at_20_km = 20_000 / 6_371_000 * 180 / math.pi
+
+            def load(_):
+                return self.make_state(center_lon=degrees_at_20_km * 0.9)
+
+            matches = matching_candidates(
+                [path], 'Sol', 'Earth', 0, 0, load,
+                max_distance=20_000, require_pml_id=True)
+            self.assertEqual(len(matches), 1)
+            self.assertGreater(matches[0][0], PML_MATCH_DISTANCE_M)
+            self.assertEqual(matching_candidates(
+                [path], 'Other', 'Earth', 0, 0, load,
+                max_distance=20_000, require_pml_id=True), [])
+            self.assertEqual(matching_candidates(
+                [path], 'Sol', 'Mars', 0, 0, load,
+                max_distance=20_000, require_pml_id=True), [])
+            self.assertEqual(matching_candidates(
+                [path], 'Sol', 'Earth', 0, 0,
+                lambda _: self.make_state(center_lon=0, pml_id=''),
+                max_distance=20_000, require_pml_id=True), [])
+            outside = self.make_state(center_lon=degrees_at_20_km * 1.01)
+            self.assertEqual(matching_candidates(
+                [path], 'Sol', 'Earth', 0, 0, lambda _: outside,
+                max_distance=20_000, require_pml_id=True), [])
 
     def test_saved_map_selection_prefers_save_time_then_legacy_mtime(self):
         with tempfile.TemporaryDirectory() as folder:
