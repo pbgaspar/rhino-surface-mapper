@@ -5,7 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from map_pml import (PML_MATCH_DISTANCE_M, corresponds_to_map, infer_legacy_pml, matching_candidates,
-                     next_version_path, safe_filename_component, surface_distance)
+                     newest_by_pml_save_time, next_version_path,
+                     safe_filename_component, surface_distance)
 
 
 class MapPmlTests(unittest.TestCase):
@@ -64,6 +65,35 @@ class MapPmlTests(unittest.TestCase):
                                        pml_id='1', marks=[], body_key='')
             result = matching_candidates([valid, invalid], 'Sol', 'Earth', 0, 0, load)
             self.assertEqual([item[1] for item in result], [valid])
+
+    def test_saved_map_selection_prefers_save_time_then_legacy_mtime(self):
+        with tempfile.TemporaryDirectory() as folder:
+            older = Path(folder) / 'older.json'
+            newer = Path(folder) / 'newer.json'
+            legacy_old = Path(folder) / 'legacy-old.json'
+            legacy_new = Path(folder) / 'legacy-new.json'
+            for path in (older, newer, legacy_old, legacy_new):
+                path.touch()
+            os.utime(older, (100, 100))
+            os.utime(newer, (200, 200))
+            os.utime(legacy_old, (100, 100))
+            os.utime(legacy_new, (200, 200))
+            saved_old = self.make_state()
+            saved_old.last_saved_at = '2024-01-01T00:00:00Z'
+            saved_new = self.make_state()
+            saved_new.last_saved_at = '2024-01-02T00:00:00Z'
+            legacy_old_state = self.make_state()
+            legacy_old_state.last_saved_at = 'unusable'
+            legacy_new_state = self.make_state()
+            legacy_new_state.last_saved_at = None
+            legacy_old_state.pml_id = legacy_new_state.pml_id = 'JD2'
+
+            selected = newest_by_pml_save_time([
+                (0, older, saved_old), (0, newer, saved_new),
+                (0, legacy_old, legacy_old_state),
+                (0, legacy_new, legacy_new_state),
+            ])
+            self.assertEqual({item[1] for item in selected}, {newer, legacy_new})
 
     def test_next_version_does_not_treat_brackets_as_glob_patterns(self):
         canonical = Path('Kappa 2 [6].json')

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -86,6 +87,33 @@ def matching_candidates(paths: Iterable[Path], system: str, body: str, lat: floa
         except (OSError, ValueError, TypeError, KeyError, AttributeError):
             continue
     return sorted(matches, key=lambda item: item[0])
+
+
+def saved_map_sort_key(path: Path, state: Any) -> float:
+    """Use persisted save time when valid, falling back to filesystem mtime."""
+    if state.last_saved_at:
+        try:
+            return datetime.fromisoformat(
+                state.last_saved_at.replace('Z', '+00:00')).timestamp()
+        except (AttributeError, TypeError, ValueError, OverflowError):
+            pass
+    return path.stat().st_mtime
+
+
+def newest_by_pml_save_time(
+        matches: Iterable[tuple[float, Path, Any]]) -> list[tuple[float, Path, Any]]:
+    """Keep the most recently saved candidate for each identified PML."""
+    selected = {}
+    for item in matches:
+        state = item[2]
+        key = (state.system.casefold(), state.body.casefold(),
+               state.pml_id.strip().casefold())
+        if (key not in selected
+                or saved_map_sort_key(item[1], state)
+                > saved_map_sort_key(selected[key][1], selected[key][2])):
+            selected[key] = item
+    return list(selected.values())
+
 
 def newest_by_pml(matches: Iterable[tuple[float, Path, Any]]) -> list[tuple[float, Path, Any]]:
     """Keep the newest file for each PML identifier."""

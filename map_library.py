@@ -16,25 +16,26 @@ from deposit_marker import deposit_bounds, draw_deposit
 from PySide6.QtSvg import QSvgRenderer
 
 from app_paths import maps_directory
-from map_pml import infer_legacy_pml, next_version_path
+from map_pml import infer_legacy_pml, next_version_path, saved_map_sort_key
 from mapper_core import MapperState
 from i18n import translate
 from map_trash import inspect_trash, restore_trash_entry, soft_delete_map
 
 
 def _version_sort_key(path, state):
-    """Return the canonical save-time key used to order map versions.
+    """Return the canonical save-time key used to order map versions."""
+    return saved_map_sort_key(path, state)
 
-    Migrated maps retain their historical ``last_saved_at`` in JSON, while
-    atomic migration writes can change the filesystem mtime. Legacy files
-    without that field still use mtime until their metadata is populated.
-    """
-    if state.last_saved_at:
+
+def _newest_map_mtime(system_dir):
+    """Return the newest modification time of a system's map files, or None when it has none."""
+    times = []
+    for path in system_dir.glob('*.json'):
         try:
-            return datetime.fromisoformat(state.last_saved_at.replace('Z', '+00:00')).timestamp()
-        except ValueError:
-            pass
-    return path.stat().st_mtime
+            times.append(path.stat().st_mtime)
+        except OSError:
+            continue
+    return max(times, default=None)
 
 
 class _MapLibraryLoader(QUiLoader):
@@ -375,7 +376,6 @@ class MapLibraryWindow(QDialog):
         self.protected_check.toggled.connect(self.change_flags)
         self.favorite_filter_check.toggled.connect(self.refresh_map_filter)
         self.protected_filter_check.toggled.connect(self.refresh_map_filter)
-        self.load_systems()
         self.set_theme(dark)
 
     @staticmethod
@@ -421,6 +421,11 @@ class MapLibraryWindow(QDialog):
             if total > 0 and all(size > 0 for size in sizes):
                 self.save_preference(key, sizes[0] / total)
 
+    def showEvent(self, event):
+        """Reload the system inventory each time the library is shown."""
+        self.refresh_systems()
+        super().showEvent(event)
+
     def closeEvent(self, event):
         """Save splitter positions before the Map Library closes."""
         self._save_splitter_preferences()
@@ -444,17 +449,36 @@ class MapLibraryWindow(QDialog):
         self.preview.set_theme(dark)
 
     def load_systems(self):
-        """Lê apenas os nomes das subpastas de MAPAS para alimentar a pesquisa."""
+        """Lista os sistemas com mapas guardados, do mais recente para o mais antigo."""
         directory = maps_directory()
-        self.systems = sorted(path.name for path in directory.iterdir() if path.is_dir())
+        newest_by_system = []
+        for system_dir in directory.iterdir():
+            if not system_dir.is_dir():
+                continue
+            newest = _newest_map_mtime(system_dir)
+            if newest is not None:
+                newest_by_system.append((system_dir.name, newest))
+        newest_by_system.sort(key=lambda item: (-item[1], item[0].casefold(), item[0]))
+        self.systems = [name for name, _ in newest_by_system]
+
+    def refresh_systems(self):
+        """Reload the system inventory and reapply the current search text."""
+        self.load_systems()
+        self.filter_systems(self.search.text())
 
     def filter_systems(self, text):
-        """Mostra sugestões só depois do mínimo configurado, hoje dois caracteres."""
+        """Mostra todos os sistemas com mapas quando a pesquisa está vazia; caso contrário filtra a partir de dois caracteres."""
         value = text.strip().casefold()
+        if not value:
+            names = self.systems
+        elif len(value) < 2:
+            names = []
+        else:
+            names = [name for name in self.systems if value in name.casefold()]
         self.suggestions.clear()
-        if len(value) < 2:
-            return
-        self.suggestions.addItems([name for name in self.systems if value in name.casefold()])
+        self.suggestions.addItems(names)
+        if self.current_system in names:
+            self.suggestions.setCurrentRow(names.index(self.current_system))
 
     def map_matches_filters(self, state):
         """Return whether a map state satisfies the active library filters."""
@@ -676,6 +700,7 @@ class MapLibraryWindow(QDialog):
         self.clear_selection()
         if system:
             self.select_system(system)
+        self.refresh_systems()
 
     def show_trash(self):
         """Show valid Trash entries and restore one selected map."""
@@ -732,3 +757,4 @@ class MapLibraryWindow(QDialog):
             return
         dialog.accept()
         self.select_system(self.current_system) if self.current_system else None
+        self.refresh_systems()
