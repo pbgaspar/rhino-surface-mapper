@@ -61,9 +61,13 @@ The Map Library layout and preview experience have been refined, Market Research
 - Planetary Mining Deposits, rigs, and named markers.
 - Radar coverage and radar pulse visualisation.
 - Saving and reopening maps as JSON files.
+- Opening an existing Rhino map JSON file directly with **Open JSON file**.
 - Map Library for browsing saved maps.
+- Map Library systems ordered by the modification time of their newest map file.
 - Favourite and protection functionality, including mining-only behaviour for protected maps.
 - Navigation to map targets and a transparent navigation overlay.
+- Airlift deployment planning around 5 km and 7 km PMLs.
+- PML approach suggestions for nearby saved maps.
 - Optional steering assistance using game telemetry and configured input conditions.
 - Configurable map, overlay, radar, and navigation settings.
 - Windows, Dark, and Light interface themes.
@@ -71,6 +75,12 @@ The Map Library layout and preview experience have been refined, Market Research
 ![Map Library](docs/images/map-library.jpg)
 
 The Map Library provides a view of saved maps and their recorded Planetary Mining Deposits, routes, rigs, and markers.
+
+### Airlift and PML navigation
+
+Airlift plans deployment positions around 5 km and 7 km PMLs using 2 km coverage circles. Choose an available operational circle count for the selected radius; the deployment positions and estimated coverage percentage update with the choice. Separate mathematical reference configurations include counts that are not selectable operational options. The highest operational count does not guarantee exactly 100% coverage.
+
+Airlift can be activated for a valid PML map and provides navigation to its deployment points. Its active state is session-only; starting Airlift stops an active search. When approaching a known PML, the application can suggest its saved map, which can be opened from the prompt.
 
 ### Navigation overlay
 

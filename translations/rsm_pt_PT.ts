@@ -111,6 +111,9 @@
         <message><source>Bearing from Rhino to the PML centre (0° = north):</source><translation>Azimute do Rhino para o centro do PML (0° = norte):</translation></message>
         <message><source>Distance from Rhino to the PML centre (m):</source><translation>Distância do Rhino ao centro do PML (m):</translation></message>
         <message><source>PML [{pml_id}] created. Save the map to keep it.</source><translation>PML [{pml_id}] criado. Guarde o mapa para o conservar.</translation></message>
+        <message><source>Known map nearby</source><translation>Mapa conhecido nas proximidades</translation></message>
+        <message><source>PML [{pml_id}] for {body} in {system} is {distance:.1f} km away. </source><translation>PML [{pml_id}] de {body} em {system} está a {distance:.1f} km. </translation></message>
+        <message><source>PML [{pml_id}] for {body} in {system} is {distance:.1f} km away. Load the most recently saved map {filename}?</source><translation>PML [{pml_id}] de {body} em {system} está a {distance:.1f} km. Carregar o mapa guardado mais recentemente {filename}?</translation></message>
         <message><source>Several nearby PMLs</source><translation>Vários PML próximos</translation></message>
         <message><source>Choose the PML:</source><translation>Escolha o PML:</translation></message>
         <message><source>PML [{pml_id}] opened</source><translation>PML [{pml_id}] aberto</translation></message>

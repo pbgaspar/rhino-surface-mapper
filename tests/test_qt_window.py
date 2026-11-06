@@ -537,8 +537,12 @@ class QtWindowTests(unittest.TestCase):
                         patch('qt_map_operations.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes), \
                         patch('qt_map_operations.QFileDialog.getOpenFileName', return_value=(str(saved), '')), \
                         patch.object(window, 'save_new_pml_version', return_value=saved):
-                    for operation in (lambda: None, window.new_map, window.load_map):
+                    for operation in (lambda: None, window.new_map, window.open_map_file):
+                        previous_state = window.state
                         operation()
+                        if operation == window.open_map_file:
+                            self.assertEqual(window.current_map_path, saved)
+                            self.assertIsNot(window.state, previous_state)
                         self.assertIn('coverage_width_m', window.parameter_spins)
                         self.assertIsNotNone(window.state.rhino_lat)
                         window.view.resize(800, 600)
