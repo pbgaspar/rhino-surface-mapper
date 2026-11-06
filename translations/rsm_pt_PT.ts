@@ -87,6 +87,9 @@
     </context>
     <context>
         <name>MapperWindow</name>
+        <message><source>Help</source><translation>Ajuda</translation></message>
+        <message><source>Check for Updates...</source><translation>Procurar atualizações...</translation></message>
+        <message><source>About Rhino Surface Mapper...</source><translation>Sobre Rhino Surface Mapper...</translation></message>
         <message><source>Protected map</source><translation>Mapa protegido</translation></message>
         <message><source>How would you like to use this protected map?</source><translation>Como gostaria de utilizar este mapa protegido?</translation></message>
         <message><source>Continuing exploration creates a new editable version. Mining only lets you view points and navigate without recording changes.</source><translation>Continuar a exploração cria uma nova versão editável. Só minerar permite consultar pontos e navegar sem registar alterações.</translation></message>
@@ -460,5 +463,22 @@
         <message><source>Number of best Surface Mining commodities to show.</source><translation>Número de melhores matérias-primas de mineração de superfície a mostrar.</translation></message>
         <message><source>Maximum number of markets shown for each commodity.</source><translation>Número máximo de mercados mostrados para cada matéria-prima.</translation></message>
         <message><source>Ignore markets with demand below this value.</source><translation>Ignorar mercados com procura inferior a este valor.</translation></message>
+    </context>
+    <context>
+        <name>UpdateBanner</name>
+        <message><source>View release</source><translation>Ver versão</translation></message>
+        <message><source>Dismiss</source><translation>Ignorar</translation></message>
+        <message><source>Version {version} is available.</source><translation>Está disponível a versão {version}.</translation></message>
+        <message><source>Update check failed: {error}</source><translation>Falha ao procurar atualizações: {error}</translation></message>
+        <message><source>Rhino Surface Mapper is up to date.</source><translation>Rhino Surface Mapper está atualizado.</translation></message>
+        <message><source>Checking for updates…</source><translation>A procurar atualizações…</translation></message>
+    </context>
+    <context>
+        <name>AboutDialog</name>
+        <message><source>About Rhino Surface Mapper</source><translation>Sobre Rhino Surface Mapper</translation></message>
+        <message><source>Version {version}</source><translation>Versão {version}</translation></message>
+        <message><source>Author: {author}</source><translation>Autor: {author}</translation></message>
+        <message><source>A companion tool for mapping Surface Mining activity in Elite Dangerous.</source><translation>Ferramenta complementar para mapear atividade de mineração de superfície em Elite Dangerous.</translation></message>
+        <message><source>Close</source><translation>Fechar</translation></message>
     </context>
 </TS>

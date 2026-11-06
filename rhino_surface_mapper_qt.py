@@ -46,6 +46,9 @@ from airlift_preferences import (
     AIRLIFT_FADE_SECONDS_KEY,
     AIRLIFT_RADIUS_KEY,
 )
+from app_version import APP_NAME
+from update_controller import UpdateController
+from update_ui import AboutDialog, UpdateBanner
 
 
 OPTIONS_PATH = Path(
@@ -898,6 +901,8 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.radar_info.setToolTip(self.radar_input.message)
         layout.addWidget(self.radar_info)
         layout.addWidget(self.view,1)
+        self.update_banner = UpdateBanner(self)
+        layout.addWidget(self.update_banner)
         # O rodapé mantém uma única linha: ficheiro ativo à esquerda e a
         # instrução de navegação alinhada à direita.
         footer = QHBoxLayout()
@@ -913,6 +918,22 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.setup_steering(layout, options if isinstance(options,dict) else {})
         self.build_layout_options(layout, operations, controls, options)
         self.setCentralWidget(container)
+        self.update_controller = UpdateController(
+            self.preferences, self.options_path, parent=self
+        )
+        self.update_banner.set_persistent_release(
+            self.update_controller.notification
+        )
+        self.update_banner.dismiss_requested.connect(
+            self.update_controller.dismiss_notification
+        )
+        self.update_controller.notification_changed.connect(
+            self.update_banner.set_persistent_release
+        )
+        self.update_controller.manual_result.connect(
+            self.update_banner.show_manual_result
+        )
+        self._build_help_menu()
         self.view.clicked.connect(self.place_rig)
         self.view.menu_requested.connect(self.marker_menu)
         escape = QShortcut(QKeySequence('Escape'),self)
@@ -931,6 +952,36 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         screen = QApplication.primaryScreen().availableGeometry()
         self.overlay.move(screen.x()+(screen.width()-self.overlay.width())//2,screen.y()+40)
         self.poll()
+
+    def _build_help_menu(self):
+        """Add update-check and application-information actions."""
+        help_menu = self.menuBar().addMenu(
+            translate('MapperWindow', 'Help')
+        )
+        check_action = help_menu.addAction(
+            translate('MapperWindow', 'Check for Updates...')
+        )
+        check_action.triggered.connect(self.check_for_updates_manually)
+        about_action = help_menu.addAction(
+            translate('MapperWindow', 'About Rhino Surface Mapper...')
+        )
+        about_action.triggered.connect(self.show_about_dialog)
+        self.help_menu = help_menu
+        self.check_updates_action = check_action
+        self.about_action = about_action
+
+    def check_for_updates_manually(self):
+        """Bypass the automatic interval and show the result in the banner."""
+        self.update_banner.show_checking()
+        self.update_controller.check_for_updates(manual=True)
+
+    def show_about_dialog(self):
+        """Display the installed application identity and project link."""
+        AboutDialog(self).exec()
+
+    def start_automatic_update_check(self):
+        """Start an asynchronous startup check when the saved interval expires."""
+        self.update_controller.start_automatic_check()
 
     def radar_options(self):
         self.options_button.toggle()
@@ -1837,6 +1888,9 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         if not self.confirm_pml_exit():
             event.ignore()
             return
+        if not self.update_controller.shutdown():
+            event.ignore()
+            return
         self.timer.stop()
         self.radar_timer.stop()
         self.assist_timer.stop()
@@ -1865,12 +1919,13 @@ def main():
         import ctypes
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('Rhino.SurfaceMapper')
     app = QApplication(sys.argv)
-    app.setApplicationName('Rhino Surface Mapper')
+    app.setApplicationName(APP_NAME)
     app.setWindowIcon(QIcon(str(Path(__file__).resolve().parent/'assets'/'Rhino_App.svg')))
     options = load_preferences(OPTIONS_PATH)
     translator = install_translator(app, options.get('language'))
     window = MapperWindow()
     window.show()
+    QTimer.singleShot(0, window.start_automatic_update_check)
     return app.exec()
 
 
