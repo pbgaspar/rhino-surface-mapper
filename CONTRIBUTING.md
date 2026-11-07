@@ -19,6 +19,16 @@ requirements from the repository root:
 .venv\Scripts\python.exe -m pytest tests -ra
 ```
 
+To build the Windows distribution from the repository root, run:
+
+```powershell
+.venv\Scripts\pyinstaller.exe --noconfirm RhinoSurfaceMapper.spec
+```
+
+The spec compiles `translations/rsm_pt_PT.ts` with the PySide6
+`pyside6-lrelease` tool before packaging the generated catalogue. PySide6 6.3.0
+or newer is required for this tool.
+
 Source code, comments, documentation, and new technical identifiers should be
 written in English. Translation contributions should preserve the Qt Linguist
 workflow and include the relevant Portuguese catalogue updates.

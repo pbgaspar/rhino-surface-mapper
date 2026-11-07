@@ -1,6 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import fnmatch
+from pathlib import Path
+import sys
+
+
+project_root = Path(SPECPATH).resolve()
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from translation_build import compile_translation_catalogue
+
+
+translation_source = project_root / 'translations' / 'rsm_pt_PT.ts'
+translation_catalogue = project_root / 'translations' / 'rsm_pt_PT.qm'
+compile_translation_catalogue(translation_source, translation_catalogue)
 
 
 def is_top_level_ucrt_binary(entry):
@@ -16,7 +30,15 @@ a = Analysis(
     ['rhino_surface_mapper.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets'), ('ui', 'ui'), ('translations/rsm_pt_PT.qm', 'translations'), ('elite_dangerous/market/SURFACE_MINING_COMMODITIES.json', 'elite_dangerous/market')],
+    datas=[
+        ('assets', 'assets'),
+        ('ui', 'ui'),
+        (str(translation_catalogue), 'translations'),
+        (
+            'elite_dangerous/market/SURFACE_MINING_COMMODITIES.json',
+            'elite_dangerous/market',
+        ),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
