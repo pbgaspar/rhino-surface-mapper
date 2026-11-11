@@ -5,10 +5,12 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
+from xml.etree import ElementTree
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6.QtWidgets import QApplication, QPushButton, QSpinBox
-from PySide6.QtCore import Qt
-from layout_options import (OP_MAPS, OP_MARK, SECTION_LAYOUT, THEME_DARK,
+from PySide6.QtCore import Qt, QTranslator
+from layout_options import (OP_MARK, OP_MARK_DEPOSIT, OP_MARK_RIG,
+                            SECTION_LAYOUT, THEME_DARK,
                             THEME_LABELS, THEME_LIGHT, THEME_SYSTEM,
                             _theme_is_dark)
 from airlift_preferences import (
@@ -43,37 +45,138 @@ class LayoutTests(unittest.TestCase):
         self.window.close()
         self.temp.cleanup()
 
-    def test_fixed_buttons_and_map_expand(self):
+    def test_menu_bar_toolbar_layout_and_options_panel_state(self):
         w = self.window
-        sizes = [b.size() for b,_ in w.fixed_buttons]
-        w.resize(1600,950)
-        self.app.processEvents()
-        self.assertEqual(sizes,[b.size() for b,_ in w.fixed_buttons])
+        self.assertEqual(
+            [action.text() for action in w.menuBar().actions()],
+            ['Maps', 'Market Research', 'Options', 'Help', 'Exit'])
+        self.assertEqual(
+            [action.text() for action in w.maps_menu.actions()],
+            ['Open', 'Open from file…', 'Save', 'New', 'View and Manage'])
+        self.assertEqual(
+            [action.text() for action in w.help_menu.actions()],
+            ['Check for Updates...', 'About Rhino Surface Mapper...'])
+        self.assertFalse(w.market_research_action.menu())
+        self.assertFalse(w.options_action.menu())
+        self.assertFalse(w.exit_action.menu())
+        self.assertEqual(len(w.op_buttons), 3)
+        self.assertTrue(all(isinstance(button, QPushButton)
+                            for button in w.op_buttons.values()))
+
         width = w.view.width()
-        w.options_button.setChecked(True)
+        with patch.object(w, 'pause_assistance') as pause:
+            w.options_action.setChecked(True)
+            pause.assert_called_once_with('Configurações abertas')
         self.app.processEvents()
         self.assertLess(w.view.width(),width)
+        self.assertTrue(w.options_panel_open)
+        self.assertTrue(w.options_panel.isVisible())
         self.assertTrue(all(not header.isChecked() for header,_ in w.option_sections.values()))
-        w.options_button.setChecked(False)
+        w.radar_options()
         self.app.processEvents()
         self.assertEqual(w.view.width(),width)
-        menu = w.findChild(QPushButton,'maps_menu').menu()
-        self.assertEqual([a.text() for a in menu.actions()],
-                         ['Open', 'Open JSON file', 'Save', 'New', 'View and manage'])
-        maps = w.findChildren(QPushButton, 'maps_menu')
-        self.assertEqual(len(maps), 1)
-        self.assertIs(w.op_buttons[OP_MAPS], maps[0])
-        self.assertTrue(maps[0].isVisible())
-        self.assertEqual(len([button for button in w.findChildren(QPushButton)
-                              if button.text() == 'Options']), 1)
+        self.assertFalse(w.options_panel_open)
+        self.assertFalse(w.options_panel.isVisible())
+        self.assertFalse(w.options_action.isChecked())
+
+        w.set_options_panel_open(True)
+        close = next(button for button in w.options_panel.findChildren(QPushButton)
+                     if button.text() == 'Close options ×')
+        close.click()
+        self.assertFalse(w.options_panel_open)
+        self.assertFalse(w.options_action.isChecked())
         self.assertEqual(len([button for button in w.findChildren(QPushButton)
                               if button.text() == 'Choose Status.json']), 1)
 
-    def test_market_research_button_survives_operations_layout_rebuild(self):
-        button = self.window.market_research_button
-        self.assertTrue(button.isVisible())
-        self.assertEqual(button.text(), 'Market Research')
-        self.assertIs(button.parentWidget(), self.window.centralWidget())
+    def test_menu_actions_keep_their_callbacks(self):
+        callback_names = (
+            'load_map', 'open_map_file', 'save_map', 'new_map',
+            'show_map_library', 'show_market_research',
+            'check_for_updates_manually', 'show_about_dialog', 'close',
+        )
+        callbacks = {name: Mock() for name in callback_names}
+        with patch.multiple(MapperWindow, **callbacks):
+            window = MapperWindow(
+                Path(self.temp.name) / 'callbacks-Status.json',
+                game_running_check=lambda: True)
+            try:
+                for action in window.maps_menu.actions():
+                    action.trigger()
+                window.market_research_action.trigger()
+                window.check_updates_action.trigger()
+                window.about_action.trigger()
+                window.exit_action.trigger()
+                self.assertEqual(
+                    [callbacks[name].call_count for name in callback_names],
+                    [1] * len(callback_names))
+            finally:
+                for timer in (window.timer, window.radar_timer,
+                              window.assist_timer):
+                    timer.stop()
+        window.close()
+
+    def test_pt_pt_menu_toolbar_and_dynamic_fuel_labels(self):
+        catalogue = (Path(__file__).resolve().parents[1]
+                     / 'translations' / 'rsm_pt_PT.qm')
+        translator = QTranslator()
+        self.assertTrue(translator.load(str(catalogue)))
+        self.assertTrue(self.app.installTranslator(translator))
+        self.addCleanup(self.app.removeTranslator, translator)
+
+        window = MapperWindow(
+            Path(self.temp.name) / 'portuguese-Status.json',
+            game_running_check=lambda: True)
+        self.addCleanup(window.close)
+        for timer in (window.timer, window.radar_timer, window.assist_timer):
+            timer.stop()
+        self.assertEqual(
+            [action.text() for action in window.menuBar().actions()],
+            ['Mapas', 'Pesquisa de Mercados', 'Opções', 'Ajuda', 'Sair'])
+        self.assertEqual(
+            [action.text() for action in window.maps_menu.actions()],
+            ['Abrir', 'Abrir de ficheiro…', 'Guardar', 'Novo', 'Ver e gerir'])
+        self.assertEqual(
+            [window.op_buttons[key].text() for key in
+             (OP_MARK, OP_MARK_DEPOSIT, OP_MARK_RIG)],
+            ['Marca', 'Depósito', 'Equipamento'])
+        self.assertEqual(window.search_button.text(), 'Iniciar pesquisa')
+        self.assertEqual(window.skip_button.text(), 'Saltar seguinte')
+        self.assertEqual(window.overlay_button.text(), 'Sobreposição')
+        self.assertEqual(window.follow.text(), 'Centrar')
+        self.assertEqual(window.assist_button.text(),
+                         'Assistência de direção [F8]')
+        self.assertEqual(window.airlift_config_button.text(),
+                         'Configurar Airlift')
+        self.assertEqual(window.info_right.text(), 'COMBUSTÍVEL : —')
+
+        window.state.fuel_percent = 64.6
+        window.refresh(redraw_map=False)
+        self.assertEqual(window.info_right.text(), 'COMBUSTÍVEL : 65% ✓ Normal')
+        window.state.search_started = True
+        window.refresh(redraw_map=False)
+        self.assertEqual(window.search_button.text(), 'Parar pesquisa')
+
+        messages = ElementTree.parse(
+            Path(__file__).resolve().parents[1]
+            / 'translations' / 'rsm_pt_PT.ts').getroot()
+        contexts = {
+            context.findtext('name'): {
+                message.findtext('source'): message.findtext('translation')
+                for message in context.findall('message')
+            }
+            for context in messages.findall('context')
+        }
+        self.assertEqual(contexts['SteeringUI']['Steering assistance [F8]'],
+                         'Assistência de direção [F8]')
+
+    def test_toolbar_button_height_preference_applies_to_both_rows(self):
+        w = self.window
+        w.resize_buttons(41)
+        self.assertTrue(all(widget.height() == 41
+                            for widget in w.toolbar_buttons))
+        self.assertEqual(w.search_button.text(), 'Start search')
+        self.assertEqual(w.skip_button.text(), 'Skip next')
+        self.assertEqual(w.assist_button.text(), 'Steering assistance [F8]')
 
     def test_market_research_uses_retained_coordinator_and_main_shutdown(self):
         coordinator = self.window.surface_mining_coordinator
@@ -226,18 +329,26 @@ class LayoutTests(unittest.TestCase):
         self.assertFalse(w.view.dark_theme)
         self.assertIn('background: #edf1f4; color: #233448;', w.styleSheet())
         self.assertIn('background: #ffffff; border: 1px solid #cbd5dd;', w.styleSheet())
+        self.assertIn('QMenu::item { padding: 4px 18px 4px 8px; }',
+                      w.styleSheet())
+        self.assertIn('QMenu::item:selected { background: #448b68;',
+                      w.styleSheet())
+        self.assertIn('QMenuBar::item:checked', w.styleSheet())
 
         w.apply_theme('Dark')
         self.assertTrue(w.view.dark_theme)
         self.assertIn('background: #202429; color: #edf1f5;', w.styleSheet())
         self.assertIn('background: #2c3239; border: 1px solid #46515d;', w.styleSheet())
+        w.apply_theme('System')
+        self.assertIn('QMenu::item { padding: 4px 18px 4px 8px; }',
+                      w.styleSheet())
 
     def test_spin_arrows_with_mouse_in_both_themes(self):
         from PySide6.QtCore import Qt
         from PySide6.QtWidgets import QStyle, QStyleOptionSpinBox
         from PySide6.QtTest import QTest
         w = self.window
-        w.options_button.setChecked(True)
+        w.options_action.setChecked(True)
         for theme in ('Light', 'Dark'):
             w.theme_selector.setCurrentText(theme)
             for title, (header, content) in w.option_sections.items():

@@ -11,7 +11,8 @@ from PySide6.QtCore import QByteArray, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter, QPen, QKeySequence, QShortcut, QFont, QPainterPath, QFontMetricsF, QIcon, QTransform
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-    QHBoxLayout, QLabel, QPushButton, QSpinBox, QCheckBox, QFileDialog, QMessageBox)
+    QHBoxLayout, QLabel, QPushButton, QSpinBox, QCheckBox, QFileDialog,
+    QMessageBox, QFrame, QSizePolicy)
 from mapper_core import CommanderPresentation, CommanderPresentationKind, MapperState
 from map_pml import (PML_SUGGESTION_DISTANCE_M, corresponds_to_map,
                      newest_by_pml)
@@ -23,7 +24,7 @@ from qt_map_operations import MapOperations
 from radar import RadarPulse
 from radar_input import RadarInput
 from steering_ui import SteeringUI
-from layout_options import (LayoutOptions, OP_EXIT, OP_MARK, OP_MARK_DEPOSIT,
+from layout_options import (LayoutOptions, OP_MARK, OP_MARK_DEPOSIT,
                             OP_MARK_RIG, SHIP_COLOR_DEFAULT as DEFAULT_SHIP_COLOR,
                             SHIP_SIZE_DEFAULT as DEFAULT_SHIP_SIZE)
 from map_library import MapLibraryWindow
@@ -838,22 +839,13 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.view = MapView(self.state)
         container = QWidget()
         layout = QVBoxLayout(container)
-        controls = QHBoxLayout()
-        operations = QHBoxLayout()
-        layout.addLayout(operations)
         self.op_buttons = {}
         for button_id, title, callback in [(OP_MARK,'Marker',self.mark),
-                                           (OP_MARK_DEPOSIT,'Mark deposit',self.mark_deposit),
-                                           (OP_MARK_RIG,'Mark rig',self.mark_rig),
-                                           (OP_EXIT,'Exit',self.close)]:
+                                           (OP_MARK_DEPOSIT,'Deposit',self.mark_deposit),
+                                           (OP_MARK_RIG,'Rig',self.mark_rig)]:
             button = QPushButton(translate('MapperWindow', title))
             button.clicked.connect(callback)
-            operations.addWidget(button)
             self.op_buttons[button_id] = button
-        market_button = QPushButton('Market Research')
-        market_button.clicked.connect(self.show_market_research)
-        self.market_research_button = market_button
-        layout.addLayout(controls)
         for label, field, minimum in [('Cobertura:','coverage_width_m',100),('Scanner:','scanner_range_m',500)]:
             spin = MetresSpinBox()
             self.parameter_spins[field] = spin
@@ -889,22 +881,15 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.airlift_coverage_label.setObjectName('airlift_coverage_label')
         self.follow = QCheckBox(translate('MapperWindow', 'Centre'))
         self.follow.toggled.connect(lambda checked: self.view.recenter() if checked else None)
-        # Barra inferior consolidada numa única linha
         self.info_bar = QHBoxLayout()
         self.info_left = QLabel(translate('MapperWindow', 'Waiting for Status.json'))
-        self.info_right = QLabel('FUEL : —')
+        self.info_right = QLabel(
+            f"{translate('MapperWindow', 'FUEL')} : —")
         self.info_bar.addWidget(self.info_left, 1)
         self.info_bar.addWidget(self.info_right)
-        layout.addLayout(self.info_bar)
-        
         self.radar_info = QLabel(translate('MapperWindow', 'Radar: waiting for the game'))
         self.radar_info.setToolTip(self.radar_input.message)
-        layout.addWidget(self.radar_info)
-        layout.addWidget(self.view,1)
         self.update_banner = UpdateBanner(self)
-        layout.addWidget(self.update_banner)
-        # O rodapé mantém uma única linha: ficheiro ativo à esquerda e a
-        # instrução de navegação alinhada à direita.
         footer = QHBoxLayout()
         self.navigation = QLabel(translate('MapperWindow', 'Suggested sec.: —'))
         self.map_flag_icons = QLabel()
@@ -914,10 +899,54 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.map_file_info.setTextFormat(Qt.TextFormat.PlainText)
         footer.addWidget(self.map_file_info, 1)
         footer.addWidget(self.navigation)
-        layout.addLayout(footer)
         self.setup_steering(layout, options if isinstance(options,dict) else {})
-        self.build_layout_options(layout, operations, controls, options)
+        layout.removeWidget(self.assist_button)
+        layout.removeWidget(self.assist_info)
+
+        toolbar_rows = QVBoxLayout()
+        row_two = QHBoxLayout()
+        for button in (self.op_buttons[OP_MARK], self.op_buttons[OP_MARK_DEPOSIT],
+                       self.op_buttons[OP_MARK_RIG], self.search_button,
+                       self.skip_button):
+            row_two.addWidget(button)
+        row_two.addStretch(1)
+        row_two.addWidget(self.overlay_button)
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.VLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        row_two.addWidget(separator)
+        row_two.addWidget(self.follow)
+        row_two.addWidget(self.info_right)
+
+        row_three = QHBoxLayout()
+        row_three.addWidget(self.airlift_button)
+        row_three.addWidget(self.airlift_config_button)
+        row_three.addWidget(self.airlift_coverage_label)
+        row_three.addStretch(1)
+        self.assist_button.setSizePolicy(
+            QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        row_three.addWidget(self.assist_button)
+        toolbar_rows.addLayout(row_two)
+        toolbar_rows.addLayout(row_three)
+        layout.addLayout(toolbar_rows)
+
+        body = QHBoxLayout()
+        body.addWidget(self.view, 1)
+        self.build_layout_options(body, options)
+        layout.addLayout(body, 1)
+        layout.addLayout(self.info_bar)
+        layout.addWidget(self.update_banner)
+        layout.addLayout(footer)
+        self.toolbar_buttons = (
+            self.op_buttons[OP_MARK], self.op_buttons[OP_MARK_DEPOSIT],
+            self.op_buttons[OP_MARK_RIG], self.search_button, self.skip_button,
+            self.overlay_button, self.follow, self.airlift_button,
+            self.airlift_config_button, self.airlift_coverage_label,
+            self.assist_button,
+        )
+        self.resize_buttons(self.setting_fields['button_height'][0]())
         self.setCentralWidget(container)
+        self._build_main_menu_bar()
         self.update_controller = UpdateController(
             self.preferences, self.options_path, parent=self
         )
@@ -933,7 +962,6 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.update_controller.manual_result.connect(
             self.update_banner.show_manual_result
         )
-        self._build_help_menu()
         self.view.clicked.connect(self.place_rig)
         self.view.menu_requested.connect(self.marker_menu)
         escape = QShortcut(QKeySequence('Escape'),self)
@@ -953,22 +981,34 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.overlay.move(screen.x()+(screen.width()-self.overlay.width())//2,screen.y()+40)
         self.poll()
 
-    def _build_help_menu(self):
-        """Add update-check and application-information actions."""
-        help_menu = self.menuBar().addMenu(
-            translate('MapperWindow', 'Help')
-        )
-        check_action = help_menu.addAction(
-            translate('MapperWindow', 'Check for Updates...')
-        )
-        check_action.triggered.connect(self.check_for_updates_manually)
-        about_action = help_menu.addAction(
-            translate('MapperWindow', 'About Rhino Surface Mapper...')
-        )
-        about_action.triggered.connect(self.show_about_dialog)
-        self.help_menu = help_menu
-        self.check_updates_action = check_action
-        self.about_action = about_action
+    def _build_main_menu_bar(self):
+        """Build the main window menu bar and connect its direct actions."""
+        menu_bar = self.menuBar()
+        self.maps_menu = menu_bar.addMenu(translate('MapperWindow', 'Maps'))
+        for title, callback in [
+                ('Open', self.load_map),
+                ('Open from file…', self.open_map_file),
+                ('Save', self.save_map),
+                ('New', self.new_map),
+                ('View and Manage', self.show_map_library)]:
+            self.maps_menu.addAction(translate('MapperWindow', title), callback)
+        self.market_research_action = menu_bar.addAction(
+            translate('MapperWindow', 'Market Research'))
+        self.market_research_action.triggered.connect(self.show_market_research)
+        self.options_action = menu_bar.addAction(
+            translate('MapperWindow', 'Options'))
+        self.options_action.setCheckable(True)
+        self.options_action.toggled.connect(self.set_options_panel_open)
+        self.help_menu = menu_bar.addMenu(translate('MapperWindow', 'Help'))
+        self.check_updates_action = self.help_menu.addAction(
+            translate('MapperWindow', 'Check for Updates...'))
+        self.check_updates_action.triggered.connect(
+            self.check_for_updates_manually)
+        self.about_action = self.help_menu.addAction(
+            translate('MapperWindow', 'About Rhino Surface Mapper...'))
+        self.about_action.triggered.connect(self.show_about_dialog)
+        self.exit_action = menu_bar.addAction(translate('MapperWindow', 'Exit'))
+        self.exit_action.triggered.connect(self.close)
 
     def check_for_updates_manually(self):
         """Bypass the automatic interval and show the result in the banner."""
@@ -984,7 +1024,7 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
         self.update_controller.start_automatic_check()
 
     def radar_options(self):
-        self.options_button.toggle()
+        self.toggle_options_panel()
 
     def update_radar(self):
         now = time.monotonic()
@@ -1302,11 +1342,12 @@ class MapperWindow(LayoutOptions, SteeringUI, MapOperations, QMainWindow):
                          presentation.system, presentation.body,
                          presentation.latitude, presentation.longitude) is True)))
         fuel = s.fuel_percent
+        fuel_label = translate('MapperWindow', 'FUEL')
         if fuel is None:
-            self.info_right.setText('FUEL : —')
+            self.info_right.setText(f'{fuel_label} : —')
         else:
             level = '⛔ Sem combustível' if fuel <= 0 else '🔴 Crítico' if fuel <= 15 else '⚠ Baixo' if fuel <= 30 else '✓ Normal'
-            self.info_right.setText(f'FUEL : {fuel:.0f}% {level}')
+            self.info_right.setText(f'{fuel_label} : {fuel:.0f}% {level}')
             
         if self.transition_required:
             self.overlay.set_navigation('—', '—', '#888888', 'white', '')

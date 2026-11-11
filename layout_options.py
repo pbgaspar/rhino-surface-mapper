@@ -1,9 +1,9 @@
 """Painel de preferências recolhível e organização das barras principais."""
 from pathlib import Path
-from PySide6.QtCore import Qt, QByteArray
+from PySide6.QtCore import Qt, QByteArray, QSignalBlocker
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QPushButton, QToolButton, QScrollArea, QMenu, QComboBox, QSpinBox,
+    QPushButton, QToolButton, QScrollArea, QComboBox, QSpinBox,
     QLineEdit, QFileDialog, QLabel, QColorDialog, QMessageBox, QSizePolicy, QFontComboBox, QStyleFactory, QAbstractSpinBox)
 from settings_persistence import (read_exported_settings, save_preferences,
                                   write_exported_settings)
@@ -88,7 +88,14 @@ def _theme_stylesheet(colors, arrow_root):
             'QPushButton:disabled { color: #7e8790; } '
             'QPushButton:checked { border: 2px solid #448b68; } '
             f'QMenu {{ background: {panel}; }} '
+            'QMenu::item { padding: 4px 18px 4px 8px; } '
             'QMenu::item:selected { background: #448b68; color: white; }' +
+            'QMenu::item:checked { background: #448b68; color: white; } ' +
+            f'QMenuBar {{ background: {background}; color: {foreground}; }} '
+            f'QMenuBar::item {{ background: transparent; padding: 5px 8px; }} '
+            'QMenuBar::item:selected, QMenuBar::item:pressed, '
+            'QMenuBar::item:checked '
+            '{ background: #448b68; color: white; }' +
             f"""
             QAbstractSpinBox {{ padding: 4px 24px 4px 4px; min-height: 24px; }}
             QAbstractSpinBox::up-button {{ subcontrol-origin: border; subcontrol-position: top right; width: 22px; height: 16px; border-left: 1px solid {border}; background: {panel}; }}
@@ -100,7 +107,24 @@ def _theme_stylesheet(colors, arrow_root):
 
 
 class LayoutOptions:
-    def build_layout_options(self, layout, operations, controls, options):
+    def set_options_panel_open(self, opened):
+        """Set panel visibility and synchronize its menu action."""
+        opened = bool(opened)
+        if opened and not self.options_panel_open:
+            self.pause_assistance('Configurações abertas')
+        self.options_panel_open = opened
+        self.options_panel.setVisible(opened)
+        action = getattr(self, 'options_action', None)
+        if action is not None and action.isChecked() != opened:
+            blocker = QSignalBlocker(action)
+            action.setChecked(opened)
+            del blocker
+
+    def toggle_options_panel(self):
+        """Toggle the panel from the menu action or existing shortcut."""
+        self.set_options_panel_open(not self.options_panel_open)
+
+    def build_layout_options(self, body, options):
         self.setting_fields = {}
         self.loading_settings = False
         self.preferences = dict(options) if isinstance(options, dict) else {}
@@ -114,83 +138,19 @@ class LayoutOptions:
                 self.preferences['theme'] = theme
         self.option_resets = {}
         self.option_sections = {}
-        self.fixed_buttons = []
         self.color_buttons = {}
-        # Reutiliza os controlos para conservar sinais e regras de ativação.
-        for box in (operations, controls):
-            while box.count():
-                item = box.takeAt(0)
-                if item.widget():
-                    item.widget().hide()
-        maps = QPushButton(translate('LayoutOptions', 'Maps'))
-        menu = QMenu(maps)
-        # Esta é a barra efetivamente apresentada depois de aplicar o layout.
-        # A ordem segue o menu de mapas definido para a utilização normal.
-        for title, callback in [('Open', self.load_map),
-                                ('Open JSON file', self.open_map_file),
-                                ('Save', self.save_map), ('New', self.new_map),
-                                ('View and manage', self.show_map_library)]:
-            menu.addAction(translate('LayoutOptions', title), callback)
-        maps.setObjectName("maps_menu")
-        maps.setMenu(menu)
-        operations.addWidget(maps)
-        self.op_buttons[OP_MAPS] = maps
-        self.fixed_buttons.append((maps, 90))
-        for key, title in [(OP_MARK,'Marker'), (OP_MARK_DEPOSIT,'Deposit'), (OP_MARK_RIG,'Rig')]:
-            button = self.op_buttons[key]
-            button.setText(translate('LayoutOptions', title))
-            button.show()
-            operations.addWidget(button)
-            self.fixed_buttons.append((button, 90))
-        market_button = getattr(self, 'market_research_button', None)
-        if market_button is not None:
-            market_button.show()
-            operations.addWidget(market_button)
-            self.fixed_buttons.append((market_button, 125))
-        self.options_button = QPushButton(translate('LayoutOptions', 'Options'))
-        self.options_button.setCheckable(True)
-        operations.addWidget(self.options_button)
-        operations.addWidget(self.op_buttons[OP_EXIT])
-        self.op_buttons[OP_EXIT].show()
-        self.fixed_buttons.extend([(self.options_button,125), (self.op_buttons[OP_EXIT],90)])
-        operations.addStretch()
-        for button, width in [
-                (self.search_button, 140),
-                (self.skip_button, 150),
-                (self.airlift_button, 105),
-                (self.airlift_config_button, 100),
-                (self.airlift_coverage_label, 115),
-                (self.overlay_button, 90)]:
-            controls.addWidget(button)
-            button.show()
-            self.fixed_buttons.append((button,width))
-        controls.addStretch()
-        controls.addWidget(self.assist_button)
-        self.fixed_buttons.append((self.assist_button,180))
-        controls.addWidget(self.follow)
-        self.follow.show()
-        controls.addSpacing(18)
-        controls.addWidget(self.info_right)
-        self.info_right.setFixedWidth(195)
-        self.info_left.hide()
-        self.radar_info.hide()
-        self.assist_info.hide()
-        layout.removeWidget(self.view)
-        body = QHBoxLayout()
-        body.addWidget(self.view, 1)
         self.options_panel = QScrollArea()
         self.options_panel.setWidgetResizable(True)
         self.options_panel.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         panel = QWidget()
         panel_layout = QVBoxLayout(panel)
         close = QPushButton(translate('LayoutOptions', 'Close options ×'))
-        close.clicked.connect(lambda: self.options_button.setChecked(False))
+        close.clicked.connect(lambda: self.set_options_panel_open(False))
         panel_layout.addWidget(close)
         self.options_panel.setWidget(panel)
         body.addWidget(self.options_panel)
-        layout.insertLayout(3, body, 1)
         self.options_panel.hide()
-        self.options_button.toggled.connect(self.toggle_options_panel)
+        self.options_panel_open = False
 
         def section(section_id, title):
             title = translate('LayoutOptions', title)
@@ -555,13 +515,9 @@ class LayoutOptions:
             self.apply_theme(THEME_SYSTEM)
 
     def resize_buttons(self, height):
-        for button,width in self.fixed_buttons:
-            button.setFixedSize(width,height)
-
-    def toggle_options_panel(self, visible):
-        if visible:
-            self.pause_assistance('Configurações abertas')
-        self.options_panel.setVisible(visible)
+        """Apply the saved height to the controls in both toolbar rows."""
+        for button in getattr(self, 'toolbar_buttons', ()):
+            button.setFixedHeight(height)
 
     def save_preference(self, key, value):
         if key == 'theme':

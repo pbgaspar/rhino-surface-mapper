@@ -1,125 +1,108 @@
-# Rhino Surface Mapper — Beta 2
+# Rhino Surface Mapper
 
-Rhino Surface Mapper is an independent companion tool for *Elite Dangerous* Commanders, designed to help map Surface Mining activity, keep track of explored areas and recorded deposits, and navigate back to points of interest.
+Rhino Surface Mapper is an independent companion tool for *Elite Dangerous* Commanders, focused on surface exploration, mapping and navigation. It helps you record where you have explored, plan systematic searches, mark points of interest and return to them later.
 
 ![Rhino Surface Mapper main map](docs/images/main-map.jpg)
 
 ## Why Rhino Surface Mapper?
 
-When Surface Mining and the Rhino SRV arrived in *Elite Dangerous*, I found it difficult to search for deposits systematically: avoiding repeated coverage, knowing which areas I had already investigated, and remembering where I had found deposits of interest. What started as a simple application to solve that problem gradually gained additional functionality that I hope will be useful to other Commanders.
+When Surface Mining and the Rhino SRV arrived in *Elite Dangerous*, I found it difficult to explore mining sites systematically. I wanted to avoid covering the same ground repeatedly, keep track of the areas I had already searched, and remember where I had found deposits worth returning to. I started Rhino Surface Mapper to solve that problem for myself. It gradually grew into a companion tool that I hope other Commanders will also find useful.
 
-## Download Beta 2
+## Download and installation
 
-Download `RhinoSurfaceMapper-Beta2-Windows-x64.zip` from [GitHub Releases](https://github.com/pbgaspar/rhino-surface-mapper/releases).
+Beta 3 is available from [GitHub Releases](https://github.com/pbgaspar/rhino-surface-mapper/releases). It requires 64-bit Windows 10 or Windows 11. Features that use live game telemetry require *Elite Dangerous*.
 
-Beta 2 is for 64-bit Windows 10 and Windows 11. Extract the complete ZIP to a writable folder, keep the extracted folder together, and run `RhinoSurfaceMapper.exe`. Do not run the executable from inside the ZIP, and avoid protected locations such as `Program Files`.
+Rhino Surface Mapper is distributed as a portable ZIP:
 
-This is a portable Beta. It stores `options.json` and the `MAPAS/` directory beside the executable.
+1. Download the Beta 3 ZIP from the releases page.
+2. Extract the entire ZIP to a writable folder. Do not run the application from inside the ZIP.
+3. Keep the extracted files and subfolders together. Avoid protected locations such as `Program Files`.
+4. Run `RhinoSurfaceMapper.exe`.
 
-### Upgrading from Beta 1
+The application stores its settings in `options.json` and maps in `MAPAS/` beside the executable.
 
-Do not extract Beta 2 directly over your existing Beta 1 installation.
+### Upgrading to Beta 3
 
-Extract Beta 2 to a new folder and, with Rhino Surface Mapper closed, copy the following from the Beta 1 folder to the new folder:
+Install Beta 3 into a new folder rather than extracting it over an earlier installation. With Rhino Surface Mapper closed, copy these items from the previous installation:
 
-- `MAPAS/` — your maps;
-- `MAPAS_TRASH/` — any maps currently in Trash;
-- `options.json` — your settings and preferences.
+- `MAPAS/` — saved maps;
+- `MAPAS_TRASH/` — maps in Trash, if this folder is present;
+- `options.json` — settings and preferences.
 
-Then start Rhino Surface Mapper from the new folder. It is recommended that you keep the Beta 1 folder until you have confirmed that your maps and settings are present and that Beta 2 is working normally.
+Keep the previous installation until you have verified that the maps and settings are present and Beta 3 is working as expected. Market Research cache files do not need to be transferred; the application can refresh its cache.
 
-The market-data cache file does not need to be copied; Beta 2 includes its own cache and can update it later.
+## Main features
 
-## What's new in Beta 2
+### Surface mapping and exploration
 
-### Surface Mining
+- View the SRV position, heading and fuel telemetry from *Elite Dangerous* `Status.json`. Journal data supplies system identity when needed.
+- Record exploration tracks and follow systematic search routes.
+- Mark mining deposits, rigs and named points of interest.
+- View radar coverage and pulses, and navigate to recorded map points.
+- Save maps as JSON and open them again later. Maps can also be opened with **Maps → Open from file…**.
 
-Beta 2 introduces **Surface Mining Market Research**, allowing you to find markets in a given system that consume commodities that can be mined from planets within that same system. This provides a good opportunity to earn merits for **PowerPlay**.
+### Ship-assisted exploration
 
-For each commodity, the **planet types where it is most likely to be found** are also indicated, helping identify the most promising bodies for surface prospecting. Where available, information about market data freshness is shown, allowing you to assess how recent the results are.
+An active PML map can remain visible after you leave the SRV. When the ship's position and heading are valid and correspond to the active map and telemetry context, they can be displayed on the map. You can navigate to recorded locations and Airlift deployment points while exploring from the ship.
 
-Commodity selection when creating or editing **marks and deposits** has also been improved, with suggestions that make it easier to use canonical commodity names.
+## Airlift — PML survey planning
+
+Airlift helps plan multiple Rhino deployment positions for systematically surveying a PML area. Choose a target radius of 5 km or 7 km and an available operational deployment count. Each planned point has a 2 km coverage circle; the application updates the positions and estimated geometric coverage percentage when the configuration changes.
+
+Coverage circles are centered on the planned deployment points, not continuously on the ship. The estimate describes geometric coverage and does not guarantee that every operational configuration reaches exactly 100%.
+
+![Airlift — PML survey coverage and deployment planning](docs/images/Airlift.gif)
+
+Airlift points can be used as navigation targets. Airlift is a separate workflow from **Start search**, and its activation lasts for the current session.
+
+Airlift development originated from a suggestion by Commander [@JackInTheMines](https://github.com/JackInTheMines), submitted in [Issue #2 — Support PML survey via ship](https://github.com/pbgaspar/rhino-surface-mapper/issues/2).
+
+The proposal inspired the investigation of different circular coverage arrangements and Rhino deployment-point configurations. The final solution was adapted to the operational requirements of Rhino Surface Mapper and does not necessarily follow the exact geometric arrangement originally suggested.
+
+## Surface Mining Market Research
+
+Market Research finds markets in a system with demand for mineable Surface Mining commodities. It displays prices and market-data age where available, and indicates probable planet types for commodities to help guide prospecting. The feature combines market information from Spansh with INARA reference prices, and caches data to reduce repeated requests. Markets with demand may also present potential Powerplay merit opportunities; results depend on current game and market data.
 
 ![Surface Mining Market Research](docs/images/market-research.jpg)
 
-### Map Library
+## Map Library
 
-Maps can now be moved to Trash and restored instead of being deleted immediately. The Map Library also provides improved Favorites and Protected filtering, and refreshes more reliably after creating a new map version.
-
-### Map versions and protection
-
-Map versions are ordered more reliably using their actual saved dates. Protected-map replacement prompts and related version-management behavior are clearer and safer when continuing work on a protected map.
-
-### Interface and localization
-
-The Map Library layout and preview experience have been refined, Market Research presentation has been improved, and Portuguese (Portugal) localization coverage has been expanded.
-
-## Features
-
-- Live SRV state, position, heading, and fuel telemetry from *Elite Dangerous* `Status.json`, with authoritative system identity from Elite Dangerous Journal data when required.
-- Surface mapping with route tracks and search routes.
-- Planetary Mining Deposits, rigs, and named markers.
-- Radar coverage and radar pulse visualisation.
-- Saving and reopening maps as JSON files.
-- Opening an existing Rhino map JSON file directly with **Open JSON file**.
-- Map Library for browsing saved maps.
-- Map Library systems ordered by the modification time of their newest map file.
-- Favourite and protection functionality, including mining-only behaviour for protected maps.
-- Navigation to map targets and a transparent navigation overlay.
-- Airlift deployment planning around 5 km and 7 km PMLs.
-- PML approach suggestions for nearby saved maps.
-- Optional steering assistance using game telemetry and configured input conditions.
-- Configurable map, overlay, radar, and navigation settings.
-- Windows, Dark, and Light interface themes.
+Browse saved maps, systems and map versions. Mark maps as favorites or protected, move maps to Trash and restore them later. Map records can include deposits, exploration routes, rigs and named markers.
 
 ![Map Library](docs/images/map-library.jpg)
 
-The Map Library provides a view of saved maps and their recorded Planetary Mining Deposits, routes, rigs, and markers.
+## Navigation overlay and steering assistance
 
-### Airlift and PML navigation
-
-Airlift plans deployment positions around 5 km and 7 km PMLs using 2 km coverage circles. Choose an available operational circle count for the selected radius; the deployment positions and estimated coverage percentage update with the choice. Separate mathematical reference configurations include counts that are not selectable operational options. The highest operational count does not guarantee exactly 100% coverage.
-
-Airlift can be activated for a valid PML map and provides navigation to its deployment points. Its active state is session-only; starting Airlift stops an active search. When approaching a known PML, the application can suggest its saved map, which can be opened from the prompt.
-
-### Navigation overlay
-
-The navigation overlay can display navigation information while *Elite Dangerous* is running. Optional steering assistance can use valid game telemetry and configured input conditions.
+The optional transparent overlay presents navigation information while you play. Optional steering assistance can help follow a target when valid telemetry and configured input conditions are available.
 
 ![Navigation overlay and steering assistance](docs/images/navigation-overlay.gif)
 
-The application does not detect obstacles. Radar input observation does not prove that the game successfully fired a pulse.
+Steering assistance does not detect obstacles or guarantee safe traversal. Observing radar input does not prove that an in-game pulse was successfully fired.
 
-## Language
+## Configuration and customization
 
-The interface supports English and Portuguese (Portugal). Language changes apply after restarting the application.
+Configure map display, radar, navigation, Airlift, the overlay and steering assistance in Options. Choose the **System**, **Dark** or **Light** theme.
 
-## Planned features
+## Languages
 
-**Powerplay Surface Mining assistance** — planned integration of the already developed market-data core to help Commanders earn Powerplay merits by identifying the three most relevant Surface Mining commodities in the current system, together with stations showing demand and market prices.
+Rhino Surface Mapper supports English and Portuguese (Portugal). Select a language in Options and restart the application to apply the change.
 
-## Development
+## Development and contributing
 
-Rhino Surface Mapper is written in Python. Its desktop interface uses PySide6 and Qt, with selected static layouts defined in Qt Designer `.ui` files to make visual UI work easier while application behaviour and state remain in Python. The codebase separates presentation, mapping and domain logic, Elite Dangerous telemetry, and persistence and I/O. Automated tests use pytest.
+Rhino Surface Mapper is written in Python and uses PySide6 / Qt. Selected static layouts use Qt Designer `.ui` files. The project separates presentation, domain logic, telemetry and I/O, and uses pytest for automated tests.
 
-Useful contribution areas include UI/UX, mapping and navigation, Elite Dangerous telemetry, translations and documentation, testing, and future Surface Mining and Powerplay functionality. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development guidance and contribution information.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development and contribution guidance.
 
-## Feedback and contributions
+## Bug reports and feature requests
 
-Please report reproducible bugs and suggestions through [GitHub Issues](https://github.com/pbgaspar/rhino-surface-mapper/issues).
-
-Contributions, documentation improvements, and translation updates are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution guidance.
+Report reproducible bugs or request features through [GitHub Issues](https://github.com/pbgaspar/rhino-surface-mapper/issues). Include steps to reproduce a problem and relevant application or game details where possible.
 
 ## Author
 
-Rhino Surface Mapper was created and is maintained by **CMDR Paulo Gaspar**, with development assistance from ChatGPT and AI coding tools.
-
-Developed as an independent companion tool for the *Elite Dangerous* community.
+**CMDR Paulo Gaspar** created and maintains Rhino Surface Mapper, with development assistance from ChatGPT and AI coding tools.
 
 ## Licence and third-party components
 
-Rhino Surface Mapper is licensed under the [GNU GPL-3.0](LICENSE).
-
-Runtime component notices are listed in [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt), with corresponding source information in [`SOURCE_AVAILABILITY.txt`](SOURCE_AVAILABILITY.txt).
+Rhino Surface Mapper is licensed under the [GNU GPL-3.0](LICENSE). Runtime component notices are listed in [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt), with corresponding source information in [`SOURCE_AVAILABILITY.txt`](SOURCE_AVAILABILITY.txt).
 
 Rhino Surface Mapper is an independent project and is not affiliated with or endorsed by Frontier Developments. *Elite Dangerous* and related marks belong to Frontier Developments plc.

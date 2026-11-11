@@ -13,7 +13,7 @@ EXPECTED_MARKER_MESSAGES = {
     'Enter the Rhino first and wait for its position.':
         'Primeiro entre no Rhino e aguarde a posição.',
     'Edit marker': 'Alterar marca',
-    'Rig': 'Rig',
+    'Rig': 'Equipamento',
     'Enter the Rhino first.': 'Primeiro entre no Rhino.',
     'Click the map to place the rig. Escape cancels.':
         'Clique no mapa para colocar o rig. Escape cancela.',

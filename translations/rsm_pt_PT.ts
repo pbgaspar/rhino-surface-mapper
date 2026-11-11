@@ -87,6 +87,9 @@
     </context>
     <context>
         <name>MapperWindow</name>
+        <message><source>Maps</source><translation>Mapas</translation></message>
+        <message><source>Market Research</source><translation>Pesquisa de Mercados</translation></message>
+        <message><source>Options</source><translation>Opções</translation></message>
         <message><source>Help</source><translation>Ajuda</translation></message>
         <message><source>Check for Updates...</source><translation>Procurar atualizações...</translation></message>
         <message><source>About Rhino Surface Mapper...</source><translation>Sobre Rhino Surface Mapper...</translation></message>
@@ -135,7 +138,7 @@
         <message><source>Discard the current map?</source><translation>Apagar o mapa atual?</translation></message>
         <message><source>Do not save</source><translation>Não gravar</translation></message>
         <message><source>New version</source><translation>Nova versão</translation></message>
-        <message><source>Save</source><translation>Gravar</translation></message>
+        <message><source>Save</source><translation>Guardar</translation></message>
         <message><source>New map</source><translation>Novo mapa</translation></message>
         <message><source>creating a new map</source><translation>criar um novo mapa</translation></message>
         <message><source>opening the map</source><translation>abrir o mapa</translation></message>
@@ -148,6 +151,9 @@
         <message><source>There is no map to save yet.</source><translation>Ainda não existe um mapa para guardar.</translation></message>
         <message><source>There is no saved version of this PML yet.</source><translation>Ainda não existe uma versão guardada deste PML.</translation></message>
         <message><source>Open</source><translation>Abrir</translation></message>
+        <message><source>Open from file…</source><translation>Abrir de ficheiro…</translation></message>
+        <message><source>New</source><translation>Novo</translation></message>
+        <message><source>View and Manage</source><translation>Ver e gerir</translation></message>
         <message><source>Loaded map</source><translation>Mapa carregado</translation></message>
         <message><source>PML [{pml_id}] created</source><translation>PML [{pml_id}] criado</translation></message>
         <message><source>PML [{pml_id}] prepared</source><translation>PML [{pml_id}] preparado</translation></message>
@@ -169,7 +175,7 @@
         <message><source>Marker</source><translation>Marca</translation></message>
         <message><source>Enter the Rhino first and wait for its position.</source><translation>Primeiro entre no Rhino e aguarde a posição.</translation></message>
         <message><source>Edit marker</source><translation>Alterar marca</translation></message>
-        <message><source>Rig</source><translation>Rig</translation></message>
+        <message><source>Rig</source><translation>Equipamento</translation></message>
         <message><source>Enter the Rhino first.</source><translation>Primeiro entre no Rhino.</translation></message>
         <message><source>Click the map to place the rig. Escape cancels.</source><translation>Clique no mapa para colocar o rig. Escape cancela.</translation></message>
         <message><source>Delete marker</source><translation>Apagar marcador</translation></message>
@@ -201,10 +207,12 @@
         <message><source>Mark rig</source><translation>Marcar rig</translation></message>
         <message><source>Exit</source><translation>Sair</translation></message>
         <message><source>Centre</source><translation>Centrar</translation></message>
+        <message><source>Overlay</source><translation>Sobreposição</translation></message>
+        <message><source>FUEL</source><translation>COMBUSTÍVEL</translation></message>
         <message><source>Initial bearing for the next search: 000=North, 090=East, 180=South, 270=West.</source><translation>Azimute inicial da próxima busca: 000=Norte, 090=Este, 180=Sul, 270=Oeste.</translation></message>
-        <message><source>Start search</source><translation>Iniciar busca</translation></message>
-        <message><source>Stop search</source><translation>Terminar busca</translation></message>
-        <message><source>Skip next</source><translation>Saltar próximo</translation></message>
+        <message><source>Start search</source><translation>Iniciar pesquisa</translation></message>
+        <message><source>Stop search</source><translation>Parar pesquisa</translation></message>
+        <message><source>Skip next</source><translation>Saltar seguinte</translation></message>
         <message><source>Search paused</source><translation>Busca em pausa</translation></message>
         <message><source>Waiting for Status.json</source><translation>A aguardar Status.json</translation></message>
         <message><source>Radar: waiting for the game</source><translation>Radar: a aguardar o jogo</translation></message>
@@ -253,16 +261,6 @@
         <message><source>Trash retention</source><translation>Período de conservação no Lixo</translation></message>
         <message><source>days</source><translation>dias</translation></message>
         <message><source>Windows system</source><translation>Como o Windows</translation></message>
-        <message><source>Maps</source><translation>Mapas</translation></message>
-        <message><source>Marker</source><translation>Marca</translation></message>
-        <message><source>Deposit</source><translation>Depósito</translation></message>
-        <message><source>Rig</source><translation>Rig</translation></message>
-        <message><source>Open</source><translation>Abrir</translation></message>
-        <message><source>Open JSON file</source><translation>Abrir ficheiro JSON</translation></message>
-        <message><source>Save</source><translation>Guardar</translation></message>
-        <message><source>New</source><translation>Novo</translation></message>
-        <message><source>View and manage</source><translation>Ver e gerir</translation></message>
-        <message><source>Options</source><translation>Opções</translation></message>
         <message><source>Close options ×</source><translation>Fechar opções ×</translation></message>
         <message><source>Search and navigation</source><translation>Busca e navegação</translation></message>
         <message><source>Coverage</source><translation>Cobertura</translation></message>
@@ -478,7 +476,8 @@
         <message><source>About Rhino Surface Mapper</source><translation>Sobre Rhino Surface Mapper</translation></message>
         <message><source>Version {version}</source><translation>Versão {version}</translation></message>
         <message><source>Author: {author}</source><translation>Autor: {author}</translation></message>
-        <message><source>A companion tool for mapping Surface Mining activity in Elite Dangerous.</source><translation>Ferramenta complementar para mapear atividade de mineração de superfície em Elite Dangerous.</translation></message>
+        <message><source>Companion tool for exploring and mapping surface mining sites in Elite Dangerous.</source><translation>Ferramenta de apoio à exploração e ao mapeamento de locais de mineração de superfície em Elite Dangerous.</translation></message>
+        <message><source>Project repository on GitHub</source><translation>Repositório do projeto no GitHub</translation></message>
         <message><source>Close</source><translation>Fechar</translation></message>
     </context>
 </TS>

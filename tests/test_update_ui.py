@@ -6,7 +6,8 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+from PySide6.QtCore import QTranslator
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
 
 from app_version import APP_NAME, APP_VERSION, AUTHOR_NAME
 from release_updates import parse_release_entries
@@ -45,18 +46,49 @@ class UpdateUiTests(unittest.TestCase):
 
     def test_about_dialog_contains_canonical_identity_and_repository_action(self):
         dialog = AboutDialog()
-        labels = [label.text() for label in dialog.findChildren(QLabel)]
-        self.assertTrue(any(APP_NAME in label for label in labels))
-        self.assertTrue(any(APP_VERSION in label for label in labels))
-        self.assertTrue(any(AUTHOR_NAME in label for label in labels))
-        self.assertTrue(any(
-            "Surface Mining" in label for label in labels
-        ))
-        self.assertTrue(any(
-            "https://github.com/pbgaspar/rhino-surface-mapper" in label
-            for label in labels
-        ))
-        dialog.close()
+        labels = dialog.findChildren(QLabel)
+        text = [label.text() for label in labels]
+        self.assertTrue(any(APP_NAME in label for label in text))
+        self.assertTrue(any(APP_VERSION in label for label in text))
+        self.assertTrue(any(AUTHOR_NAME in label for label in text))
+        self.assertIn(
+            "Companion tool for exploring and mapping surface mining sites "
+            "in Elite Dangerous.", text)
+        repository = next(label for label in labels if '<a href=' in label.text())
+        self.assertEqual(
+            repository.text(),
+            '<a href="https://github.com/pbgaspar/rhino-surface-mapper">'
+            'Project repository on GitHub</a>')
+        self.assertTrue(repository.openExternalLinks())
+        self.assertEqual(
+            [button.text() for button in dialog.findChildren(QPushButton)],
+            ['Close'])
+        dialog.show()
+        dialog.findChild(QPushButton).click()
+        self.assertEqual(dialog.result(), QDialog.DialogCode.Accepted)
+
+    def test_about_dialog_uses_portuguese_description_and_repository_label(self):
+        from i18n import catalogue_path
+
+        translator = QTranslator()
+        self.assertTrue(translator.load(str(catalogue_path('pt_PT'))))
+        self.assertTrue(self.app.installTranslator(translator))
+        dialog = AboutDialog()
+        try:
+            text = [label.text() for label in dialog.findChildren(QLabel)]
+            self.assertIn(
+                'Ferramenta de apoio à exploração e ao mapeamento de locais '
+                'de mineração de superfície em Elite Dangerous.', text)
+            repository = next(label for label in dialog.findChildren(QLabel)
+                              if '<a href=' in label.text())
+            self.assertEqual(
+                repository.text(),
+                '<a href="https://github.com/pbgaspar/rhino-surface-mapper">'
+                'Repositório do projeto no GitHub</a>')
+            self.assertTrue(repository.openExternalLinks())
+        finally:
+            dialog.close()
+            self.app.removeTranslator(translator)
 
     def test_main_window_exposes_help_menu_actions(self):
         from rhino_surface_mapper_qt import MapperWindow

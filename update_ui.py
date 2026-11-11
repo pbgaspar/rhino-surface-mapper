@@ -127,6 +127,7 @@ class AboutDialog(QDialog):
         self.setWindowTitle(translate("AboutDialog", "About Rhino Surface Mapper"))
         self.setModal(True)
         layout = QVBoxLayout(self)
+        layout.setSpacing(8)
         name = QLabel(f"<b>{APP_NAME}</b>")
         name.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(name)
@@ -138,10 +139,11 @@ class AboutDialog(QDialog):
         ).format(author=AUTHOR_NAME)))
         layout.addWidget(QLabel(translate(
             "AboutDialog",
-            "A companion tool for mapping Surface Mining activity in Elite Dangerous.",
+            "Companion tool for exploring and mapping surface mining sites in Elite Dangerous.",
         )))
         repository = QLabel(
-            f'<a href="{GITHUB_REPOSITORY}">{GITHUB_REPOSITORY}</a>'
+            f'<a href="{GITHUB_REPOSITORY}">'
+            f'{translate("AboutDialog", "Project repository on GitHub")}</a>'
         )
         repository.setOpenExternalLinks(True)
         layout.addWidget(repository)
